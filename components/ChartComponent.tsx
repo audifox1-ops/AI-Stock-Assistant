@@ -71,7 +71,7 @@ export default function ChartComponent() {
       const fetchHistory = async () => {
         setIsDataLoading(true);
         try {
-          const res = await fetch(`/api/history?symbol=${selectedStock.symbol}`);
+          const res = await fetch(`/api/history?symbol=\${selectedStock.symbol}`);
           const data = await res.json();
           setChartData(Array.isArray(data) ? data : []);
         } catch (error) { setChartData([]); }
@@ -88,9 +88,9 @@ export default function ChartComponent() {
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
       return (
-        <div className="bg-white border border-gray-100 p-4 rounded-[2rem] shadow-2xl">
-          <p className="text-[10px] text-gray-400 font-bold mb-1 uppercase tracking-widest">{label}</p>
-          <p className="text-base font-black text-[#191f28]">{payload[0].value.toLocaleString()}원</p>
+        <div className="bg-white border border-gray-100 p-6 rounded-[2.5rem] shadow-[0_10px_40px_rgba(0,0,0,0.06)] min-w-[140px] overflow-visible">
+          <p className="text-[11px] text-gray-400 font-black mb-1.5 uppercase tracking-widest leading-none">{label}</p>
+          <p className="text-lg font-black text-[#191f28] leading-none whitespace-nowrap overflow-visible">{payload[0].value.toLocaleString()}원</p>
         </div>
       );
     }
@@ -98,72 +98,74 @@ export default function ChartComponent() {
   };
 
   return (
-    <div className="min-h-screen bg-white text-[#191f28] pb-32 animate-in fade-in duration-500">
-      <header className="px-6 pt-12 pb-6">
-        <h1 className="text-2xl font-bold tracking-tight mb-8">차트 분석</h1>
+    <div className="min-h-screen bg-white text-[#191f28] pb-40 animate-in fade-in duration-500">
+      <header className="px-6 pt-12 pb-8">
+        <h1 className="text-2xl font-black tracking-tight mb-10">차트 분석</h1>
         
         {/* Tab Selection */}
-        <div className="flex gap-4 border-b border-gray-100">
+        <div className="flex gap-6 border-b border-gray-100">
           <button 
             onClick={() => setActiveTab('holdings')}
-            className={`pb-3 px-2 text-sm font-bold transition-all relative ${activeTab === 'holdings' ? 'text-[#3182f6]' : 'text-gray-400'}`}
+            className={`pb-4 px-3 text-sm font-black transition-all relative w-fit \${activeTab === 'holdings' ? 'text-[#3182f6]' : 'text-gray-400'}`}
           >
             내 주식
-            {activeTab === 'holdings' && <div className="absolute bottom-[-1px] left-0 right-0 h-0.5 bg-[#3182f6]"></div>}
+            {activeTab === 'holdings' && <div className="absolute bottom-[-1.5px] left-0 right-0 h-[3px] bg-[#3182f6] rounded-full"></div>}
           </button>
           <button 
             onClick={() => setActiveTab('interests')}
-            className={`pb-3 px-2 text-sm font-bold transition-all relative ${activeTab === 'interests' ? 'text-[#3182f6]' : 'text-gray-400'}`}
+            className={`pb-4 px-3 text-sm font-black transition-all relative w-fit \${activeTab === 'interests' ? 'text-gray-400' : 'text-gray-400 hover:text-gray-600'}`}
           >
             관심 종목
-            {activeTab === 'interests' && <div className="absolute bottom-[-1px] left-0 right-0 h-0.5 bg-[#3182f6]"></div>}
+            {activeTab === 'interests' && <div className="absolute bottom-[-1.5px] left-0 right-0 h-[3px] bg-[#3182f6] rounded-full"></div>}
           </button>
         </div>
       </header>
 
       {/* Stock Selection List */}
-      <div className="flex gap-3 overflow-x-auto px-6 pb-6 no-scrollbar">
+      <div className="flex gap-4 overflow-x-auto px-6 pb-8 no-scrollbar scroll-smooth">
         {stocks.map(stock => (
           <button 
             key={stock.id}
             onClick={() => setSelectedStock(stock)}
-            className={`min-w-[100px] py-4 px-5 rounded-3xl border transition-all text-center ${selectedStock?.id === stock.id ? 'bg-[#3182f6] border-[#3182f6] text-white shadow-lg shadow-blue-100' : 'bg-gray-50 border-transparent text-gray-600'}`}
+            className={`min-w-fit px-8 py-5 rounded-[2rem] border transition-all text-center whitespace-nowrap overflow-visible \${selectedStock?.id === stock.id ? 'bg-[#3182f6] border-[#3182f6] text-white shadow-xl shadow-blue-100 scale-[1.02]' : 'bg-gray-50 border-transparent text-gray-600 hover:bg-gray-100'}`}
           >
-            <p className="text-sm font-bold truncate">{stock.name}</p>
+            <p className="text-sm font-black whitespace-nowrap overflow-visible px-1">{stock.name}</p>
           </button>
         ))}
       </div>
 
       {selectedStock && (
-        <div className="px-6 space-y-8">
-          <div className="bg-white rounded-[2.5rem] py-8">
-            <div className="flex justify-between items-center mb-8">
-              <div>
-                <h2 className="text-2xl font-black text-[#191f28]">{selectedStock.name}</h2>
-                <p className="text-xs font-bold text-gray-400">최근 3개월 가격 변동</p>
-              </div>
-              <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full font-black text-xs ${isTrendUp ? 'bg-red-50 text-red-500' : 'bg-blue-50 text-[#3182f6]'}`}>
-                {isTrendUp ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
-                {isTrendUp ? '상승세' : '조정기'}
+        <div className="px-6 space-y-10 animate-in slide-in-from-bottom-2 duration-500">
+          <div className="bg-white rounded-[3rem] py-10 shadow-[0_0_30px_rgba(0,0,0,0.02)]">
+            <div className="flex justify-between items-start mb-10 overflow-visible px-2">
+              <div className="overflow-visible flex-1">
+                <h2 className="text-3xl font-black text-[#191f28] leading-tight mb-2 break-all whitespace-normal">{selectedStock.name}</h2>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-black text-gray-400 uppercase tracking-widest">{selectedStock.symbol}</span>
+                  <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full font-black text-[10px] shadow-sm \${isTrendUp ? 'bg-red-50 text-red-500' : 'bg-blue-50 text-[#3182f6]'}`}>
+                    {isTrendUp ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
+                    {isTrendUp ? '상승세' : '조정기'}
+                  </div>
+                </div>
               </div>
             </div>
 
-            <div className="h-[280px] w-full">
+            <div className="h-[320px] w-full px-1">
               {isDataLoading ? (
-                <div className="w-full h-full flex flex-col items-center justify-center gap-3">
-                  <div className="w-10 h-10 border-4 border-[#3182f6] border-t-transparent rounded-full animate-spin"></div>
-                  <p className="text-xs font-bold text-gray-400 animate-pulse">차트를 그리는 중입니다...</p>
+                <div className="w-full h-full flex flex-col items-center justify-center gap-4">
+                  <div className="w-12 h-12 border-4 border-[#3182f6] border-t-transparent rounded-full animate-spin"></div>
+                  <p className="text-xs font-black text-gray-300 animate-pulse uppercase tracking-[0.2em]">Designing Chart</p>
                 </div>
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={chartData}>
+                  <AreaChart data={chartData} margin={{ top: 20, right: 10, left: 10, bottom: 0 }}>
                     <defs>
                       <linearGradient id="colorUp" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#ef4444" stopOpacity={0.15}/>
+                        <stop offset="5%" stopColor="#ef4444" stopOpacity={0.2}/>
                         <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
                       </linearGradient>
                       <linearGradient id="colorDown" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#3182f6" stopOpacity={0.15}/>
+                        <stop offset="5%" stopColor="#3182f6" stopOpacity={0.2}/>
                         <stop offset="95%" stopColor="#3182f6" stopOpacity={0}/>
                       </linearGradient>
                     </defs>
@@ -171,8 +173,9 @@ export default function ChartComponent() {
                       dataKey="date" 
                       axisLine={false} 
                       tickLine={false} 
-                      tick={{ fill: '#adb5bd', fontSize: 10, fontWeight: 700 }}
+                      tick={{ fill: '#adb5bd', fontSize: 10, fontWeight: 900 }}
                       minTickGap={40}
+                      dy={15}
                     />
                     <YAxis hide={true} domain={['auto', 'auto']} />
                     <Tooltip content={<CustomTooltip />} />
@@ -180,7 +183,7 @@ export default function ChartComponent() {
                       type="monotone" 
                       dataKey="price" 
                       stroke={trendColor} 
-                      strokeWidth={3} 
+                      strokeWidth={4} 
                       strokeLinecap="round"
                       fillOpacity={1} 
                       fill={trendGradient} 
@@ -193,15 +196,15 @@ export default function ChartComponent() {
           </div>
 
           {/* AI Insight Row */}
-          <div className="bg-gray-50 rounded-[2.5rem] p-8 space-y-4">
-            <div className="flex items-center gap-2">
-              <Sparkles size={20} className="text-[#3182f6]" />
-              <h4 className="text-base font-bold text-[#191f28]">전문가 인사이트</h4>
+          <div className="bg-gray-50 rounded-[2.5rem] p-8 space-y-5 border border-gray-100 shadow-sm overflow-visible">
+            <div className="flex items-center gap-3">
+              <Sparkles size={22} className="text-[#3182f6]" />
+              <h4 className="text-lg font-black text-[#191f28]">전문가 기술 분석</h4>
             </div>
-            <p className="text-sm text-gray-600 leading-relaxed font-bold">
+            <p className="text-sm text-gray-700 leading-relaxed font-black break-words whitespace-normal px-1">
               {isTrendUp 
-                ? `${selectedStock.name}은(는) 안정적인 우상향 궤도에 진입했습니다. 현재 구간에서는 지지선을 이탈하지 않는 한 비중을 유지하는 전술이 유효합니다.` 
-                : `${selectedStock.name}은(는) 현재 기술적 조정을 거치고 있습니다. 섣부른 추격 매수보다는 하방 지지력이 확인되는 구간까지 기다리는 미덕이 필요합니다.`}
+                ? `${selectedStock.name}은(는) 안정적인 우상향 궤도에 진입했습니다. 현재 구간에서는 단기 과매수 여부를 체크한 뒤, 지지선을 이탈하지 않는 한 비중을 유지하는 전략이 유효합니다.` 
+                : `${selectedStock.name}은(는) 현재 기술적 조정을 거치고 있습니다. 섣부른 추격 매수보다는 하방 지지력이 확인되고 거래량이 실리는 저점 구간까지 관망하는 미덕이 필요합니다.`}
             </p>
           </div>
         </div>
