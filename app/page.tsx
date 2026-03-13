@@ -7,7 +7,9 @@ import {
   Sparkles, 
   Plus, 
   Target, 
-  ShieldAlert
+  ShieldAlert,
+  X,
+  Check
 } from 'lucide-react';
 
 interface Stock {
@@ -23,11 +25,21 @@ interface Stock {
 }
 
 export default function PortfolioPage() {
-  const [stocks] = useState<Stock[]>([
+  const [stocks, setStocks] = useState<Stock[]>([
     { id: 1, name: '삼성전자', avgPrice: 72000, currentPrice: 75200, quantity: 100, type: '장기', target: 90000, stopLoss: 68000, supplyTrend: '외국인 순매수세 지속' },
     { id: 2, name: 'SK하이닉스', avgPrice: 150000, currentPrice: 162000, quantity: 50, type: '스윙', target: 185000, stopLoss: 140000, supplyTrend: '기관 대량 매집 중' },
-    { id: 3, name: '카카오', avgPrice: 52000, currentPrice: 48500, quantity: 200, type: '단기', target: 60000, stopLoss: 45000, supplyTrend: '기관 매도세 및 거래량 감소' },
   ]);
+
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [newStock, setNewStock] = useState<Partial<Stock>>({
+    name: '',
+    avgPrice: 0,
+    quantity: 0,
+    type: '스윙',
+    target: 0,
+    stopLoss: 0,
+    supplyTrend: '수급 분석 대기 중'
+  });
 
   const [loadingAi, setLoadingAi] = useState<Record<number, boolean>>({});
   const [aiAnalysis, setAiAnalysis] = useState<Record<number, string>>({});
@@ -36,6 +48,26 @@ export default function PortfolioPage() {
     const profit = (stock.currentPrice - stock.avgPrice) * stock.quantity;
     const rate = ((stock.currentPrice / stock.avgPrice - 1) * 100).toFixed(2);
     return { profit, rate, isPositive: profit >= 0 };
+  };
+
+  const handleAddStock = () => {
+    if (!newStock.name || !newStock.avgPrice) return;
+    
+    const stockToAdd: Stock = {
+      id: Date.now(),
+      name: newStock.name,
+      avgPrice: Number(newStock.avgPrice),
+      currentPrice: Number(newStock.avgPrice), // 초기값은 동일하게 설정
+      quantity: Number(newStock.quantity),
+      type: newStock.type as '단기' | '스윙' | '장기',
+      target: Number(newStock.target),
+      stopLoss: Number(newStock.stopLoss),
+      supplyTrend: newStock.supplyTrend || '신규 등록 종목'
+    };
+
+    setStocks([stockToAdd, ...stocks]);
+    setIsAddModalOpen(false);
+    setNewStock({ name: '', avgPrice: 0, quantity: 0, type: '스윙', target: 0, stopLoss: 0, supplyTrend: '수급 분석 대기 중' });
   };
 
   const analyzeStock = async (stock: Stock) => {
@@ -70,7 +102,10 @@ export default function PortfolioPage() {
           <h1 className="text-2xl font-heading font-bold bg-gradient-to-r from-blue-500 to-indigo-400 bg-clip-text text-transparent">
             내 자산 현황
           </h1>
-          <button className="w-12 h-12 rounded-2xl bg-slate-800 border border-white/5 flex items-center justify-center text-blue-500 shadow-xl hover:bg-slate-700 transition-all">
+          <button 
+            onClick={() => setIsAddModalOpen(true)}
+            className="w-12 h-12 rounded-2xl bg-slate-800 border border-white/5 flex items-center justify-center text-blue-500 shadow-xl hover:bg-slate-700 transition-all active:scale-95"
+          >
             <Plus size={24} />
           </button>
         </div>
@@ -192,6 +227,105 @@ export default function PortfolioPage() {
           );
         })}
       </div>
+
+      {/* Add Stock Modal */}
+      {isAddModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-end justify-center sm:items-center p-0 sm:p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="bg-slate-900 w-full max-w-md rounded-t-[2.5rem] sm:rounded-[2.5rem] border-t sm:border border-white/10 p-8 shadow-2xl animate-in slide-in-from-bottom-10 duration-500">
+            <div className="flex justify-between items-center mb-8">
+              <h2 className="text-xl font-bold font-heading">새 종목 추가</h2>
+              <button 
+                onClick={() => setIsAddModalOpen(false)}
+                className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-slate-400 hover:text-white"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="space-y-6">
+              <div className="space-y-2">
+                <label className="text-xs text-slate-500 font-bold uppercase ml-1">종목명</label>
+                <input 
+                  type="text" 
+                  value={newStock.name}
+                  onChange={e => setNewStock({...newStock, name: e.target.value})}
+                  className="w-full bg-slate-800 border border-white/5 rounded-2xl px-5 py-4 focus:border-blue-500/50 focus:outline-none transition-all"
+                  placeholder="예: 삼성전자"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-xs text-slate-500 font-bold uppercase ml-1">매수가 (원)</label>
+                  <input 
+                    type="number" 
+                    value={newStock.avgPrice || ''}
+                    onChange={e => setNewStock({...newStock, avgPrice: Number(e.target.value)})}
+                    className="w-full bg-slate-800 border border-white/5 rounded-2xl px-5 py-4 focus:border-blue-500/50 focus:outline-none transition-all"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs text-slate-500 font-bold uppercase ml-1">보유수량</label>
+                  <input 
+                    type="number" 
+                    value={newStock.quantity || ''}
+                    onChange={e => setNewStock({...newStock, quantity: Number(e.target.value)})}
+                    className="w-full bg-slate-800 border border-white/5 rounded-2xl px-5 py-4 focus:border-blue-500/50 focus:outline-none transition-all"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs text-slate-500 font-bold uppercase ml-1">투자 성향</label>
+                <div className="flex gap-2">
+                  {['단기', '스윙', '장기'].map(t => (
+                    <button
+                      key={t}
+                      onClick={() => setNewStock({...newStock, type: t as any})}
+                      className={`flex-1 py-3 rounded-xl border text-sm font-bold transition-all ${
+                        newStock.type === t 
+                        ? 'bg-blue-500/10 border-blue-500 text-blue-500' 
+                        : 'bg-slate-800 border-white/5 text-slate-500'
+                      }`}
+                    >
+                      {t}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 pt-2">
+                <div className="space-y-2">
+                  <label className="text-xs text-slate-500 font-bold uppercase ml-1">목표가</label>
+                  <input 
+                    type="number" 
+                    value={newStock.target || ''}
+                    onChange={e => setNewStock({...newStock, target: Number(e.target.value)})}
+                    className="w-full bg-slate-800 border border-white/5 rounded-2xl px-5 py-4 text-red-500 focus:border-red-500/50 focus:outline-none"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs text-slate-500 font-bold uppercase ml-1">손절가</label>
+                  <input 
+                    type="number" 
+                    value={newStock.stopLoss || ''}
+                    onChange={e => setNewStock({...newStock, stopLoss: Number(e.target.value)})}
+                    className="w-full bg-slate-800 border border-white/5 rounded-2xl px-5 py-4 text-blue-400 focus:border-blue-400/50 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <button 
+                onClick={handleAddStock}
+                className="w-full py-5 mt-4 rounded-2xl bg-blue-500 text-white font-black text-lg flex items-center justify-center gap-2 shadow-xl shadow-blue-500/20 active:scale-[0.98] transition-all"
+              >
+                <Check size={24} />
+                <span>종목 추가하기</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
