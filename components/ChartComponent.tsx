@@ -1,157 +1,240 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from 'react';
-import { createChart, IChartApi, ISeriesApi } from 'lightweight-charts';
-import { Sparkles } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { 
+  LineChart, 
+  Line, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  ResponsiveContainer,
+  AreaChart,
+  Area
+} from 'recharts';
+import { 
+  LayoutDashboard, 
+  Bell, 
+  TrendingUp, 
+  TrendingDown, 
+  Search,
+  ChevronRight,
+  Sparkles
+} from 'lucide-react';
+import { supabase } from '@/lib/supabase';
+
+interface StockData {
+  id: string | number;
+  symbol: string;
+  name: string;
+}
+
+interface ChartData {
+  date: string;
+  price: number;
+}
 
 export default function ChartComponent() {
-  const chartContainerRef = useRef<HTMLDivElement>(null);
-  const chartRef = useRef<IChartApi | null>(null);
-  const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
-  const [activePeriod, setActivePeriod] = useState<string>('일');
-  const [activeIndicator, setActiveIndicator] = useState<string[]>(['5일선', '20일선']);
+  const [activeTab, setActiveTab] = useState<'holdings' | 'interests'>('holdings');
+  const [stocks, setStocks] = useState<StockData[]>([]);
+  const [selectedStock, setSelectedStock] = useState<StockData | null>(null);
+  const [chartData, setChartData] = useState<ChartData[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isDataLoading, setIsDataLoading] = useState(false);
 
-  const mockData: any = {
-    '일': [
-      { time: '2024-03-01', open: 72000, high: 73000, low: 71500, close: 72500 },
-      { time: '2024-03-02', open: 72500, high: 74000, low: 72000, close: 73800 },
-      { time: '2024-03-03', open: 73800, high: 75000, low: 73500, close: 74900 },
-      { time: '2024-03-04', open: 74900, high: 75500, low: 74000, close: 74200 },
-      { time: '2024-03-05', open: 74200, high: 76000, low: 74200, close: 75800 },
-    ],
-    '주': [
-      { time: '2024-02-05', open: 68000, high: 71000, low: 67500, close: 70500 },
-      { time: '2024-02-12', open: 70500, high: 72500, low: 70000, close: 71800 },
-      { time: '2024-02-19', open: 71800, high: 73500, low: 71000, close: 73200 },
-      { time: '2024-02-26', open: 73200, high: 76500, low: 73000, close: 75800 },
-    ],
-    '월': [
-      { time: '2023-12-01', open: 62000, high: 68000, low: 61000, close: 67500 },
-      { time: '2024-01-01', open: 67500, high: 71000, low: 66000, close: 70200 },
-      { time: '2024-02-01', open: 70200, high: 77000, low: 69500, close: 75800 },
-    ]
-  };
-
+  // 데이터 로드
   useEffect(() => {
-    if (!chartContainerRef.current) return;
-
-    const chart = createChart(chartContainerRef.current, {
-      layout: {
-        background: { color: 'transparent' },
-        textColor: '#94a3b8',
-        fontSize: 10,
-        fontFamily: 'Inter',
-      },
-      grid: {
-        vertLines: { color: 'rgba(255, 255, 255, 0.05)' },
-        horzLines: { color: 'rgba(255, 255, 255, 0.05)' },
-      },
-      crosshair: {
-        mode: 0,
-        vertLine: { color: '#3182f6', labelBackgroundColor: '#3182f6' },
-        horzLine: { color: '#3182f6', labelBackgroundColor: '#3182f6' },
-      },
-      width: chartContainerRef.current.clientWidth,
-      height: 400,
-      timeScale: {
-        borderColor: 'rgba(255, 255, 255, 0.1)',
-      },
-    });
-
-    const series = (chart as any).addCandlestickSeries({
-      upColor: '#ef4444',
-      downColor: '#60a5fa',
-      borderUpColor: '#ef4444',
-      borderDownColor: '#60a5fa',
-      wickUpColor: '#ef4444',
-      wickDownColor: '#60a5fa',
-    });
-
-    series.setData(mockData[activePeriod]);
-    
-    chartRef.current = chart;
-    seriesRef.current = series;
-
-    const handleResize = () => {
-      if (chartContainerRef.current) {
-        chart.applyOptions({ width: chartContainerRef.current.clientWidth });
+    const fetchData = async () => {
+      setIsLoading(true);
+      try {
+        if (activeTab === 'holdings') {
+          const { data } = await supabase.from('holdings').select('id, symbol, stock_name');
+          if (data) {
+            const mapped = data.map(d => ({ id: d.id, symbol: d.symbol, name: d.stock_name }));
+            setStocks(mapped);
+            if (mapped.length > 0) setSelectedStock(mapped[0]);
+          }
+        } else {
+          const { data } = await supabase.from('alerts').select('id, symbol, stock_name');
+          if (data) {
+            const mapped = data.map(d => ({ id: d.id, symbol: d.symbol, name: d.stock_name }));
+            setStocks(mapped);
+            if (mapped.length > 0) setSelectedStock(mapped[0]);
+          }
+        }
+      } catch (error) {
+        console.error("Fetch stocks error:", error);
+      } finally {
+        setIsLoading(false);
       }
     };
+    fetchData();
+  }, [activeTab]);
 
-    window.addEventListener('resize', handleResize);
-
-    return () => {
-      window.removeEventListener('resize', handleResize);
-      chart.remove();
-    };
-  }, []);
-
+  // 차트 데이터 로드
   useEffect(() => {
-    if (seriesRef.current && chartRef.current) {
-      seriesRef.current.setData(mockData[activePeriod]);
-      chartRef.current.timeScale().fitContent();
+    if (selectedStock) {
+      const fetchHistory = async () => {
+        setIsDataLoading(true);
+        try {
+          const res = await fetch(`/api/history?symbol=${selectedStock.symbol}`);
+          const data = await res.json();
+          if (Array.isArray(data)) {
+            setChartData(data);
+          } else {
+            setChartData([]);
+          }
+        } catch (error) {
+          console.error("Fetch history error:", error);
+          setChartData([]);
+        } finally {
+          setIsDataLoading(false);
+        }
+      };
+      fetchHistory();
     }
-  }, [activePeriod]);
+  }, [selectedStock]);
 
-  const toggleIndicator = (id: string) => {
-    setActiveIndicator(prev => 
-      prev.includes(id) ? prev.filter((i: string) => i !== id) : [...prev, id]
-    );
+  const isTrendUp = chartData.length >= 2 && chartData[chartData.length - 1].price >= chartData[0].price;
+  const trendColor = isTrendUp ? '#ef4444' : '#3b82f6'; // 상승 빨강, 하락 파랑
+  const trendGradient = isTrendUp ? 'url(#colorUp)' : 'url(#colorDown)';
+
+  const CustomTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
+      return (
+        <div className="bg-slate-800 border border-white/10 p-3 rounded-2xl shadow-2xl backdrop-blur-xl">
+          <p className="text-[10px] text-slate-500 font-black mb-1">{label}</p>
+          <p className="text-sm font-black text-slate-100">{payload[0].value.toLocaleString()}원</p>
+        </div>
+      );
+    }
+    return null;
   };
 
   return (
-    <div className="flex flex-col gap-5 animate-in fade-in duration-500 pb-24 p-6">
-      <div className="flex justify-between items-center px-1">
-        <div className="flex items-center gap-3">
-          <h3 className="text-xl font-black font-heading text-slate-100">삼성전자</h3>
-          <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">005930</span>
-        </div>
-        <div className="flex p-1 bg-slate-800 border border-white/5 rounded-2xl">
-          {['일', '주', '월'].map(p => (
-            <button 
-              key={p} 
-              className={`px-4 py-1.5 text-xs font-black rounded-xl transition-all ${
-                activePeriod === p ? "bg-slate-700 text-white shadow-lg" : "text-slate-500 hover:text-slate-300"
-              }`}
-              onClick={() => setActivePeriod(p)}
-            >
-              {p}
-            </button>
-          ))}
-        </div>
-      </div>
-      
-      <div className="bg-slate-800/40 border border-white/5 rounded-[2.5rem] p-4 h-[440px] shadow-2xl">
-        <div ref={chartContainerRef} className="w-full h-full" />
-      </div>
-
-      <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-none px-1">
-        {['5일선', '20일선', '60일선', '120일선'].map(ind => (
+    <div className="min-h-screen bg-slate-900 text-slate-100 pb-36 font-sans p-6 animate-in fade-in duration-500">
+      <header className="mb-8">
+        <h1 className="text-2xl font-black bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent italic tracking-tighter mb-4">Stock Charts</h1>
+        
+        {/* Tab Selection */}
+        <div className="flex p-1.5 bg-slate-800/50 border border-white/5 rounded-[2rem] gap-1">
           <button 
-            key={ind}
-            className={`px-5 py-2.5 rounded-2xl text-[11px] font-black border whitespace-nowrap transition-all ${
-              activeIndicator.includes(ind) 
-              ? 'bg-blue-500/10 text-blue-500 border-blue-500/30 shadow-[0_0_15px_rgba(59,130,246,0.1)]' 
-              : 'bg-slate-800 border-white/5 text-slate-500 hover:text-slate-300'
-            }`}
-            onClick={() => toggleIndicator(ind)}
+            onClick={() => setActiveTab('holdings')}
+            className={`flex-1 py-3 px-4 rounded-full text-xs font-black transition-all flex items-center justify-center gap-2 ${activeTab === 'holdings' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}
           >
-            {ind}
+            <LayoutDashboard size={14} /> 보유종목
           </button>
-        ))}
+          <button 
+            onClick={() => setActiveTab('interests')}
+            className={`flex-1 py-3 px-4 rounded-full text-xs font-black transition-all flex items-center justify-center gap-2 ${activeTab === 'interests' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}
+          >
+            <Bell size={14} /> 관심종목
+          </button>
+        </div>
+      </header>
+
+      {/* Stock Selection List */}
+      <div className="flex gap-2 overflow-x-auto pb-6 scrollbar-none">
+        {isLoading ? (
+          [1,2,3].map(i => <div key={i} className="min-w-[120px] h-20 bg-slate-800/40 rounded-3xl animate-pulse"></div>)
+        ) : stocks.length === 0 ? (
+          <div className="w-full text-center py-4 bg-slate-800/20 rounded-3xl border border-dashed border-white/5">
+            <p className="text-slate-500 text-xs font-bold">표시할 종목이 없습니다.</p>
+          </div>
+        ) : (
+          stocks.map(stock => (
+            <button 
+              key={stock.id}
+              onClick={() => setSelectedStock(stock)}
+              className={`min-w-[120px] p-4 rounded-3xl border transition-all text-left group ${selectedStock?.id === stock.id ? 'bg-slate-800 border-blue-500/50 shadow-xl' : 'bg-slate-800/30 border-white/5 hover:border-white/10'}`}
+            >
+              <p className="text-[10px] text-slate-500 font-bold mb-1 uppercase tracking-tighter truncate">{stock.symbol}</p>
+              <p className={`text-sm font-black truncate ${selectedStock?.id === stock.id ? 'text-blue-400' : 'text-slate-300'}`}>{stock.name}</p>
+            </button>
+          ))
+        )}
       </div>
 
-      <div className="p-8 bg-slate-800/50 border border-white/5 rounded-[2.5rem] animate-in slide-in-from-bottom-3 duration-600 shadow-xl relative overflow-hidden">
-        <div className="absolute top-0 left-0 w-1.5 h-full bg-blue-500/30"></div>
-        <div className="flex items-center gap-2 mb-4">
-          <Sparkles size={16} className="text-blue-500" />
-          <h4 className="text-sm font-black text-slate-200">AI 차트 분석 의견</h4>
+      {selectedStock && (
+        <div className="space-y-6">
+          <div className="bg-slate-800/40 border border-white/5 rounded-[2.5rem] p-6 shadow-2xl relative overflow-hidden">
+            <div className="flex justify-between items-center mb-8">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-blue-500/10 flex items-center justify-center border border-blue-500/20">
+                  {isTrendUp ? <TrendingUp size={20} className="text-red-500" /> : <TrendingDown size={20} className="text-blue-400" />}
+                </div>
+                <div>
+                  <h2 className="text-xl font-black">{selectedStock.name}</h2>
+                  <p className="text-[10px] text-slate-500 font-bold">최근 3개월 주가 추이</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="h-[300px] w-full">
+              {isDataLoading ? (
+                <div className="w-full h-full flex flex-col items-center justify-center gap-3">
+                  <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                  <p className="text-[10px] text-slate-500 font-black animate-pulse">데이터 로드 중...</p>
+                </div>
+              ) : chartData.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={chartData}>
+                    <defs>
+                      <linearGradient id="colorUp" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3}/>
+                        <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
+                      </linearGradient>
+                      <linearGradient id="colorDown" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
+                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)" vertical={false} />
+                    <XAxis 
+                      dataKey="date" 
+                      axisLine={false} 
+                      tickLine={false} 
+                      tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
+                      minTickGap={30}
+                    />
+                    <YAxis 
+                      hide={true} 
+                      domain={['auto', 'auto']} 
+                    />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Area 
+                      type="monotone" 
+                      dataKey="price" 
+                      stroke={trendColor} 
+                      strokeWidth={3} 
+                      fillOpacity={1} 
+                      fill={trendGradient} 
+                      animationDuration={1500}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="w-full h-full flex items-center justify-center">
+                  <p className="text-slate-500 text-xs font-bold">차트 데이터를 가져올 수 없습니다.</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="p-8 bg-slate-800/50 border border-white/5 rounded-[2.5rem] shadow-xl relative overflow-hidden group">
+            <div className="absolute top-0 left-0 w-1.5 h-full bg-blue-500/30 group-hover:bg-blue-500 transition-all"></div>
+            <div className="flex items-center gap-2 mb-4">
+              <Sparkles size={16} className="text-blue-500" />
+              <h4 className="text-sm font-black text-slate-200 uppercase tracking-tighter">Market Insight</h4>
+            </div>
+            <p className="text-xs text-slate-400 leading-relaxed font-medium">
+              {isTrendUp 
+                ? `${selectedStock.name}은 최근 3개월간 우상향 추세를 보이고 있습니다. 지지선을 확보하며 안정적인 흐름을 유지 중입니다.` 
+                : `${selectedStock.name}은 최근 단기 조정을 보이고 있습니다. 기술적 반등 구간 확인이 필요하며 변동성에 유의하십시오.`}
+            </p>
+          </div>
         </div>
-        <p className="text-xs text-slate-400 leading-relaxed font-medium">
-          현재 20일 이동평균선 지지를 받으며 반등 시도 중입니다. 
-          최근 외국인 수급이 개선되고 있어 76,000원 돌파 시 추가 상승이 기대되는 기술적 구간입니다.
-        </p>
-      </div>
+      )}
     </div>
   );
 }

@@ -18,7 +18,9 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Bell,
-  Search
+  Search,
+  Flame,
+  Trophy
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
@@ -31,7 +33,7 @@ interface AiAnalysisResult {
 
 interface Stock {
   id: string | number;
-  symbol: string; // 야후 파이낸스 심볼 (예: 005930.KS)
+  symbol: string;
   name: string;
   avgPrice: number;
   currentPrice: number | null; 
@@ -44,6 +46,8 @@ interface Stock {
   error?: string;
   changePercent?: number;
   fetchError?: boolean;
+  volume?: number;
+  avgVolume?: number;
 }
 
 interface InterestStock {
@@ -56,6 +60,8 @@ interface InterestStock {
   fetchError?: boolean;
   analysis?: AiAnalysisResult;
   error?: string;
+  volume?: number;
+  avgVolume?: number;
 }
 
 interface MarketIndex {
@@ -86,14 +92,7 @@ export default function PortfolioPage() {
   const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
   
   const [newStock, setNewStock] = useState<Partial<Stock>>({
-    name: '',
-    symbol: '',
-    avgPrice: 0,
-    quantity: 0,
-    type: '스윙',
-    target: 0,
-    stopLoss: 0,
-    supplyTrend: '수급 분석 대기 중'
+    name: '', symbol: '', avgPrice: 0, quantity: 0, type: '스윙', target: 0, stopLoss: 0, supplyTrend: '수급 분석 대기 중'
   });
 
   const [loadingAi, setLoadingAi] = useState<Record<string | number, boolean>>({});
@@ -104,36 +103,24 @@ export default function PortfolioPage() {
     return now.toTimeString().split(' ')[0];
   };
 
-  // 1. 시장 지수 가져오기
   const fetchMarketIndices = async () => {
     setIsMarketLoading(true);
     try {
       const res = await fetch('/api/market');
       const data = await res.json();
-      if (Array.isArray(data)) {
-        setMarketIndices(data);
-      }
-    } catch (error) {
-      console.error("Market fetch error:", error);
-    } finally {
-      setIsMarketLoading(false);
-    }
+      if (Array.isArray(data)) setMarketIndices(data);
+    } catch (error) { console.error("Market fetch error:", error); }
+    finally { setIsMarketLoading(false); }
   };
 
-  // 2. 보유 종목 불러오기
   const fetchHoldings = async () => {
     setIsInitialLoading(true);
     const localData = localStorage.getItem(STORAGE_KEY);
     if (localData) {
-      try {
-        setStocks(JSON.parse(localData));
-      } catch (e) { console.error("Local storage error:", e); }
+      try { setStocks(JSON.parse(localData)); } catch (e) { console.error("Local storage error:", e); }
     }
     try {
-      const { data, error } = await supabase
-        .from('holdings')
-        .select('*')
-        .order('created_at', { ascending: false });
+      const { data, error } = await supabase.from('holdings').select('*').order('created_at', { ascending: false });
       if (error) throw error;
       if (data) {
         const mapped: Stock[] = data.map(item => ({
@@ -149,25 +136,18 @@ export default function PortfolioPage() {
     finally { setIsInitialLoading(false); }
   };
 
-  // 3. 관심 종목 불러오기
   const fetchInterests = async () => {
     setIsInterestsLoading(true);
     const localData = localStorage.getItem(INTERESTS_STORAGE_KEY);
     if (localData) {
-      try {
-        setInterestStocks(JSON.parse(localData));
-      } catch (e) { console.error("Interests local storage error:", e); }
+      try { setInterestStocks(JSON.parse(localData)); } catch (e) { console.error("Interests local storage error:", e); }
     }
     try {
-      const { data, error } = await supabase
-        .from('alerts')
-        .select('*')
-        .order('created_at', { ascending: false });
+      const { data, error } = await supabase.from('alerts').select('*').order('created_at', { ascending: false });
       if (error) throw error;
       if (data) {
         const mapped: InterestStock[] = data.map(item => ({
-          id: item.id, name: item.stock_name, symbol: item.symbol,
-          price: null, change: null, alertEnabled: item.alert_enabled,
+          id: item.id, name: item.stock_name, symbol: item.symbol, price: null, change: null, alertEnabled: item.alert_enabled,
         }));
         setInterestStocks(mapped);
         localStorage.setItem(INTERESTS_STORAGE_KEY, JSON.stringify(mapped));
@@ -176,7 +156,6 @@ export default function PortfolioPage() {
     finally { setIsInterestsLoading(false); }
   };
 
-  // 4. 모든 종목 가격 통합 업데이트
   const fetchAllPrices = async () => {
     if (stocks.length === 0 && interestStocks.length === 0) return;
     setIsRefreshing(true);
@@ -193,21 +172,33 @@ export default function PortfolioPage() {
       });
       const data = await res.json();
       
-      // 보유 종목 업데이트
       setStocks(prev => {
         const next = prev.map(s => {
           const live = data[s.symbol];
-          return live && live.success ? { ...s, currentPrice: live.price, changePercent: live.changePercent, fetchError: false } : (live?.error ? { ...s, fetchError: true } : s);
+          return live && live.success ? { 
+            ...s, 
+            currentPrice: live.price, 
+            changePercent: live.changePercent, 
+            volume: live.volume,
+            avgVolume: live.avgVolume,
+            fetchError: false 
+          } : (live?.error ? { ...s, fetchError: true } : s);
         });
         localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
         return next;
       });
 
-      // 관심 종목 업데이트
       setInterestStocks(prev => {
         const next = prev.map(s => {
           const live = data[s.symbol];
-          return live && live.success ? { ...s, price: live.price, change: live.changePercent, fetchError: false } : (live?.error ? { ...s, fetchError: true } : s);
+          return live && live.success ? { 
+            ...s, 
+            price: live.price, 
+            change: live.changePercent, 
+            volume: live.volume,
+            avgVolume: live.avgVolume,
+            fetchError: false 
+          } : (live?.error ? { ...s, fetchError: true } : s);
         });
         localStorage.setItem(INTERESTS_STORAGE_KEY, JSON.stringify(next));
         return next;
@@ -221,7 +212,8 @@ export default function PortfolioPage() {
   useEffect(() => {
     const init = async () => {
       fetchMarketIndices();
-      await Promise.all([fetchHoldings(), fetchInterests()]);
+      await fetchHoldings();
+      await fetchInterests();
       fetchAllPrices();
     };
     init();
@@ -247,11 +239,7 @@ export default function PortfolioPage() {
         target_price: Number(newStock.target), stop_loss: Number(newStock.stopLoss)
       }]).select();
       if (error) throw error;
-      if (data && data[0]) {
-        fetchHoldings().then(() => fetchAllPrices());
-        setIsAddModalOpen(false);
-        setNewStock({ name: '', symbol: '', avgPrice: 0, quantity: 0, type: '스윙', target: 0, stopLoss: 0, supplyTrend: '수급 분석 대기 중' });
-      }
+      if (data) { fetchHoldings().then(() => fetchAllPrices()); setIsAddModalOpen(false); }
     } catch (err) { console.error('Error adding stock:', err); }
   };
 
@@ -295,6 +283,15 @@ export default function PortfolioPage() {
   const totalCurrentAmount = stocks.reduce((acc, s) => acc + (s.currentPrice || s.avgPrice) * s.quantity, 0);
   const totalProfit = totalCurrentAmount - totalBuyAmount;
   const isTotalPositive = totalProfit >= 0;
+
+  // 알림 로직
+  const isTargetReached = (stock: Stock) => stock.currentPrice !== null && stock.target > 0 && stock.currentPrice >= stock.target;
+  const isSupplySpike = (stock: Stock | InterestStock) => {
+    const change = 'changePercent' in stock ? stock.changePercent : (stock as InterestStock).change;
+    const isPriceSpike = change !== undefined && change !== null && change >= 5;
+    const isVolumeSpike = stock.volume !== undefined && stock.avgVolume !== undefined && stock.volume > 0 && stock.avgVolume > 0 && stock.volume >= stock.avgVolume * 2;
+    return isPriceSpike || isVolumeSpike;
+  };
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 pb-36 font-sans overflow-x-hidden">
@@ -345,7 +342,7 @@ export default function PortfolioPage() {
                 <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.2em] mb-1">Total Portfolio Value</p>
                 <h2 className="text-3xl font-black text-slate-100 tracking-tight">{(totalCurrentAmount).toLocaleString()}원</h2>
               </div>
-              <div className={`px-4 py-2 rounded-2xl flex items-center gap-1.5 font-black text-sm border ${isTotalPositive ? 'bg-red-500/10 text-red-500 border-red-500/20' : 'bg-blue-500/10 text-blue-400 border-blue-500/20'}`}>
+              <div className={`px-4 py-2 rounded-2xl flex items-center gap-1.5 font-black text-sm border ${isTotalPositive ? 'bg-red-500/10 text-red-500 border-red-500/20 shadow-[0_0_15px_rgba(239,68,68,0.2)]' : 'bg-blue-500/10 text-blue-400 border-blue-500/20 shadow-[0_0_15px_rgba(59,130,246,0.2)]'}`}>
                 {isTotalPositive ? <TrendingUp size={14} /> : <TrendingDown size={14} />} {totalBuyAmount > 0 ? (totalProfit/totalBuyAmount*100).toFixed(2) : '0.00'}%
               </div>
             </div>
@@ -367,20 +364,38 @@ export default function PortfolioPage() {
           {isInitialLoading ? (
             <div className="flex justify-center py-10"><div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div></div>
           ) : stocks.length === 0 ? (
-            <div className="bg-slate-800/20 border-2 border-dashed border-white/5 rounded-[3rem] p-10 text-center"><h4 className="text-slate-500 font-bold mb-4">보유 종목이 없습니다.</h4><button onClick={() => setIsAddModalOpen(true)} className="px-6 py-3 bg-slate-800 text-blue-500 rounded-2xl font-black border border-blue-500/30">종목 추가하기</button></div>
+            <div className="bg-slate-800/20 border-2 border-dashed border-white/5 rounded-[3rem] p-10 text-center animate-in fade-in duration-700"><h4 className="text-slate-500 font-bold mb-4">보유 종목이 없습니다.</h4><button onClick={() => setIsAddModalOpen(true)} className="px-6 py-3 bg-slate-800 text-blue-500 rounded-2xl font-black border border-blue-500/30">종목 추가하기</button></div>
           ) : (
             <div className="space-y-6">
               {stocks.map(stock => {
                 const { profit, rate, isPositive } = calculateProfit(stock);
                 const isExpanded = expandedStockId === stock.id;
+                const targetAchieved = isTargetReached(stock);
+                const supplyDetected = isSupplySpike(stock);
+                
                 return (
-                  <div key={stock.id} className="bg-slate-800/40 border border-white/5 rounded-[2.5rem] p-6 hover:bg-slate-800/60 transition-all group/card">
+                  <div key={stock.id} className="bg-slate-800/40 border border-white/5 rounded-[2.5rem] p-6 hover:bg-slate-800/60 transition-all group/card relative overflow-hidden">
+                    {targetAchieved && (
+                      <div className="absolute top-4 right-4 animate-bounce">
+                        <div className="bg-red-500 text-white text-[9px] font-black px-2 py-1 rounded-lg flex items-center gap-1 shadow-[0_0_15px_rgba(239,68,68,0.5)] border border-white/20">
+                          <Trophy size={10} strokeWidth={3} /> 목표가 달성!
+                        </div>
+                      </div>
+                    )}
                     <div className="flex justify-between items-start mb-6">
                       <div>
-                        <div className="flex items-center gap-2 mb-1"><h4 className="text-xl font-black">{stock.name}</h4></div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <h4 className="text-xl font-black">{stock.name}</h4>
+                          {supplyDetected && (
+                            <div className="flex items-center gap-1 bg-orange-500/10 text-orange-400 px-2 py-0.5 rounded-full border border-orange-500/20 animate-pulse">
+                              <Flame size={10} />
+                              <span className="text-[9px] font-black italic">수급포착</span>
+                            </div>
+                          )}
+                        </div>
                         <p className="text-[10px] text-slate-500 font-bold tracking-widest">{stock.symbol}</p>
                       </div>
-                      <div className="text-right">
+                      <div className={`text-right ${targetAchieved ? 'mt-6' : ''}`}>
                         {stock.currentPrice === null ? <div className="w-20 h-6 bg-white/5 animate-pulse rounded-lg"></div> : <><div className={`text-xl font-black ${isPositive ? 'text-red-500' : 'text-blue-400'}`}>{rate}%</div><p className="text-[10px] text-slate-500 font-bold">{isPositive ? '+' : ''}{profit.toLocaleString()}원</p></>}
                       </div>
                     </div>
@@ -418,11 +433,16 @@ export default function PortfolioPage() {
               {interestStocks.map(stock => {
                 const isExpanded = expandedInterestId === stock.id;
                 const isUp = stock.change !== null && stock.change >= 0;
+                const supplyDetected = isSupplySpike(stock);
+                
                 return (
-                  <div key={stock.id} className="bg-slate-800/40 border border-white/5 rounded-[2.5rem] p-6 hover:bg-slate-800/60 transition-all border-l-4 border-l-indigo-500/30">
+                  <div key={stock.id} className="bg-slate-800/40 border border-white/5 rounded-[2.5rem] p-6 hover:bg-slate-800/60 transition-all border-l-4 border-l-indigo-500/30 group/card relative overflow-hidden">
                     <div className="flex justify-between items-start mb-6">
                       <div>
-                        <h4 className="text-xl font-black mb-1">{stock.name}</h4>
+                        <div className="flex items-center gap-2 mb-1">
+                          <h4 className="text-xl font-black">{stock.name}</h4>
+                          {supplyDetected && <Flame size={16} className="text-orange-500 animate-pulse" />}
+                        </div>
                         <p className="text-[10px] text-slate-500 font-bold tracking-widest">{stock.symbol}</p>
                       </div>
                       <div className="text-right">
