@@ -6,57 +6,94 @@ import { supabase } from '@/lib/supabase';
 export const dynamic = 'force-dynamic';
 
 /**
- * 공공데이터포털 주식 시세 정보 (인증 실패 정밀 추격 리팩토링)
+ * 보안을 위해 URL 마스킹 (Vercel 로그용)
+ */
+function maskUrl(url: string) {
+  try {
+    const urlObj = new URL(url);
+    const key = urlObj.searchParams.get('serviceKey');
+    if (key) {
+      const masked = key.length > 6 
+        ? `\${key.substring(0, 3)}***\${key.substring(key.length - 3)}`
+        : "***";
+      urlObj.searchParams.set('serviceKey', masked);
+    }
+    return urlObj.toString();
+  } catch (e) {
+    return url.substring(0, 50) + "...";
+  }
+}
+
+/**
+ * 공공데이터포털 주식 시세 정보 (2단계 검색 + 인증 고도화 리팩토링)
  */
 async function getPublicStockData(tickerOrName: string) {
-  let serviceKey = process.env.PUBLIC_DATA_PORTAL_KEY;
-  if (!serviceKey || serviceKey.includes('YOUR_PUBLIC')) return null;
+  const rawKey = process.env.PUBLIC_DATA_PORTAL_KEY;
+  if (!rawKey || rawKey.includes('YOUR_PUBLIC')) return null;
 
   try {
-    // 1. 하드코딩 교정: 이중 인코딩 차단
-    const decodedKey = decodeURIComponent(serviceKey);
+    // 1. 인증키 정규화 (이중 인코딩 방지)
+    const serviceKey = decodeURIComponent(rawKey);
+    const baseUrl = "http://apis.data.go.kr/1160100/service/GetStockSecuritiesInfoService/getStockPriceInfo";
     
-    const isCode = /^\d{6}$/.test(tickerOrName);
-    const param = isCode ? `likeSrtnCd=\${tickerOrName}` : `itmsNm=\${encodeURIComponent(tickerOrName)}`;
+    // 티커 여부 판별 (숫자 6자리 혹은 A+숫자 6자리)
+    const cleanTicker = tickerOrName.trim();
+    const isNumericTicker = /^\d{6}$/.test(cleanTicker);
+    const isATicker = /^A\d{6}$/i.test(cleanTicker);
+
+    // 검색 파라미터 구성 로직
+    const searchParams = [];
     
-    // 금융위원회 주식시세정보 (getStockPriceInfo)
-    const url = `http://apis.data.go.kr/1160100/service/GetStockSecuritiesInfoService/getStockPriceInfo?serviceKey=\${decodedKey}&resultType=json&numOfRows=1&\${param}`;
-    
-    console.log(`[Stock API] Calling URL for \${tickerOrName}: \${url.substring(0, 100)}...`);
-
-    const res = await fetch(url, { cache: 'no-store' });
-    const text = await res.text();
-    
-    let data;
-    try {
-      data = JSON.parse(text);
-    } catch (e) {
-      console.error(`[Stock API] JSON Parse Error(\${tickerOrName}): \${text.substring(0, 200)}`);
-      return null;
-    }
-
-    // 2. 에러 코드 정밀 로깅 (resultCode 추적)
-    const header = data?.response?.header;
-    if (header?.resultCode !== "00") {
-      console.error(`[Stock API] API ERROR(\${tickerOrName}) - Code: \${header?.resultCode}, Msg: \${header?.resultMsg}`);
-      return null;
-    }
-
-    const item = data?.response?.body?.items?.item?.[0];
-
-    if (item) {
-      return {
-        price: parseFloat(item.clpr), // 종가
-        change: parseFloat(item.vs), // 전일대비
-        changePercent: parseFloat(item.fltRt), // 등락률
-        success: true,
-        status: "공공데이터"
-      };
+    if (isNumericTicker || isATicker) {
+      // 6자리 숫자면 'A'를 앞에 붙여서 srtnCd로 먼저 시도
+      const srtnCd = isNumericTicker ? `A\${cleanTicker}` : cleanTicker.toUpperCase();
+      searchParams.push(`srtnCd=\${srtnCd}`);
+      // 종목명으로도 백업 시도할 수 있게 명칭도 추가 (실제로는 srtnCd로 먼저 호출)
+      searchParams.push(`itmsNm=\${encodeURIComponent(cleanTicker)}`);
     } else {
-      console.warn(`[Stock API] No item found for \${tickerOrName} in public response.`);
+      // 숫자가 아니면 종목명으로 판단
+      searchParams.push(`itmsNm=\${encodeURIComponent(cleanTicker)}`);
     }
-  } catch (e) {
-    console.error(`[Stock API] Critical Fetch Error for \${tickerOrName}:`, e);
+
+    // --- 2단계 검색 로직 시작 ---
+    for (const param of searchParams) {
+      const fullUrl = `\${baseUrl}?serviceKey=\${serviceKey}&resultType=json&numOfRows=1&\${param}`;
+      
+      console.log(`[Stock API] Requesting: \${maskUrl(fullUrl)}`);
+
+      const res = await fetch(fullUrl, { cache: 'no-store' });
+      const text = await res.text();
+      
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        console.error(`[Stock API] JSON Parse Error (\${tickerOrName}): \${text.substring(0, 200)}`);
+        continue; // 다음 파라미터로 시도
+      }
+
+      const header = data?.response?.header;
+      if (header?.resultCode !== "00") {
+        console.error(`[Stock API] FAIL (\${tickerOrName}) - Code: \${header?.resultCode}, Msg: \${header?.resultMsg}`);
+        continue;
+      }
+
+      const item = data?.response?.body?.items?.item?.[0];
+
+      if (item) {
+        console.log(`[Stock API] SUCCESS (\${tickerOrName}) via \${param.split('=')[0]}: \${item.clpr}`);
+        return {
+          price: parseFloat(item.clpr),
+          change: parseFloat(item.vs),
+          changePercent: parseFloat(item.fltRt),
+          success: true,
+          status: "공공데이터"
+        };
+      }
+    }
+    // 모든 시도 실패 시
+  } catch (e: any) {
+    console.error(`[Stock API] ERROR (\${tickerOrName}):`, e.message);
   }
   return null;
 }
@@ -94,18 +131,19 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "올바른 종목 코드 형식이 아닙니다." }, { status: 400 });
     }
 
-    console.log(`[Stock API] Batch Update Started for \${symbols.length} symbols...`);
+    console.log(`[Stock API] Updating \${symbols.length} symbols...`);
 
     const results = await Promise.all(
       symbols.map(async (s) => {
         let originalSymbol = s.toUpperCase().trim();
         
         try {
-          // 1. 공공데이터 우선 호출
+          // 1. 공공데이터 우선
           let data = await getPublicStockData(originalSymbol);
           
-          // 2. 실패 시 야후 파이낸스 폴백
+          // 2. 실패 시 야후
           if (!data) {
+            console.log(`[Stock API] Primary Search Failed for \${originalSymbol} -> Trying Yahoo...`);
             data = await getYahooFallback(originalSymbol);
           }
 
@@ -132,9 +170,9 @@ export async function POST(request: Request) {
               status: data.status
             };
           }
-          throw new Error("Data fetch failed from all sources");
+          throw new Error("No data found from any source");
         } catch (e: any) {
-          console.error(`[Stock API] Master Retry/Fallback Error for \${originalSymbol}: \${e.message}`);
+          console.error(`[Stock API] Critical Fallback Process for \${originalSymbol}: \${e.message}`);
           
           const { data: holdingData } = await supabase.from('holdings').select('last_price').eq('symbol', originalSymbol).single();
           const { data: alertData } = await supabase.from('alerts').select('last_price').eq('symbol', originalSymbol).single();
@@ -160,7 +198,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json(priceMap);
   } catch (error: any) {
-    console.error("[Stock API] Severe Master Error:", error.message);
+    console.error("[Stock API] Severe POST Error:", error.message);
     return NextResponse.json({ error: "데이터 업데이트 중 중대한 오류가 발생했습니다." }, { status: 500 });
   }
 }
