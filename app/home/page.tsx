@@ -1,3 +1,5 @@
+"use client";
+
 export default function HomePage() {
   return (
     <div className="main-content fade-in">
