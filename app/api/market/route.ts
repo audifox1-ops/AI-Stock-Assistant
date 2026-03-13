@@ -4,50 +4,73 @@ import { NextResponse } from 'next/server';
 // 캐싱 강제 무효화
 export const dynamic = 'force-dynamic';
 
-// 비상용 임시 지수값 (데이터 호출 실패 시 화면 깨짐 방지)
+const PUBLIC_KEY = process.env.PUBLIC_DATA_PORTAL_KEY;
+
+// 비상용 임시 지수값 (모든 시도 실패 시)
 const EMERGENCY_FALLBACK = [
-  { name: '코스피', symbol: '^KS11', price: 2605.4, changePercent: 0.2, success: false, status: "데이터 점검 중" },
-  { name: '코스닥', symbol: '^KQ11', price: 872.1, changePercent: -0.1, success: false, status: "데이터 점검 중" }
+  { name: '코스피', symbol: '^KS11', price: 2605.4, changePercent: 0.2, success: false, status: "비상 폴백" },
+  { name: '코스닥', symbol: '^KQ11', price: 872.1, changePercent: -0.1, success: false, status: "비상 폴백" }
 ];
+
+/**
+ * 공공데이터포털에서 지수 정보를 가져옵니다.
+ */
+async function getPublicIndexData(name: string) {
+  if (!PUBLIC_KEY || PUBLIC_KEY.includes('YOUR_PUBLIC')) return null;
+
+  try {
+    const url = `http://apis.data.go.kr/1160100/service/GetIndexPriceInfoService/getIndexPriceInfo?serviceKey=\${PUBLIC_KEY}&resultType=json&numOfRows=1&idxNm=\${encodeURIComponent(name)}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    const item = data?.response?.body?.items?.item?.[0];
+
+    if (item) {
+      return {
+        price: parseFloat(item.clpr),
+        changePercent: parseFloat(item.fltRt),
+        success: true,
+        status: "공공데이터"
+      };
+    }
+  } catch (e) {
+    console.error(`[Market API] Public Data Portal Error for \${name}:`, e);
+  }
+  return null;
+}
 
 export async function GET() {
   try {
     const symbols = {
-      kospi: '^KS11',
-      kosdaq: '^KQ11'
+      kospi: { name: '코스피', ySymbol: '^KS11' },
+      kosdaq: { name: '코스닥', ySymbol: '^KQ11' }
     };
 
-    console.log("[Market API] Fetching indices from Yahoo Finance...");
+    console.log("[Market API] Fetching indices...");
 
     const results = await Promise.all([
-      (yahooFinance.quote(symbols.kospi) as Promise<any>).catch(err => {
-        console.error(`[Market API] KOSPI Error: \${err.message}`);
-        return null;
-      }),
-      (yahooFinance.quote(symbols.kosdaq) as Promise<any>).catch(err => {
-        console.error(`[Market API] KOSDAQ Error: \${err.message}`);
-        return null;
-      })
+      // 1. 코스피 시도
+      (async () => {
+        let data = await getPublicIndexData('코스피');
+        if (!data) {
+          const yData = await (yahooFinance.quote(symbols.kospi.ySymbol) as Promise<any>).catch(() => null);
+          if (yData) data = { price: yData.regularMarketPrice, changePercent: yData.regularMarketChangePercent, success: true, status: "야후 폴백" };
+        }
+        return data || { ...EMERGENCY_FALLBACK[0] };
+      })(),
+      // 2. 코스닥 시도
+      (async () => {
+        let data = await getPublicIndexData('코스닥');
+        if (!data) {
+          const yData = await (yahooFinance.quote(symbols.kosdaq.ySymbol) as Promise<any>).catch(() => null);
+          if (yData) data = { price: yData.regularMarketPrice, changePercent: yData.regularMarketChangePercent, success: true, status: "야후 폴백" };
+        }
+        return data || { ...EMERGENCY_FALLBACK[1] };
+      })()
     ]);
 
-    // 결과 매핑
     const marketData = [
-      {
-        name: '코스피',
-        symbol: symbols.kospi,
-        price: results[0]?.regularMarketPrice || EMERGENCY_FALLBACK[0].price,
-        changePercent: results[0]?.regularMarketChangePercent || EMERGENCY_FALLBACK[0].changePercent,
-        success: !!results[0],
-        status: results[0] ? "실시간" : "데이터 점검 중"
-      },
-      {
-        name: '코스닥',
-        symbol: symbols.kosdaq,
-        price: results[1]?.regularMarketPrice || EMERGENCY_FALLBACK[1].price,
-        changePercent: results[1]?.regularMarketChangePercent || EMERGENCY_FALLBACK[1].changePercent,
-        success: !!results[1],
-        status: results[1] ? "실시간" : "데이터 점검 중"
-      }
+      { name: '코스피', symbol: symbols.kospi.ySymbol, ...results[0] },
+      { name: '코스닥', symbol: symbols.kosdaq.ySymbol, ...results[1] }
     ];
 
     return NextResponse.json(marketData);
