@@ -39,6 +39,7 @@ interface Stock {
   analysis?: AiAnalysisResult;
   error?: string;
   changePercent?: number;
+  fetchError?: boolean;
 }
 
 export default function PortfolioPage() {
@@ -118,11 +119,17 @@ export default function PortfolioPage() {
       
       setStocks(prev => prev.map(stock => {
         const liveData = data[stock.symbol];
-        if (liveData && !liveData.error) {
+        if (liveData && liveData.success) {
           return {
             ...stock,
             currentPrice: liveData.price,
-            changePercent: liveData.changePercent
+            changePercent: liveData.changePercent,
+            fetchError: false
+          };
+        } else if (liveData && liveData.error) {
+          return {
+            ...stock,
+            fetchError: true
           };
         }
         return stock;
@@ -130,6 +137,8 @@ export default function PortfolioPage() {
       setLastSyncTime(formatCurrentTime());
     } catch (error) {
       console.error("Price fetch error:", error);
+      // 전체 실패 시 처리
+      setStocks(prev => prev.map(s => ({ ...s, fetchError: true })));
     } finally {
       setIsRefreshing(false);
     }
@@ -150,18 +159,24 @@ export default function PortfolioPage() {
   }, []);
 
   const calculateProfit = (stock: Stock) => {
-    if (stock.currentPrice === null) return { profit: 0, rate: '0.00', isPositive: true };
+    if (stock.currentPrice === null || stock.fetchError) return { profit: 0, rate: '0.00', isPositive: true, error: stock.fetchError };
     const profit = (stock.currentPrice - stock.avgPrice) * stock.quantity;
     const rate = ((stock.currentPrice / stock.avgPrice - 1) * 100).toFixed(2);
-    return { profit, rate, isPositive: profit >= 0 };
+    return { profit, rate, isPositive: profit >= 0, error: false };
   };
 
   const handleAddStock = async () => {
     if (!newStock.name || !newStock.avgPrice || !newStock.symbol) return;
     
-    let symbol = newStock.symbol.toUpperCase();
+    let symbol = newStock.symbol.toUpperCase().trim();
+    // 종목코드 자동 보정 로직 (숫자만 입력된 경우 예외처리 등)
     if (!symbol.includes('.')) {
-      symbol += '.KS';
+      // 한국 주식 코드 (6자리 숫자)인 경우 처리 가이드
+      if (/^\d{6}$/.test(symbol)) {
+        // 기본적으로 .KS(코스피)로 시도하지만, 코스닥 종목인 경우 사용자가 직접 입력해야 할 수도 있음
+        // 여기서는 사용자 편의를 위해 숫자로만 되어 있으면 .KS를 붙여 시도하도록 함
+        symbol += '.KS'; 
+      }
     }
 
     try {
@@ -205,7 +220,7 @@ export default function PortfolioPage() {
       }
     } catch (err) {
       console.error('Error adding stock:', err);
-      alert('종목 등록 중 오류가 발생했습니다. DB 설정을 확인해주세요.');
+      alert('종목 등록 중 오류가 발생했습니다. 종목 코드(예: 005930.KS)를 정확히 입력했는지 확인해주세요.');
     }
   };
 
@@ -229,7 +244,7 @@ export default function PortfolioPage() {
   };
 
   const analyzeStock = async (stock: Stock) => {
-    if (stock.currentPrice === null) return;
+    if (stock.currentPrice === null || stock.fetchError) return;
 
     if ((stock.analysis || stock.error) && expandedStockId === stock.id) {
       setExpandedStockId(null);
@@ -273,6 +288,7 @@ export default function PortfolioPage() {
   };
 
   // 포트폴리오 요약 계산
+  const validStocks = stocks.filter(s => s.currentPrice !== null && !s.fetchError);
   const totalBuyAmount = stocks.reduce((acc, s) => acc + s.avgPrice * s.quantity, 0);
   const totalCurrentAmount = stocks.reduce((acc, s) => acc + (s.currentPrice || s.avgPrice) * s.quantity, 0);
   const totalProfit = totalCurrentAmount - totalBuyAmount;
@@ -365,7 +381,7 @@ export default function PortfolioPage() {
           </div>
         ) : (
           stocks.map(stock => {
-            const { profit, rate, isPositive } = calculateProfit(stock);
+            const { profit, rate, isPositive, error: hasFetchError } = calculateProfit(stock);
             const isExpanded = expandedStockId === stock.id;
             const badgeColors = {
               '장기': 'bg-blue-500/10 text-blue-400 border-blue-500/20',
@@ -394,10 +410,14 @@ export default function PortfolioPage() {
                       <Trash2 size={16} />
                     </button>
                     <div className="text-right mt-1">
-                      {stock.currentPrice === null ? (
+                      {stock.currentPrice === null && !stock.fetchError ? (
                         <div className="flex flex-col items-end gap-1">
                           <div className="w-20 h-6 bg-white/5 animate-pulse rounded-lg"></div>
                           <div className="w-12 h-4 bg-white/5 animate-pulse rounded-lg mt-1"></div>
+                        </div>
+                      ) : hasFetchError ? (
+                        <div className="text-red-500 font-black text-xs bg-red-500/10 px-2 py-1 rounded-lg border border-red-500/20">
+                          데이터 오류
                         </div>
                       ) : (
                         <>
@@ -425,11 +445,13 @@ export default function PortfolioPage() {
                   <div className="flex items-center gap-3 bg-slate-900/40 rounded-2xl p-4 border border-white/5 relative">
                     <div className="flex flex-col">
                       <span className="text-[10px] text-slate-600 font-black uppercase mb-1">실시간 현재가</span>
-                      {stock.currentPrice === null ? (
+                      {stock.currentPrice === null && !stock.fetchError ? (
                         <span className="text-xs text-slate-500 font-black animate-pulse">조회 중...</span>
+                      ) : stock.fetchError ? (
+                        <span className="text-xs text-red-500/70 font-black italic">가져오기 실패</span>
                       ) : (
                         <span className={`text-sm font-black ${stock.changePercent && stock.changePercent >= 0 ? 'text-red-500' : 'text-blue-400'}`}>
-                          {stock.currentPrice.toLocaleString()}원
+                          {stock.currentPrice?.toLocaleString()}원
                         </span>
                       )}
                     </div>
@@ -450,7 +472,7 @@ export default function PortfolioPage() {
                 {/* AI Analysis Button */}
                 <button 
                   onClick={() => analyzeStock(stock)}
-                  disabled={loadingAi[stock.id] || stock.currentPrice === null}
+                  disabled={loadingAi[stock.id] || stock.currentPrice === null || stock.fetchError}
                   className={`w-full py-4 rounded-2xl flex items-center justify-center gap-3 font-black transition-all active:scale-[0.98] disabled:opacity-30 overflow-hidden relative group ${
                     isExpanded ? 'bg-slate-700/50 border border-white/10 text-slate-300' : 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-lg shadow-blue-500/20'
                   }`}
@@ -531,7 +553,7 @@ export default function PortfolioPage() {
                   value={newStock.symbol}
                   onChange={e => setNewStock({...newStock, symbol: e.target.value})}
                   className="w-full bg-slate-800/50 border border-white/5 rounded-2xl px-6 py-4 focus:border-blue-500/50 focus:outline-none transition-all font-bold text-slate-100 placeholder:text-slate-700"
-                  placeholder="예: 005930.KS"
+                  placeholder="예: 005930.KS 또는 086520.KQ"
                 />
               </div>
               <div className="space-y-2">
