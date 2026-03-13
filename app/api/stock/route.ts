@@ -5,24 +5,33 @@ import { supabase } from '@/lib/supabase';
 // 캐싱 무효화
 export const dynamic = 'force-dynamic';
 
-const PUBLIC_KEY = process.env.PUBLIC_DATA_PORTAL_KEY;
-
 /**
- * 공공데이터포털에서 주식 시세 정보를 가져옵니다.
+ * 공공데이터포털 주식 시세 정보 (인코딩/디코딩 이슈 완벽 대응)
  */
 async function getPublicStockData(tickerOrName: string) {
-  if (!PUBLIC_KEY || PUBLIC_KEY.includes('YOUR_PUBLIC')) return null;
+  let serviceKey = process.env.PUBLIC_DATA_PORTAL_KEY;
+  if (!serviceKey || serviceKey.includes('YOUR_PUBLIC')) return null;
 
   try {
-    // 종목코드(6자리) 또는 종목명으로 검색
+    const decodedKey = decodeURIComponent(serviceKey);
+    const encodedKey = encodeURIComponent(decodedKey);
+
     const isCode = /^\d{6}$/.test(tickerOrName);
     const param = isCode ? `likeSrtnCd=\${tickerOrName}` : `itmsNm=\${encodeURIComponent(tickerOrName)}`;
     
     // 금융위원회 주식시세정보 (getStockPriceInfo)
-    const url = `http://apis.data.go.kr/1160100/service/GetStockSecuritiesInfoService/getStockPriceInfo?serviceKey=\${PUBLIC_KEY}&resultType=json&numOfRows=1&\${param}`;
+    const url = `http://apis.data.go.kr/1160100/service/GetStockSecuritiesInfoService/getStockPriceInfo?serviceKey=\${encodedKey}&resultType=json&numOfRows=1&\${param}`;
     
-    const res = await fetch(url);
-    const data = await res.json();
+    const res = await fetch(url, { cache: 'no-store' });
+    const text = await res.text();
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch (e) {
+      console.error(`[Stock API] JSON Parse Error for \${tickerOrName}:`, text.substring(0, 100));
+      return null;
+    }
+
     const item = data?.response?.body?.items?.item?.[0];
 
     if (item) {
@@ -45,7 +54,7 @@ async function getPublicStockData(tickerOrName: string) {
  */
 async function getYahooFallback(symbol: string) {
   const baseSymbol = symbol.split('.')[0];
-  const extensions = ['.KS', '.KQ', '']; // 코스피, 코스닥 순차 시도
+  const extensions = ['.KS', '.KQ', '']; 
 
   for (const ext of extensions) {
     try {
@@ -111,9 +120,9 @@ export async function POST(request: Request) {
           }
           throw new Error("No data found from any source");
         } catch (e: any) {
-          console.error(`[Stock API] Error fetching \${originalSymbol}: \${e.message}`);
+          console.error(`[Stock API] Final Error for \${originalSymbol}: \${e.message}`);
           
-          // 호출 실패 시 DB에서 마지막 가격 반환
+          // 모든 호출 실패 시 DB에서 마지막 가격 반환
           const { data: holdingData } = await supabase.from('holdings').select('last_price').eq('symbol', originalSymbol).single();
           const { data: alertData } = await supabase.from('alerts').select('last_price').eq('symbol', originalSymbol).single();
           
@@ -138,7 +147,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json(priceMap);
   } catch (error: any) {
-    console.error("[Stock API] Global Error:", error.message);
+    console.error("[Stock API] Master Process Error:", error.message);
     return NextResponse.json({ error: "데이터를 불러오는 데 실패했습니다." }, { status: 500 });
   }
 }
