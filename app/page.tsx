@@ -7,8 +7,7 @@ import {
   Sparkles, 
   Plus, 
   Target, 
-  ShieldAlert,
-  Search
+  ShieldAlert
 } from 'lucide-react';
 
 interface Stock {
@@ -24,7 +23,7 @@ interface Stock {
 }
 
 export default function PortfolioPage() {
-  const [stocks, setStocks] = useState<Stock[]>([
+  const [stocks] = useState<Stock[]>([
     { id: 1, name: '삼성전자', avgPrice: 72000, currentPrice: 75200, quantity: 100, type: '장기', target: 90000, stopLoss: 68000, supplyTrend: '외국인 순매수세 지속' },
     { id: 2, name: 'SK하이닉스', avgPrice: 150000, currentPrice: 162000, quantity: 50, type: '스윙', target: 185000, stopLoss: 140000, supplyTrend: '기관 대량 매집 중' },
     { id: 3, name: '카카오', avgPrice: 52000, currentPrice: 48500, quantity: 200, type: '단기', target: 60000, stopLoss: 45000, supplyTrend: '기관 매도세 및 거래량 감소' },
@@ -64,46 +63,46 @@ export default function PortfolioPage() {
   };
 
   return (
-    <div className="min-h-screen bg-navy-950 text-slate-100 pb-24">
+    <div className="min-h-screen bg-slate-900 text-slate-100 pb-24 font-sans">
       {/* Header Summary */}
-      <div className="p-6 bg-gradient-to-b from-navy-900 to-navy-950">
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-heading font-bold bg-gradient-to-r from-accent-primary to-accent-secondary bg-clip-text text-transparent">
+      <div className="p-8 bg-gradient-to-b from-slate-800 to-slate-900">
+        <div className="flex justify-between items-center mb-8">
+          <h1 className="text-2xl font-heading font-bold bg-gradient-to-r from-blue-500 to-indigo-400 bg-clip-text text-transparent">
             내 자산 현황
           </h1>
-          <button className="w-10 h-10 rounded-xl bg-navy-800 border border-navy-700 flex items-center justify-center text-accent-primary hover:bg-navy-700 transition-colors">
+          <button className="w-12 h-12 rounded-2xl bg-slate-800 border border-white/5 flex items-center justify-center text-blue-500 shadow-xl hover:bg-slate-700 transition-all">
             <Plus size={24} />
           </button>
         </div>
 
-        <div className="bg-navy-900/50 backdrop-blur-xl border border-white/5 rounded-3xl p-6 shadow-2xl">
-          <p className="text-slate-400 text-sm mb-1">총 평가 손익</p>
-          <div className="flex items-baseline gap-2 mb-4">
-            <h2 className="text-3xl font-bold text-stock-up">
+        <div className="bg-slate-800/40 backdrop-blur-2xl border border-white/10 rounded-[2.5rem] p-8 shadow-2xl">
+          <p className="text-slate-400 text-sm mb-2 font-medium">총 평가 손익</p>
+          <div className="flex items-baseline gap-2 mb-6">
+            <h2 className="text-4xl font-bold text-red-500 tracking-tight">
               +4,250,500원
             </h2>
-            <span className="text-stock-up text-lg font-semibold">+5.24%</span>
+            <span className="text-red-500 text-xl font-bold">+5.24%</span>
           </div>
-          <div className="flex gap-4">
-            <div className="flex-1 bg-white/5 rounded-2xl p-3 border border-white/5">
-              <p className="text-xs text-slate-500 mb-1">평가 금액</p>
-              <p className="font-semibold">82,450,000원</p>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="bg-white/5 rounded-3xl p-4 border border-white/5">
+              <p className="text-[10px] text-slate-500 mb-1 uppercase tracking-wider font-bold">평가 금액</p>
+              <p className="text-lg font-bold">82,450,000원</p>
             </div>
-            <div className="flex-1 bg-white/5 rounded-2xl p-3 border border-white/5">
-              <p className="text-xs text-slate-500 mb-1">매수 금액</p>
-              <p className="font-semibold">78,200,000원</p>
+            <div className="bg-white/5 rounded-3xl p-4 border border-white/5">
+              <p className="text-[10px] text-slate-500 mb-1 uppercase tracking-wider font-bold">매수 금액</p>
+              <p className="text-lg font-bold">78,200,000원</p>
             </div>
           </div>
         </div>
       </div>
 
       {/* Stock Cards List */}
-      <div className="px-6 space-y-4">
+      <div className="px-8 space-y-5">
         <div className="flex justify-between items-center px-1">
-          <h3 className="font-semibold text-slate-300">보유 종목 ({stocks.length})</h3>
-          <div className="flex gap-2 text-xs">
-            <button className="px-3 py-1 rounded-full bg-accent-primary/20 text-accent-primary">전체</button>
-            <button className="px-3 py-1 rounded-full text-slate-500">수익순</button>
+          <h3 className="font-bold text-lg text-slate-200 font-heading">보유 종목 ({stocks.length})</h3>
+          <div className="flex gap-2">
+            <button className="px-4 py-1.5 rounded-full bg-blue-500/10 text-blue-500 text-xs font-bold border border-blue-500/20">전체</button>
+            <button className="px-4 py-1.5 rounded-full text-slate-500 text-xs font-bold">수익순</button>
           </div>
         </div>
 
@@ -111,46 +110,50 @@ export default function PortfolioPage() {
           const { profit, rate, isPositive } = calculateProfit(stock);
           const badgeColors = {
             '장기': 'bg-blue-500/10 text-blue-400 border-blue-500/20',
-            '스윙': 'bg-purple-500/10 text-purple-400 border-purple-500/20',
+            '스윙': 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20',
             '단기': 'bg-orange-500/10 text-orange-400 border-orange-500/20'
           };
 
           return (
-            <div key={stock.id} className="bg-navy-900/40 border border-white/5 rounded-3xl p-5 hover:bg-navy-900/60 transition-all duration-300 group">
-              <div className="flex justify-between items-start mb-4">
+            <div key={stock.id} className="bg-slate-800/40 border border-white/5 rounded-[2rem] p-6 hover:bg-slate-800/60 hover:border-blue-500/20 transition-all duration-300 group shadow-lg">
+              <div className="flex justify-between items-start mb-6">
                 <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <h4 className="text-lg font-bold">{stock.name}</h4>
-                    <span className={`text-[10px] px-2 py-0.5 rounded-md border font-bold ${badgeColors[stock.type]}`}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <h4 className="text-xl font-bold text-slate-100">{stock.name}</h4>
+                    <span className={`text-[10px] px-2.5 py-1 rounded-lg border font-black ${badgeColors[stock.type]}`}>
                       {stock.type}
                     </span>
                   </div>
-                  <p className="text-xs text-slate-500">{stock.quantity}주 · 평단 {stock.avgPrice.toLocaleString()}원</p>
+                  <p className="text-xs text-slate-500 font-medium">{stock.quantity}주 · 평단 {stock.avgPrice.toLocaleString()}원</p>
                 </div>
                 <div className="text-right">
-                  <div className={`flex items-center justify-end gap-1 font-bold text-lg ${isPositive ? 'text-stock-up' : 'text-stock-down'}`}>
-                    {isPositive ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
+                  <div className={`flex items-center justify-end gap-1 font-black text-xl ${isPositive ? 'text-red-500' : 'text-blue-400'}`}>
+                    {isPositive ? <TrendingUp size={20} /> : <TrendingDown size={20} />}
                     {rate}%
                   </div>
-                  <p className={`text-xs font-medium ${isPositive ? 'text-stock-up/70' : 'text-stock-down/70'}`}>
+                  <p className={`text-xs font-bold ${isPositive ? 'text-red-500/70' : 'text-blue-400/70'}`}>
                     {isPositive ? '+' : ''}{profit.toLocaleString()}원
                   </p>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3 mb-4">
-                <div className="flex items-center gap-2 bg-navy-950/50 rounded-xl p-2.5 border border-white/5">
-                  <Target size={14} className="text-slate-500" />
+              <div className="grid grid-cols-2 gap-4 mb-6">
+                <div className="flex items-center gap-3 bg-slate-900/50 rounded-2xl p-4 border border-white/5">
+                  <div className="w-8 h-8 rounded-xl bg-red-500/10 flex items-center justify-center text-red-500">
+                    <Target size={18} />
+                  </div>
                   <div className="flex flex-col">
-                    <span className="text-[10px] text-slate-500 leading-none mb-1">목표가</span>
-                    <span className="text-sm font-semibold text-stock-up">{stock.target.toLocaleString()}원</span>
+                    <span className="text-[10px] text-slate-500 font-bold mb-0.5 uppercase">목표가</span>
+                    <span className="text-base font-bold text-red-500">{stock.target.toLocaleString()}원</span>
                   </div>
                 </div>
-                <div className="flex items-center gap-2 bg-navy-950/50 rounded-xl p-2.5 border border-white/5">
-                  <ShieldAlert size={14} className="text-slate-500" />
+                <div className="flex items-center gap-3 bg-slate-900/50 rounded-2xl p-4 border border-white/5">
+                  <div className="w-8 h-8 rounded-xl bg-blue-500/10 flex items-center justify-center text-blue-400">
+                    <ShieldAlert size={18} />
+                  </div>
                   <div className="flex flex-col">
-                    <span className="text-[10px] text-slate-500 leading-none mb-1">손절가</span>
-                    <span className="text-sm font-semibold text-stock-down">{stock.stopLoss.toLocaleString()}원</span>
+                    <span className="text-[10px] text-slate-500 font-bold mb-0.5 uppercase">손절가</span>
+                    <span className="text-base font-bold text-blue-400">{stock.stopLoss.toLocaleString()}원</span>
                   </div>
                 </div>
               </div>
@@ -159,29 +162,30 @@ export default function PortfolioPage() {
               <button 
                 onClick={() => analyzeStock(stock)}
                 disabled={loadingAi[stock.id]}
-                className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-accent-primary/10 to-accent-secondary/10 border border-accent-primary/20 flex items-center justify-center gap-2 text-accent-primary font-bold hover:from-accent-primary/20 hover:to-accent-secondary/20 transition-all active:scale-[0.98] disabled:opacity-50"
+                className="w-full py-4 rounded-2xl bg-gradient-to-r from-blue-500/10 to-indigo-500/10 border border-blue-500/20 flex items-center justify-center gap-3 text-blue-500 font-black hover:from-blue-500/20 hover:to-indigo-500/20 transition-all active:scale-[0.97] disabled:opacity-50 shadow-inner"
               >
                 {loadingAi[stock.id] ? (
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 border-2 border-accent-primary border-t-transparent rounded-full animate-spin"></div>
-                    <span>AI 분석 중...</span>
+                  <div className="flex items-center gap-3">
+                    <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                    <span>AI 전략 분석 중...</span>
                   </div>
                 ) : (
                   <>
-                    <Sparkles size={16} className="text-accent-primary fill-accent-primary/20" />
-                    <span>Gemini Pro AI 분석하기</span>
+                    <Sparkles size={18} className="text-blue-500 fill-blue-500/20" />
+                    <span>Gemini Pro AI 전략 보기</span>
                   </>
                 )}
               </button>
 
               {/* AI Result Box */}
               {aiAnalysis[stock.id] && (
-                <div className="mt-4 p-4 bg-navy-950/80 rounded-2xl border border-accent-primary/10 text-sm leading-relaxed text-slate-300 animate-in fade-in slide-in-from-top-2 duration-500">
-                  <div className="flex items-center gap-2 mb-2 text-accent-primary font-bold text-xs">
-                    <Sparkles size={12} />
-                    <span>AI 분석 결과</span>
+                <div className="mt-5 p-5 bg-slate-900/80 rounded-[1.5rem] border border-blue-500/10 text-sm leading-relaxed text-slate-300 animate-in fade-in slide-in-from-top-3 duration-500 shadow-xl relative overflow-hidden">
+                  <div className="absolute top-0 left-0 w-1 h-full bg-blue-500/50"></div>
+                  <div className="flex items-center gap-2 mb-3 text-blue-500 font-black text-xs uppercase tracking-widest">
+                    <Sparkles size={14} />
+                    <span>AI Analysis Insight</span>
                   </div>
-                  {aiAnalysis[stock.id]}
+                  <p className="font-medium underline decoration-blue-500/20 underline-offset-4">{aiAnalysis[stock.id]}</p>
                 </div>
               )}
             </div>

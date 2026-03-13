@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import Navigation from "@/components/Navigation";
+import { NotificationProvider } from "@/context/NotificationContext";
 
 export const metadata: Metadata = {
   title: "AI STOCK - 개인 투자자를 위한 AI 주식 분석",
@@ -8,7 +9,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#050a1f",
+  themeColor: "#0f172a",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
@@ -22,11 +23,13 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ko" className="dark">
-      <body className="bg-navy-950 selection:bg-accent-primary/30">
-        <main className="max-w-md mx-auto min-h-screen relative shadow-2xl bg-navy-950">
-          {children}
-          <Navigation />
-        </main>
+      <body className="bg-slate-900 selection:bg-blue-500/30 text-slate-100">
+        <NotificationProvider>
+          <main className="max-w-md mx-auto min-h-screen relative shadow-2xl bg-slate-900 border-x border-slate-800/50">
+            {children}
+            <Navigation />
+          </main>
+        </NotificationProvider>
       </body>
     </html>
   );
