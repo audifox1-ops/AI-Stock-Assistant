@@ -11,7 +11,7 @@ export default function Navigation() {
     { href: "/home", icon: Home, label: "홈" },
     { href: "/", icon: LayoutDashboard, label: "보유종목" },
     { href: "/interest", icon: Bell, label: "관심종목" },
-    { href: "/analysis", icon: LineChart, label: "차트" },
+    { href: "/chart", icon: LineChart, label: "차트" },
     { href: "/settings", icon: Settings, label: "설정" },
   ];
 
