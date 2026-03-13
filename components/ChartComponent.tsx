@@ -58,7 +58,7 @@ export default function ChartComponent() {
       },
     });
 
-    const series = chart.addCandlestickSeries({
+    const series = (chart as any).addCandlestickSeries({
       upColor: '#ef4444',
       downColor: '#60a5fa',
       borderUpColor: '#ef4444',

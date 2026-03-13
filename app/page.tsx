@@ -33,6 +33,7 @@ interface Stock {
   stopLoss: number;
   supplyTrend: string;
   analysis?: AiAnalysisResult;
+  error?: string;
 }
 
 export default function PortfolioPage() {
@@ -83,13 +84,13 @@ export default function PortfolioPage() {
 
   const analyzeStock = async (stock: Stock) => {
     // 이미 결과가 있고 펼쳐져 있다면 닫기만 함
-    if (stock.analysis && expandedStockId === stock.id) {
+    if ((stock.analysis || stock.error) && expandedStockId === stock.id) {
       setExpandedStockId(null);
       return;
     }
 
-    // 결과가 이미 있다면 분석 없이 펼치기만 함
-    if (stock.analysis) {
+    // 결과나 에러가 이미 있다면 분석 없이 펼치기만 함
+    if (stock.analysis || stock.error) {
       setExpandedStockId(stock.id);
       return;
     }
@@ -107,12 +108,24 @@ export default function PortfolioPage() {
           supplyTrend: stock.supplyTrend
         })
       });
+
+      if (!res.ok) {
+        throw new Error('API 호출에 실패했습니다.');
+      }
+
       const data = await res.json();
       
-      setStocks(prev => prev.map(s => s.id === stock.id ? { ...s, analysis: data } : s));
+      // 만약 백엔드에서 에러 필드를 보냈다면 에러로 처리
+      if (data.error) {
+        setStocks(prev => prev.map(s => s.id === stock.id ? { ...s, error: data.error, analysis: undefined } : s));
+      } else {
+        setStocks(prev => prev.map(s => s.id === stock.id ? { ...s, analysis: data, error: undefined } : s));
+      }
       setExpandedStockId(stock.id);
-    } catch (error) {
-      console.error(error);
+    } catch (err) {
+      console.error(err);
+      setStocks(prev => prev.map(s => s.id === stock.id ? { ...s, error: "일시적인 오류가 발생했습니다. 다시 시도해 주세요.", analysis: undefined } : s));
+      setExpandedStockId(stock.id);
     } finally {
       setLoadingAi(prev => ({ ...prev, [stock.id]: false }));
     }
@@ -240,7 +253,12 @@ export default function PortfolioPage() {
 
               {/* AI Result Accordion (Expanded Area) */}
               <div className={`transition-all duration-500 overflow-hidden ${isExpanded ? 'max-h-[500px] mt-6 opacity-100' : 'max-h-0 opacity-0'}`}>
-                {stock.analysis && (
+                {stock.error ? (
+                  <div className="bg-red-500/10 rounded-[2rem] border border-red-500/20 p-6 flex items-center gap-3 shadow-inner">
+                    <AlertCircle size={20} className="text-red-500" />
+                    <p className="text-xs font-bold text-red-500">{stock.error}</p>
+                  </div>
+                ) : stock.analysis ? (
                   <div className="bg-slate-900/60 rounded-[2rem] border border-blue-500/20 p-6 shadow-inner relative overflow-hidden group/analysis">
                     <div className="absolute top-0 right-0 p-4 opacity-5">
                       <Sparkles size={120} className="text-blue-500" />
@@ -249,7 +267,7 @@ export default function PortfolioPage() {
                     <div className="flex gap-3 mb-6 relative">
                       <div className="flex-1 bg-white/5 rounded-2xl p-4 border border-white/5">
                         <p className="text-[10px] text-slate-500 font-black mb-1 uppercase tracking-widest">포지션</p>
-                        <span className="text-sm font-black text-blue-400">{stock.analysis.position}</span>
+                        <span className="text-sm font-black text-blue-400">{String(stock.analysis.position)}</span>
                       </div>
                       <div className="flex-1 bg-white/5 rounded-2xl p-4 border border-white/5 text-center">
                         <p className="text-[10px] text-slate-500 font-black mb-1 uppercase tracking-widest">권장 행동</p>
@@ -258,7 +276,7 @@ export default function PortfolioPage() {
                           stock.analysis.action === '손절' ? 'bg-blue-500/20 text-blue-500' : 
                           'bg-slate-700 text-slate-300'
                         }`}>
-                          {stock.analysis.action}
+                          {String(stock.analysis.action)}
                         </span>
                       </div>
                     </div>
@@ -266,7 +284,7 @@ export default function PortfolioPage() {
                     <div className="bg-white/5 rounded-2xl p-4 border border-white/5 mb-6 relative">
                       <p className="text-[10px] text-slate-500 font-black mb-2 uppercase tracking-widest">AI 적정 목표가</p>
                       <div className="flex items-baseline gap-2">
-                        <span className="text-2xl font-black text-red-500">{stock.analysis.targetPrice.toLocaleString()}원</span>
+                        <span className="text-2xl font-black text-red-500">{Number(stock.analysis.targetPrice).toLocaleString()}원</span>
                         <span className="text-xs text-slate-600 font-bold">중기 관점</span>
                       </div>
                     </div>
@@ -276,11 +294,11 @@ export default function PortfolioPage() {
                         <AlertCircle size={16} className="text-blue-500 animate-pulse" />
                       </div>
                       <p className="text-xs text-slate-300 leading-relaxed font-medium">
-                        {stock.analysis.reason}
+                        {String(stock.analysis.reason)}
                       </p>
                     </div>
                   </div>
-                )}
+                ) : null}
               </div>
             </div>
           );
