@@ -46,6 +46,7 @@ export default function PortfolioPage() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [expandedStockId, setExpandedStockId] = useState<string | number | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
   const [newStock, setNewStock] = useState<Partial<Stock>>({
     name: '',
     symbol: '',
@@ -58,6 +59,12 @@ export default function PortfolioPage() {
   });
 
   const [loadingAi, setLoadingAi] = useState<Record<string | number, boolean>>({});
+
+  // 시간 포맷팅 함수 (HH:mm:ss)
+  const formatCurrentTime = () => {
+    const now = new Date();
+    return now.toTimeString().split(' ')[0];
+  };
 
   // 1. Supabase에서 보유 종목 가져오기
   const fetchHoldings = async () => {
@@ -119,6 +126,7 @@ export default function PortfolioPage() {
         }
         return stock;
       }));
+      setLastSyncTime(formatCurrentTime());
     } catch (error) {
       console.error("Price fetch error:", error);
     } finally {
@@ -249,15 +257,22 @@ export default function PortfolioPage() {
       <div className="p-8 bg-gradient-to-b from-slate-800 to-slate-900">
         <div className="flex justify-between items-center mb-8">
           <div className="flex flex-col">
-            <h1 className="text-2xl font-heading font-black bg-gradient-to-r from-blue-500 to-indigo-400 bg-clip-text text-transparent">
+            <h1 className="text-2xl font-black font-heading bg-gradient-to-r from-blue-500 to-indigo-400 bg-clip-text text-transparent">
               내 자산 현황
             </h1>
+            <div className="flex items-center gap-2 mt-1">
+              <span className="text-[10px] text-slate-500 font-bold">AI가 실시간으로 타이밍을 감시 중입니다.</span>
+              {lastSyncTime && (
+                <span className="text-[10px] text-blue-500/70 font-black">마지막 동기화: {lastSyncTime}</span>
+              )}
+            </div>
             <button 
               onClick={() => fetchPrices()}
-              className="flex items-center gap-1.5 text-[10px] text-slate-500 font-bold hover:text-blue-400 transition-colors mt-1"
+              disabled={isRefreshing}
+              className="flex items-center gap-1.5 w-fit px-3 py-1.5 mt-2 rounded-full bg-slate-800/50 border border-white/5 text-[10px] text-slate-400 font-black hover:text-blue-400 transition-all active:scale-95 disabled:opacity-50"
             >
-              <RefreshCcw size={12} className={isRefreshing ? 'animate-spin' : ''} />
-              {isRefreshing ? '가격 동기화 중...' : '실시간 시세 업데이트'}
+              <RefreshCcw size={10} className={isRefreshing ? 'animate-spin' : ''} />
+              {isRefreshing ? '조회 중...' : '↻ 새로고침'}
             </button>
           </div>
           <button 
@@ -281,7 +296,7 @@ export default function PortfolioPage() {
             </h2>
             <span className="text-red-500 text-lg font-black">
               {stocks.length > 0 ? (
-                `+${(stocks.reduce((acc, s) => acc + calculateProfit(s).profit, 0) / stocks.reduce((acc, s) => acc + (s.avgPrice * s.quantity), 0) * 100 || 0).toFixed(2)}%`
+                `+${(stocks.reduce((acc, s) => acc + calculateProfit(s).profit, 0) / (stocks.reduce((acc, s) => acc + (s.avgPrice * s.quantity), 0) || 1) * 100).toFixed(2)}%`
               ) : (
                 '+0.00%'
               )}
