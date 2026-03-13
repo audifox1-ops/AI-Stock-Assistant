@@ -22,10 +22,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ko" className="dark">
-      <body className="bg-slate-900 selection:bg-blue-500/30 text-slate-100">
+    <html lang="ko">
+      <body className="bg-gray-50 selection:bg-blue-500/20 text-gray-900">
         <NotificationProvider>
-          <main className="max-w-md mx-auto min-h-screen relative shadow-2xl bg-slate-900 border-x border-slate-800/50">
+          <main className="max-w-md mx-auto min-h-screen relative shadow-2xl bg-gray-50 border-x border-gray-200">
             {children}
             <Navigation />
           </main>

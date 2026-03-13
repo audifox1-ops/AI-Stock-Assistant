@@ -1,38 +1,44 @@
 import yahooFinance from 'yahoo-finance2';
 import { NextResponse } from 'next/server';
 
-// 캐싱 무효화 및 매번 최신 데이터 가져오기 강제
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
-    // 코스피 (^KS11), 코스닥 (^KQ11) 티커 정의
-    const marketSymbols = [
-      { symbol: '^KS11', name: 'KOSPI' },
-      { symbol: '^KQ11', name: 'KOSDAQ' }
+    const symbols = {
+      kospi: '^KS11',
+      kosdaq: '^KQ11'
+    };
+
+    // Type casting to handle promise results properly in TS
+    const results = await Promise.all([
+      (yahooFinance.quote(symbols.kospi) as Promise<any>).catch(() => null),
+      (yahooFinance.quote(symbols.kosdaq) as Promise<any>).catch(() => null)
+    ]);
+
+    const marketData = [
+      {
+        name: 'KOSPI',
+        symbol: symbols.kospi,
+        price: results[0]?.regularMarketPrice || 0,
+        changePercent: results[0]?.regularMarketChangePercent || 0,
+        success: !!results[0]
+      },
+      {
+        name: 'KOSDAQ',
+        symbol: symbols.kosdaq,
+        price: results[1]?.regularMarketPrice || 0,
+        changePercent: results[1]?.regularMarketChangePercent || 0,
+        success: !!results[1]
+      }
     ];
 
-    const results = await Promise.all(
-      marketSymbols.map(async (market) => {
-        try {
-          const quote: any = await yahooFinance.quote(market.symbol);
-          return {
-            name: market.name,
-            symbol: market.symbol,
-            price: quote?.regularMarketPrice || 0,
-            changePercent: quote?.regularMarketChangePercent || 0,
-            success: !!quote
-          };
-        } catch (e) {
-          console.error(`[Market API] Error fetching ${market.name}:`, e);
-          return { name: market.name, symbol: market.symbol, price: 0, changePercent: 0, error: true, success: false };
-        }
-      })
-    );
-
-    return NextResponse.json(results);
+    return NextResponse.json(marketData);
   } catch (error) {
     console.error("[Market API] Global Error:", error);
-    return NextResponse.json({ error: "시장 지수를 가져오는 중 오류가 발생했습니다." }, { status: 500 });
+    return NextResponse.json([
+      { name: 'KOSPI', symbol: '^KS11', price: 0, changePercent: 0, success: false },
+      { name: 'KOSDAQ', symbol: '^KQ11', price: 0, changePercent: 0, success: false }
+    ]);
   }
 }
