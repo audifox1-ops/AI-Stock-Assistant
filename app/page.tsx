@@ -13,7 +13,8 @@ import {
   ChevronDown,
   ChevronUp,
   AlertCircle,
-  RefreshCcw
+  RefreshCcw,
+  Trash2
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
@@ -194,16 +195,36 @@ export default function PortfolioPage() {
           supplyTrend: '신규 등록 종목'
         };
 
-        setStocks(prev => [stockToAdd, ...prev]);
+        const updatedStocks = [stockToAdd, ...stocks];
+        setStocks(updatedStocks);
         setIsAddModalOpen(false);
         setNewStock({ name: '', symbol: '', avgPrice: 0, quantity: 0, type: '스윙', target: 0, stopLoss: 0, supplyTrend: '수급 분석 대기 중' });
         
         // 가격 즉시 동기화
-        setTimeout(() => fetchPrices([stockToAdd, ...stocks]), 500);
+        setTimeout(() => fetchPrices(updatedStocks), 500);
       }
     } catch (err) {
       console.error('Error adding stock:', err);
       alert('종목 등록 중 오류가 발생했습니다. DB 설정을 확인해주세요.');
+    }
+  };
+
+  const handleDeleteStock = async (stockId: string | number) => {
+    if (!confirm('정말 이 종목을 삭제하시겠습니까?')) return;
+
+    try {
+      const { error } = await supabase
+        .from('holdings')
+        .delete()
+        .eq('id', stockId);
+
+      if (error) throw error;
+
+      setStocks(prev => prev.filter(s => s.id !== stockId));
+      if (expandedStockId === stockId) setExpandedStockId(null);
+    } catch (err) {
+      console.error('Error deleting stock:', err);
+      alert('종목 삭제 중 오류가 발생했습니다.');
     }
   };
 
@@ -251,6 +272,13 @@ export default function PortfolioPage() {
     }
   };
 
+  // 포트폴리오 요약 계산
+  const totalBuyAmount = stocks.reduce((acc, s) => acc + s.avgPrice * s.quantity, 0);
+  const totalCurrentAmount = stocks.reduce((acc, s) => acc + (s.currentPrice || s.avgPrice) * s.quantity, 0);
+  const totalProfit = totalCurrentAmount - totalBuyAmount;
+  const totalProfitRate = totalBuyAmount > 0 ? (totalProfit / totalBuyAmount * 100) : 0;
+  const isTotalPositive = totalProfit >= 0;
+
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 pb-32 font-sans overflow-x-hidden">
       {/* Header Summary */}
@@ -260,7 +288,7 @@ export default function PortfolioPage() {
             <h1 className="text-2xl font-black font-heading bg-gradient-to-r from-blue-500 to-indigo-400 bg-clip-text text-transparent">
               내 자산 현황
             </h1>
-            <div className="flex items-center gap-2 mt-1">
+            <div className="flex flex-col gap-1 mt-1">
               <span className="text-[10px] text-slate-500 font-bold">AI가 실시간으로 타이밍을 감시 중입니다.</span>
               {lastSyncTime && (
                 <span className="text-[10px] text-blue-500/70 font-black">마지막 동기화: {lastSyncTime}</span>
@@ -269,7 +297,7 @@ export default function PortfolioPage() {
             <button 
               onClick={() => fetchPrices()}
               disabled={isRefreshing}
-              className="flex items-center gap-1.5 w-fit px-3 py-1.5 mt-2 rounded-full bg-slate-800/50 border border-white/5 text-[10px] text-slate-400 font-black hover:text-blue-400 transition-all active:scale-95 disabled:opacity-50"
+              className="flex items-center gap-1.5 w-fit px-3 py-1.5 mt-3 rounded-full bg-slate-800/50 border border-white/5 text-[10px] text-slate-400 font-black hover:text-blue-400 transition-all active:scale-95 disabled:opacity-50"
             >
               <RefreshCcw size={10} className={isRefreshing ? 'animate-spin' : ''} />
               {isRefreshing ? '조회 중...' : '↻ 새로고침'}
@@ -287,32 +315,24 @@ export default function PortfolioPage() {
           <div className="absolute -top-10 -right-10 w-32 h-32 bg-blue-500/10 rounded-full blur-3xl group-hover:bg-blue-500/20 transition-all duration-700"></div>
           <p className="text-slate-500 text-xs mb-1 font-black uppercase tracking-widest">실시간 총 평가 손익</p>
           <div className="flex items-baseline gap-2 mb-6">
-            <h2 className="text-4xl font-black text-red-500 tracking-tight">
-              {stocks.length > 0 ? (
-                `+${stocks.reduce((acc, s) => acc + calculateProfit(s).profit, 0).toLocaleString()}원`
-              ) : (
-                '0원'
-              )}
+            <h2 className={`text-4xl font-black tracking-tight ${isTotalPositive ? 'text-red-500' : 'text-blue-400'}`}>
+              {isTotalPositive ? '+' : ''}{totalProfit.toLocaleString()}원
             </h2>
-            <span className="text-red-500 text-lg font-black">
-              {stocks.length > 0 ? (
-                `+${(stocks.reduce((acc, s) => acc + calculateProfit(s).profit, 0) / (stocks.reduce((acc, s) => acc + (s.avgPrice * s.quantity), 0) || 1) * 100).toFixed(2)}%`
-              ) : (
-                '+0.00%'
-              )}
+            <span className={`text-lg font-black ${isTotalPositive ? 'text-red-500' : 'text-blue-400'}`}>
+              {isTotalPositive ? '+' : ''}{totalProfitRate.toFixed(2)}%
             </span>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="bg-slate-900/40 rounded-3xl p-4 border border-white/5">
               <p className="text-[10px] text-slate-500 mb-1 uppercase tracking-wider font-bold">평가 금액</p>
               <p className="text-lg font-bold">
-                {((stocks.reduce((acc, s) => acc + (s.currentPrice || s.avgPrice) * s.quantity, 0)) / 1000000).toFixed(1)}M
+                {(totalCurrentAmount / 1000000).toFixed(1)}M
               </p>
             </div>
             <div className="bg-slate-900/40 rounded-3xl p-4 border border-white/5">
               <p className="text-[10px] text-slate-500 mb-1 uppercase tracking-wider font-bold">매수 금액</p>
               <p className="text-lg font-bold">
-                {((stocks.reduce((acc, s) => acc + s.avgPrice * s.quantity, 0)) / 1000000).toFixed(1)}M
+                {(totalBuyAmount / 1000000).toFixed(1)}M
               </p>
             </div>
           </div>
@@ -354,7 +374,7 @@ export default function PortfolioPage() {
             };
 
             return (
-              <div key={stock.id} className="bg-slate-800/40 border border-white/5 rounded-[2.5rem] p-6 hover:bg-slate-800/60 transition-all duration-300 shadow-xl relative overflow-hidden">
+              <div key={stock.id} className="bg-slate-800/40 border border-white/5 rounded-[2.5rem] p-6 hover:bg-slate-800/60 transition-all duration-300 shadow-xl relative overflow-hidden group/card">
                 {/* Card Header */}
                 <div className="flex justify-between items-start mb-6">
                   <div>
@@ -366,23 +386,31 @@ export default function PortfolioPage() {
                     </div>
                     <p className="text-xs text-slate-500 font-bold">{stock.symbol} · {stock.quantity}주</p>
                   </div>
-                  <div className="text-right">
-                    {stock.currentPrice === null ? (
-                      <div className="flex flex-col items-end gap-1">
-                        <div className="w-20 h-6 bg-white/5 animate-pulse rounded-lg"></div>
-                        <div className="w-12 h-4 bg-white/5 animate-pulse rounded-lg mt-1"></div>
-                      </div>
-                    ) : (
-                      <>
-                        <div className={`flex items-center justify-end gap-1 font-black text-xl ${isPositive ? 'text-red-500' : 'text-blue-400'}`}>
-                          {isPositive ? <TrendingUp size={20} /> : <TrendingDown size={20} />}
-                          {rate}%
+                  <div className="flex flex-col items-end">
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); handleDeleteStock(stock.id); }}
+                      className="text-slate-700 hover:text-red-500 transition-colors p-2 -mt-2 -mr-2 opacity-0 group-hover/card:opacity-100"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                    <div className="text-right mt-1">
+                      {stock.currentPrice === null ? (
+                        <div className="flex flex-col items-end gap-1">
+                          <div className="w-20 h-6 bg-white/5 animate-pulse rounded-lg"></div>
+                          <div className="w-12 h-4 bg-white/5 animate-pulse rounded-lg mt-1"></div>
                         </div>
-                        <p className={`text-xs font-bold ${isPositive ? 'text-red-500/70' : 'text-blue-400/70'}`}>
-                          {isPositive ? '+' : ''}{profit.toLocaleString()}원
-                        </p>
-                      </>
-                    )}
+                      ) : (
+                        <>
+                          <div className={`flex items-center justify-end gap-1 font-black text-xl ${isPositive ? 'text-red-500' : 'text-blue-400'}`}>
+                            {isPositive ? <TrendingUp size={20} /> : <TrendingDown size={20} />}
+                            {rate}%
+                          </div>
+                          <p className={`text-xs font-bold ${isPositive ? 'text-red-500/70' : 'text-blue-400/70'}`}>
+                            {isPositive ? '+' : ''}{profit.toLocaleString()}원
+                          </p>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -480,22 +508,30 @@ export default function PortfolioPage() {
 
       {/* Add Stock Modal */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-950/80 backdrop-blur-xl animate-in fade-in duration-300">
-          <div className="bg-slate-900 w-full max-w-md rounded-[2.5rem] border border-white/10 p-8 shadow-2xl animate-in zoom-in-95 duration-500">
-            <div className="flex justify-between items-center mb-10">
-              <h2 className="text-2xl font-black font-heading text-slate-100">종목 신규 등록</h2>
-              <button onClick={() => setIsAddModalOpen(false)} className="text-slate-400 hover:text-white"><X size={24} /></button>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-950/90 backdrop-blur-xl animate-in fade-in duration-300">
+          <div className="bg-slate-900 w-full max-w-md rounded-[2.5rem] border border-white/10 p-8 shadow-2xl animate-in zoom-in-95 duration-500 max-h-[90vh] overflow-y-auto custom-scrollbar">
+            <div className="flex justify-between items-center mb-8">
+              <div>
+                <h2 className="text-2xl font-black font-heading text-slate-100">종목 신규 등록</h2>
+                <p className="text-xs text-slate-500 mt-1 font-bold">포트폴리오에 새로운 자산을 추가합니다.</p>
+              </div>
+              <button 
+                onClick={() => setIsAddModalOpen(false)} 
+                className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center text-slate-400 hover:text-white transition-colors"
+              >
+                <X size={20} />
+              </button>
             </div>
 
-            <div className="space-y-5">
+            <div className="space-y-6">
               <div className="space-y-2">
-                <label className="text-[10px] text-slate-500 font-black uppercase ml-1 tracking-widest">심볼 (예: 005930.KS)</label>
+                <label className="text-[10px] text-slate-500 font-black uppercase ml-1 tracking-widest">종목 코드 (Symbol)</label>
                 <input 
                   type="text" 
                   value={newStock.symbol}
                   onChange={e => setNewStock({...newStock, symbol: e.target.value})}
                   className="w-full bg-slate-800/50 border border-white/5 rounded-2xl px-6 py-4 focus:border-blue-500/50 focus:outline-none transition-all font-bold text-slate-100 placeholder:text-slate-700"
-                  placeholder="005930.KS"
+                  placeholder="예: 005930.KS"
                 />
               </div>
               <div className="space-y-2">
@@ -505,52 +541,64 @@ export default function PortfolioPage() {
                   value={newStock.name}
                   onChange={e => setNewStock({...newStock, name: e.target.value})}
                   className="w-full bg-slate-800/50 border border-white/5 rounded-2xl px-6 py-4 focus:border-blue-500/50 focus:outline-none transition-all font-bold text-slate-100"
-                  placeholder="삼성전자"
+                  placeholder="예: 삼성전자"
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <input 
-                  type="number" 
-                  value={newStock.avgPrice || ''}
-                  onChange={e => setNewStock({...newStock, avgPrice: Number(e.target.value)})}
-                  className="bg-slate-800/50 border border-white/5 rounded-2xl px-6 py-4 focus:border-blue-500/50 focus:outline-none font-bold"
-                  placeholder="매수가"
-                />
-                <input 
-                  type="number" 
-                  value={newStock.quantity || ''}
-                  onChange={e => setNewStock({...newStock, quantity: Number(e.target.value)})}
-                  className="bg-slate-800/50 border border-white/5 rounded-2xl px-6 py-4 focus:border-blue-500/50 focus:outline-none font-bold"
-                  placeholder="수량"
-                />
+                <div className="space-y-2">
+                  <label className="text-[10px] text-slate-500 font-black uppercase ml-1 tracking-widest">매수 단가</label>
+                  <input 
+                    type="number" 
+                    value={newStock.avgPrice || ''}
+                    onChange={e => setNewStock({...newStock, avgPrice: Number(e.target.value)})}
+                    className="w-full bg-slate-800/50 border border-white/5 rounded-2xl px-6 py-4 focus:border-blue-500/50 focus:outline-none font-bold"
+                    placeholder="75000"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] text-slate-500 font-black uppercase ml-1 tracking-widest">보유 수량</label>
+                  <input 
+                    type="number" 
+                    value={newStock.quantity || ''}
+                    onChange={e => setNewStock({...newStock, quantity: Number(e.target.value)})}
+                    className="w-full bg-slate-800/50 border border-white/5 rounded-2xl px-6 py-4 focus:border-blue-500/50 focus:outline-none font-bold"
+                    placeholder="100"
+                  />
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <input 
-                  type="number" 
-                  value={newStock.target || ''}
-                  onChange={e => setNewStock({...newStock, target: Number(e.target.value)})}
-                  className="bg-slate-800/50 border border-white/5 rounded-2xl px-6 py-4 focus:border-blue-500/50 focus:outline-none font-bold"
-                  placeholder="목표가"
-                />
-                <input 
-                  type="number" 
-                  value={newStock.stopLoss || ''}
-                  onChange={e => setNewStock({...newStock, stopLoss: Number(e.target.value)})}
-                  className="bg-slate-800/50 border border-white/5 rounded-2xl px-6 py-4 focus:border-blue-500/50 focus:outline-none font-bold"
-                  placeholder="손절가"
-                />
+                <div className="space-y-2">
+                  <label className="text-[10px] text-slate-500 font-black uppercase ml-1 tracking-widest text-red-500/70">목표가 (TP)</label>
+                  <input 
+                    type="number" 
+                    value={newStock.target || ''}
+                    onChange={e => setNewStock({...newStock, target: Number(e.target.value)})}
+                    className="w-full bg-slate-800/50 border border-white/5 rounded-2xl px-6 py-4 focus:border-blue-500/50 focus:outline-none font-bold text-red-400"
+                    placeholder="90000"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] text-slate-500 font-black uppercase ml-1 tracking-widest text-blue-500/70">손절가 (SL)</label>
+                  <input 
+                    type="number" 
+                    value={newStock.stopLoss || ''}
+                    onChange={e => setNewStock({...newStock, stopLoss: Number(e.target.value)})}
+                    className="w-full bg-slate-800/50 border border-white/5 rounded-2xl px-6 py-4 focus:border-blue-500/50 focus:outline-none font-bold text-blue-400"
+                    placeholder="68000"
+                  />
+                </div>
               </div>
               <div className="space-y-2">
-                <label className="text-[10px] text-slate-500 font-black uppercase ml-1 tracking-widest">투자 성향</label>
-                <div className="flex gap-2 p-1 bg-slate-800 border border-white/5 rounded-2xl">
+                <label className="text-[10px] text-slate-500 font-black uppercase ml-1 tracking-widest">투자 포지션</label>
+                <div className="flex gap-2 p-1 bg-slate-950/40 border border-white/5 rounded-2xl">
                   {['단기', '스윙', '장기'].map(t => (
                     <button
                       key={t}
                       onClick={() => setNewStock({...newStock, type: t as any})}
                       className={`flex-1 py-3 rounded-xl font-black text-xs transition-all ${
                         newStock.type === t 
-                        ? 'bg-blue-600 text-white shadow-lg' 
-                        : 'text-slate-500 hover:text-slate-300'
+                        ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' 
+                        : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
                       }`}
                     >
                       {t}
@@ -560,15 +608,29 @@ export default function PortfolioPage() {
               </div>
               <button 
                 onClick={handleAddStock}
-                className="w-full py-5 mt-4 rounded-2xl bg-blue-500 text-white font-black text-lg flex items-center justify-center gap-3 shadow-xl shadow-blue-500/20 active:scale-[0.98]"
+                className="w-full py-5 mt-4 rounded-2xl bg-gradient-to-r from-blue-600 to-blue-500 text-white font-black text-lg flex items-center justify-center gap-3 shadow-xl shadow-blue-500/30 hover:from-blue-500 hover:to-blue-400 transition-all active:scale-[0.98]"
               >
                 <Check size={24} />
-                <span>등록 완료</span>
+                <span>포트폴리오에 저장</span>
               </button>
             </div>
           </div>
         </div>
       )}
+
+      {/* Custom Styles for scrollbar */}
+      <style jsx global>{`
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: rgba(255, 255, 255, 0.1);
+          border-radius: 10px;
+        }
+      `}</style>
     </div>
   );
 }
