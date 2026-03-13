@@ -1,9 +1,40 @@
 "use client";
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Sparkles, TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, Globe, Zap } from 'lucide-react';
 
+interface MarketIndex {
+  name: string;
+  symbol: string;
+  price: number;
+  changePercent: number;
+  success: boolean;
+}
+
 export default function HomePage() {
+  const [marketIndices, setMarketIndices] = useState<MarketIndex[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const fetchMarketIndices = async () => {
+    try {
+      const res = await fetch('/api/market');
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        setMarketIndices(data);
+      }
+    } catch (error) {
+      console.error("Market fetch error:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchMarketIndices();
+    const interval = setInterval(fetchMarketIndices, 60000); // 1분마다 업데이트
+    return () => clearInterval(interval);
+  }, []);
+
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 pb-36 font-sans overflow-x-hidden p-8">
       {/* Welcome Header */}
@@ -21,30 +52,35 @@ export default function HomePage() {
         </p>
       </div>
       
-      {/* Market Indices Section */}
+      {/* Market Indices Section (Real-time Integration) */}
       <div className="flex gap-4 mb-10">
-        <div className="flex-1 p-6 rounded-[2.5rem] bg-slate-800/40 border border-white/5 relative overflow-hidden group shadow-xl">
-          <div className="absolute -top-10 -right-10 w-24 h-24 bg-red-500/5 rounded-full blur-3xl group-hover:bg-red-500/10 transition-all duration-700"></div>
-          <div className="flex justify-between items-start mb-4">
-            <span className="text-[10px] text-slate-500 font-black uppercase tracking-widest">KOSPI</span>
-            <ArrowUpRight size={14} className="text-red-500" />
-          </div>
-          <div className="flex flex-col">
-            <span className="text-xl font-black text-red-500 tracking-tight">2,680.35</span>
-            <span className="text-xs font-black text-red-500/70">+0.45%</span>
-          </div>
-        </div>
-        <div className="flex-1 p-6 rounded-[2.5rem] bg-slate-800/40 border border-white/5 relative overflow-hidden group shadow-xl">
-          <div className="absolute -top-10 -right-10 w-24 h-24 bg-blue-500/5 rounded-full blur-3xl group-hover:bg-blue-500/10 transition-all duration-700"></div>
-          <div className="flex justify-between items-start mb-4">
-            <span className="text-[10px] text-slate-500 font-black uppercase tracking-widest">KOSDAQ</span>
-            <ArrowDownRight size={14} className="text-blue-400" />
-          </div>
-          <div className="flex flex-col">
-            <span className="text-xl font-black text-blue-400 tracking-tight">875.12</span>
-            <span className="text-xs font-black text-blue-400/70">-0.12%</span>
-          </div>
-        </div>
+        {isLoading && marketIndices.length === 0 ? (
+          <>
+            <div className="flex-1 h-28 bg-slate-800/40 rounded-[2.5rem] animate-pulse"></div>
+            <div className="flex-1 h-28 bg-slate-800/40 rounded-[2.5rem] animate-pulse"></div>
+          </>
+        ) : (
+          marketIndices.map(market => {
+            const isUp = market.changePercent >= 0;
+            return (
+              <div key={market.symbol} className="flex-1 p-6 rounded-[2.5rem] bg-slate-800/40 border border-white/5 relative overflow-hidden group shadow-xl transition-all duration-300">
+                <div className={`absolute -top-10 -right-10 w-24 h-24 rounded-full blur-3xl opacity-10 transition-all duration-700 ${isUp ? 'bg-red-500' : 'bg-blue-500'}`}></div>
+                <div className="flex justify-between items-start mb-4">
+                  <span className="text-[10px] text-slate-500 font-black uppercase tracking-widest">{market.name}</span>
+                  {isUp ? <ArrowUpRight size={14} className="text-red-500" /> : <ArrowDownRight size={14} className="text-blue-400" />}
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-xl font-black text-slate-100 tracking-tight">
+                    {market.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                  <span className={`text-xs font-black ${isUp ? 'text-red-500' : 'text-blue-400'}`}>
+                    {isUp ? '+' : ''}{market.changePercent.toFixed(2)}%
+                  </span>
+                </div>
+              </div>
+            );
+          })
+        )}
       </div>
 
       {/* AI Intelligence Card */}
