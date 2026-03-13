@@ -1,7 +1,7 @@
 import yahooFinance from 'yahoo-finance2';
 import { NextResponse } from 'next/server';
 
-// 캐싱 무효화 및 매번 최신 데이터 가져오기 강제
+// 캐싱 무효화
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
@@ -24,11 +24,10 @@ export async function POST(request: Request) {
             volume: quote?.regularMarketVolume || 0,
             avgVolume: quote?.averageDailyVolume3Month || quote?.averageDailyVolume10Day || 0,
             prevClose: quote?.regularMarketPreviousClose || 0,
-            currency: quote?.currency || 'KRW',
             success: !!quote
           };
         } catch (e) {
-          console.error(`[Stock API] Error fetching ${symbol}:`, e);
+          console.error(`[Stock API] Error fetching \${symbol}:`, e);
           return { symbol, price: 0, changePercent: 0, error: true, success: false };
         }
       })
