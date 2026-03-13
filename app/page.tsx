@@ -16,14 +16,14 @@ import {
   Trophy,
   ChevronDown,
   ChevronUp,
-  Search
+  AlertCircle
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 // --- Interfaces ---
 interface AiAnalysisResult {
   position: string;
-  action: '매수권장' | '매수' | '관망' | '적극매수' | '홀딩' | '매도' | string;
+  action: string;
   targetPrice: number;
   reason: string;
 }
@@ -42,8 +42,7 @@ interface Stock {
   error?: string;
   changePercent?: number;
   fetchError?: boolean;
-  volume?: number;
-  avgVolume?: number;
+  isFallback?: boolean;
 }
 
 interface InterestStock {
@@ -54,8 +53,8 @@ interface InterestStock {
   change: number | null;
   alertEnabled: boolean;
   fetchError?: boolean;
+  isFallback?: boolean;
   analysis?: AiAnalysisResult;
-  error?: string;
 }
 
 interface MarketIndex {
@@ -64,15 +63,16 @@ interface MarketIndex {
   price: number;
   changePercent: number;
   success: boolean;
+  isFallback?: boolean;
 }
 
 // --- Skeleton UI Components ---
-const SkeletonText = ({ width = "w-20", height = "h-4" }) => (
-  <div className={`\${width} \${height} bg-gray-100 rounded animate-pulse`}></div>
+const SkeletonText = ({ width = "w-20", height = "h-4", className = "" }) => (
+  <div className={`\${width} \${height} bg-gray-100 rounded-lg animate-pulse \${className}`}></div>
 );
 
-const SkeletonCircle = ({ size = "w-10 h-10" }) => (
-  <div className={`\${size} bg-gray-100 rounded-full animate-pulse`}></div>
+const SkeletonCircle = ({ size = "w-12 h-12" }) => (
+  <div className={`\${size} bg-gray-100 rounded-2xl animate-pulse`}></div>
 );
 
 // --- Main Page ---
@@ -114,11 +114,13 @@ export default function PortfolioPage() {
         const mapped: Stock[] = data.map(item => ({
           id: item.id, symbol: item.symbol, name: item.stock_name,
           avgPrice: Number(item.avg_buy_price), currentPrice: null, quantity: Number(item.quantity),
-          type: item.position_type as any, target: Number(item.target_price), stopLoss: Number(item.stop_loss),
+          type: item.position_type as string, target: Number(item.target_price), stopLoss: Number(item.stop_loss),
         }));
         setStocks(mapped);
+        return mapped;
       }
     } catch (err) { console.error(err); }
+    return [];
   };
 
   const fetchInterests = async () => {
@@ -130,8 +132,10 @@ export default function PortfolioPage() {
           id: item.id, name: item.stock_name, symbol: item.symbol, price: null, change: null, alertEnabled: item.alert_enabled,
         }));
         setInterestStocks(mapped);
+        return mapped;
       }
     } catch (err) { console.error(err); }
+    return [];
   };
 
   const fetchPrices = async (targetStocks: Stock[], targetInterests: InterestStock[]) => {
@@ -152,12 +156,30 @@ export default function PortfolioPage() {
       
       setStocks(prev => prev.map(s => {
         const live = data[s.symbol];
-        return live && live.success ? { ...s, currentPrice: live.price, changePercent: live.changePercent, volume: live.volume, avgVolume: live.avgVolume, fetchError: false } : s;
+        if (live) {
+          return { 
+            ...s, 
+            currentPrice: live.price, 
+            changePercent: live.changePercent, 
+            fetchError: live.fetchError,
+            isFallback: live.isFallback 
+          };
+        }
+        return s;
       }));
 
       setInterestStocks(prev => prev.map(s => {
         const live = data[s.symbol];
-        return live && live.success ? { ...s, price: live.price, change: live.changePercent, fetchError: false } : s;
+        if (live) {
+          return { 
+            ...s, 
+            price: live.price, 
+            change: live.changePercent, 
+            fetchError: live.fetchError,
+            isFallback: live.isFallback 
+          };
+        }
+        return s;
       }));
     } catch (error) { console.error(error); }
     finally { setIsRefreshing(false); }
@@ -167,19 +189,30 @@ export default function PortfolioPage() {
     const init = async () => {
       setIsInitialLoading(true);
       fetchMarketIndices();
-      await Promise.all([fetchHoldings(), fetchInterests()]);
+      const [h, i] = await Promise.all([fetchHoldings(), fetchInterests()]);
+      await fetchPrices(h, i);
       setIsInitialLoading(false);
     };
     init();
   }, []);
 
-  useEffect(() => {
-    if (!isInitialLoading) {
-      fetchPrices(stocks, interestStocks);
-    }
-  }, [isInitialLoading]);
+  const handleAddStock = async () => {
+    if (!newStock.name || !newStock.avgPrice || !newStock.symbol) { alert('필수 정보를 모두 입력해 주세요.'); return; }
+    try {
+      const { data, error } = await supabase.from('holdings').insert([{
+        symbol: newStock.symbol.toUpperCase(), stock_name: newStock.name, avg_buy_price: Number(newStock.avgPrice),
+        quantity: Number(newStock.quantity), position_type: newStock.type,
+        target_price: Number(newStock.target), stop_loss: Number(newStock.stopLoss)
+      }]).select();
+      if (error) throw error;
+      if (data) { 
+        const updated = await fetchHoldings();
+        fetchPrices(updated, interestStocks);
+        setIsAddModalOpen(false); 
+      }
+    } catch (err) { console.error('Error adding stock:', err); }
+  };
 
-  // AI Analysis
   const analyzeStockOrInterest = async (item: Stock | InterestStock, isHolding: boolean) => {
     const id = item.id;
     const isExpanded = isHolding ? expandedStockId === id : expandedInterestId === id;
@@ -198,14 +231,15 @@ export default function PortfolioPage() {
 
     setLoadingAi(prev => ({ ...prev, [id]: true }));
     try {
+      const price = isHolding ? (item as Stock).currentPrice : (item as InterestStock).price;
       const res = await fetch('/api/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           name: item.name, 
-          currentPrice: isHolding ? (item as Stock).currentPrice : (item as InterestStock).price,
+          currentPrice: price,
           type: isHolding ? 'holding' : 'interest',
-          rate: isHolding ? (((item as Stock).currentPrice! / (item as Stock).avgPrice - 1) * 100).toFixed(2) : undefined
+          rate: isHolding ? (((price! / (item as Stock).avgPrice) - 1) * 100).toFixed(2) : undefined
         })
       });
       const data = await res.json();
@@ -220,7 +254,6 @@ export default function PortfolioPage() {
     finally { setLoadingAi(prev => ({ ...prev, [id]: false })); }
   };
 
-  // UI Helpers
   const getActionColor = (action: string) => {
     if (action.includes('매수')) return 'bg-red-50 text-red-600 border-red-100';
     if (action.includes('홀딩')) return 'bg-blue-50 text-blue-600 border-blue-100';
@@ -234,13 +267,17 @@ export default function PortfolioPage() {
 
   return (
     <div className="min-h-screen bg-white text-[#191f28] pb-32 animate-in fade-in duration-500">
-      {/* Top Navigation / Indices */}
+      {/* Header / Market Indices */}
       <header className="px-6 pt-12 pb-4">
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-xl font-bold tracking-tight text-[#3182f6]">AI Stock</h1>
           <div className="flex gap-4">
-            <button onClick={() => { fetchMarketIndices(); fetchPrices(stocks, interestStocks); }} className="text-gray-400 hover:text-gray-600 transition-colors"><RefreshCcw size={20} className={isRefreshing ? 'animate-spin' : ''} /></button>
-            <button onClick={() => setIsAddModalOpen(true)} className="text-[#3182f6] hover:scale-110 transition-transform"><Plus size={24} strokeWidth={3} /></button>
+            <button onClick={() => { fetchMarketIndices(); fetchPrices(stocks, interestStocks); }} className="text-gray-400 hover:text-gray-600 transition-colors">
+              <RefreshCcw size={20} className={isRefreshing ? 'animate-spin' : ''} />
+            </button>
+            <button onClick={() => setIsAddModalOpen(true)} className="text-[#3182f6] hover:scale-110 transition-transform">
+              <Plus size={24} strokeWidth={3} />
+            </button>
           </div>
         </div>
 
@@ -254,8 +291,9 @@ export default function PortfolioPage() {
                 <span className={`text-sm font-bold \${market.changePercent >= 0 ? 'text-red-500' : 'text-blue-600'}`}>
                   {market.price > 0 ? market.price.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '--'}
                 </span>
-                <span className={`text-[11px] font-bold px-1 rounded \${market.changePercent >= 0 ? 'text-red-500 bg-red-50' : 'text-blue-600 bg-blue-50'}`}>
+                <span className={`text-[11px] font-bold px-1 rounded flex items-center gap-0.5 \${market.changePercent >= 0 ? 'text-red-500 bg-red-50' : 'text-blue-600 bg-blue-50'}`}>
                   {market.changePercent >= 0 ? '▲' : '▼'}{Math.abs(market.changePercent).toFixed(1)}%
+                  {market.isFallback && <AlertCircle size={10} />}
                 </span>
               </div>
             ))
@@ -263,48 +301,55 @@ export default function PortfolioPage() {
         </div>
       </header>
 
-      {/* Main Asset Summary */}
+      {/* Asset Summary */}
       <section className="px-6 py-8">
-        <p className="text-sm font-bold text-gray-400 mb-1">내 원금 현황</p>
+        <p className="text-sm font-bold text-gray-400 mb-1">총 자산 현황</p>
         <div className="flex items-baseline gap-2">
-          <h2 className="text-3xl font-bold tracking-tight">{totalCurrentAmount.toLocaleString()}원</h2>
+          {isRefreshing && stocks.length === 0 ? <SkeletonText width="w-40" height="h-8" /> : <h2 className="text-3xl font-bold tracking-tight">{totalCurrentAmount.toLocaleString()}원</h2>}
           <span className={`text-sm font-bold \${parseFloat(totalRate) >= 0 ? 'text-red-500' : 'text-blue-600'}`}>
             {parseFloat(totalRate) >= 0 ? '+' : ''}{totalRate}%
           </span>
         </div>
       </section>
 
-      {/* Section Divider */}
       <div className="h-2 bg-gray-50"></div>
 
-      {/* Holdings List */}
+      {/* Holdings Section */}
       <section className="px-6 py-8">
         <div className="flex justify-between items-center mb-6">
-          <h3 className="text-lg font-bold">내 주식</h3>
-          <span className="text-xs font-bold text-[#3182f6] hover:bg-blue-50 px-2 py-1 rounded-lg transition-colors cursor-pointer">상세보기</span>
+          <h3 className="text-lg font-bold">보유 주식</h3>
+          <span className="text-xs font-bold text-[#3182f6] px-2 py-1 rounded-lg">리밸런싱 AI</span>
         </div>
         
         {isInitialLoading ? (
-          <div className="space-y-6">
-            {[1,2,3].map(i => <div key={i} className="flex justify-between items-center"><div className="flex gap-3"><SkeletonCircle /><div className="space-y-1"><SkeletonText width="w-20" /><SkeletonText width="w-12" /></div></div><SkeletonText width="w-16" /></div>)}
+          <div className="space-y-8">
+            {[1,2,3].map(i => (
+              <div key={i} className="flex justify-between items-center">
+                <div className="flex items-center gap-4">
+                  <SkeletonCircle />
+                  <div className="space-y-1.5"><SkeletonText width="w-24" /><SkeletonText width="w-16" height="h-3" /></div>
+                </div>
+                <div className="text-right space-y-1.5"><SkeletonText width="w-20" /><SkeletonText width="w-12" height="h-3" /></div>
+              </div>
+            ))}
           </div>
         ) : stocks.length === 0 ? (
-          <div className="py-12 bg-gray-50 rounded-3xl text-center border-2 border-dashed border-gray-100">
-            <p className="text-gray-400 font-bold mb-4">아직 등록된 종목이 없어요</p>
-            <button onClick={() => setIsAddModalOpen(true)} className="bg-[#3182f6] text-white px-6 py-3 rounded-2xl font-bold shadow-lg shadow-blue-100 active:scale-95 transition-all">첫 종목 추가하기</button>
+          <div className="py-12 bg-gray-50 rounded-[2.5rem] text-center border-2 border-dashed border-gray-100">
+            <p className="text-gray-400 font-bold mb-4">보유 종목을 추가해 보세요</p>
+            <button onClick={() => setIsAddModalOpen(true)} className="bg-[#3182f6] text-white px-6 py-3 rounded-2xl font-bold shadow-lg shadow-blue-100 active:scale-95">추가하기</button>
           </div>
         ) : (
           <div className="space-y-8">
             {stocks.map(stock => {
               const isExpanded = expandedStockId === stock.id;
-              const isLoading = loadingAi[stock.id];
               const isProfit = (stock.currentPrice || stock.avgPrice) >= stock.avgPrice;
+              const rate = (( (stock.currentPrice || stock.avgPrice) / stock.avgPrice - 1) * 100).toFixed(1);
               
               return (
-                <div key={stock.id} className="group">
-                  <div className="flex justify-between items-center bg-white active:bg-gray-50 p-2 rounded-2xl transition-colors cursor-pointer" onClick={() => analyzeStockOrInterest(stock, true)}>
+                <div key={stock.id}>
+                  <div className="flex justify-between items-center active:bg-gray-50 p-2 -m-2 rounded-2xl transition-colors cursor-pointer" onClick={() => analyzeStockOrInterest(stock, true)}>
                     <div className="flex items-center gap-4">
-                      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black text-white text-xs \${isProfit ? 'bg-red-400 shadow-red-100' : 'bg-blue-400 shadow-blue-100'} shadow-lg`}>
+                      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black text-white text-xs \${isProfit ? 'bg-red-400' : 'bg-blue-400'} shadow-lg shadow-gray-100`}>
                         {stock.name.charAt(0)}
                       </div>
                       <div>
@@ -313,42 +358,38 @@ export default function PortfolioPage() {
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className="text-base font-bold leading-none mb-1">
-                        {stock.currentPrice ? stock.currentPrice.toLocaleString() : <SkeletonText />}
-                      </p>
+                      <div className="flex items-center justify-end gap-1">
+                        {stock.isFallback && <AlertCircle size={12} className="text-orange-400" />}
+                        <p className="text-base font-bold leading-none">
+                          {isRefreshing && stock.currentPrice === null ? <SkeletonText className="inline-block" /> : (stock.currentPrice?.toLocaleString() || '--')}
+                        </p>
+                      </div>
                       <p className={`text-xs font-bold \${isProfit ? 'text-red-500' : 'text-blue-600'}`}>
-                        {isProfit ? '+' : ''}{(((stock.currentPrice || stock.avgPrice) / stock.avgPrice - 1) * 100).toFixed(1)}%
+                        {isProfit ? '+' : ''}{rate}%
+                        {stock.isFallback && <span className="ml-1 text-[10px] opacity-70">(직전가)</span>}
                       </p>
                     </div>
                   </div>
 
-                  {/* AI Summary Layer (Signal Light) */}
-                  {(isExpanded || isLoading) && (
-                    <div className="mt-4 mx-2 bg-gray-50 rounded-3xl p-5 border border-gray-100 animate-in slide-in-from-top-2 duration-300">
-                      {isLoading ? (
+                  {/* AI Info Card */}
+                  {(isExpanded || loadingAi[stock.id]) && (
+                    <div className="mt-4 bg-gray-50 rounded-3xl p-5 border border-gray-100 animate-in slide-in-from-top-2">
+                      {loadingAi[stock.id] ? (
                         <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 border-3 border-[#3182f6] border-t-transparent rounded-full animate-spin"></div>
-                          <p className="text-sm font-bold text-[#3182f6]">Gemini가 분석하고 있어요...</p>
+                          <div className="w-5 h-5 border-2 border-[#3182f6] border-t-transparent rounded-full animate-spin"></div>
+                          <p className="text-sm font-bold text-[#3182f6]">AI가 전략을 분석 중입니다...</p>
                         </div>
                       ) : stock.analysis ? (
                         <div className="space-y-4">
                           <div className="flex justify-between items-center">
-                            <div className={`px-4 py-1.5 rounded-full text-xs font-black border \${getActionColor(stock.analysis.action)} shadow-sm`}>
+                            <div className={`px-4 py-1.5 rounded-full text-xs font-black border \${getActionColor(stock.analysis.action)}`}>
                               {stock.analysis.action}
                             </div>
-                            <div className="text-right">
-                              <span className="text-[10px] font-bold text-gray-400 uppercase block leading-none">Target Price</span>
-                              <span className="text-sm font-black text-[#191f28]">{stock.analysis.targetPrice.toLocaleString()}원</span>
-                            </div>
+                            <div className="text-right"><span className="text-[10px] font-bold text-gray-400 block uppercase">목표가</span><span className="text-sm font-black text-[#191f28]">{stock.analysis.targetPrice.toLocaleString()}원</span></div>
                           </div>
-                          <div className="h-px bg-gray-200/50 w-full"></div>
-                          <p className="text-sm text-gray-600 leading-relaxed font-medium">
-                            {stock.analysis.reason}
-                          </p>
+                          <p className="text-sm text-gray-600 leading-relaxed font-medium">{stock.analysis.reason}</p>
                         </div>
-                      ) : (
-                        <p className="text-sm text-gray-400 font-bold">분석 정보를 가져올 수 없습니다.</p>
-                      )}
+                      ) : null}
                     </div>
                   )}
                 </div>
@@ -358,49 +399,46 @@ export default function PortfolioPage() {
         )}
       </section>
 
-      {/* Interest Section */}
       <div className="h-2 bg-gray-50"></div>
+
+      {/* Interests Section */}
       <section className="px-6 py-8">
         <h3 className="text-lg font-bold mb-6">관심 종목</h3>
         <div className="space-y-6">
           {interestStocks.map(stock => {
-            const isExpanded = expandedInterestId === stock.id;
-            const isLoading = loadingAi[stock.id];
             const isUp = (stock.change || 0) >= 0;
-
+            const isExpanded = expandedInterestId === stock.id;
+            
             return (
               <div key={stock.id}>
-                <div className="flex justify-between items-center p-2 rounded-2xl active:bg-gray-50 transition-colors cursor-pointer" onClick={() => analyzeStockOrInterest(stock, false)}>
+                <div className="flex justify-between items-center active:bg-gray-50 p-2 -m-2 rounded-2xl transition-colors cursor-pointer" onClick={() => analyzeStockOrInterest(stock, false)}>
                   <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-400">
+                    <div className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center text-gray-400">
                       <Bell size={18} />
                     </div>
                     <div>
                       <h4 className="text-base font-bold">{stock.name}</h4>
-                      <p className="text-[10px] font-bold text-gray-400 uppercase">{stock.symbol}</p>
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{stock.symbol}</p>
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="text-sm font-bold text-gray-800">{stock.price?.toLocaleString() || '--'}</p>
+                    <div className="flex items-center justify-end gap-1">
+                      {stock.isFallback && <AlertCircle size={12} className="text-orange-400" />}
+                      <p className="text-sm font-bold text-gray-800">{stock.price?.toLocaleString() || '--'}</p>
+                    </div>
                     <p className={`text-[11px] font-bold \${isUp ? 'text-red-500' : 'text-blue-600'}`}>
                       {isUp ? '+' : ''}{stock.change?.toFixed(2) || '0.00'}%
+                      {stock.isFallback && <span className="ml-1 text-[9px] opacity-70">(직전가)</span>}
                     </p>
                   </div>
                 </div>
 
-                {/* AI Summary Layer for Interests */}
-                {(isExpanded || isLoading) && (
-                  <div className="mt-4 mx-2 bg-gray-50 rounded-3xl p-5 border border-gray-100 animate-in slide-in-from-top-2 duration-300">
-                    {isLoading ? (
-                      <SkeletonText width="w-full" height="h-20" />
-                    ) : stock.analysis ? (
-                      <div className="space-y-4">
-                        <div className="flex justify-between items-center">
-                          <div className={`px-4 py-1.5 rounded-full text-xs font-black border \${getActionColor(stock.analysis.action)}`}>
-                            {stock.analysis.action}
-                          </div>
-                          <span className="text-sm font-black text-[#3182f6]">진입 시점 분석 완료</span>
-                        </div>
+                {/* AI Interest Card */}
+                {(isExpanded || loadingAi[stock.id]) && (
+                  <div className="mt-4 bg-gray-50 rounded-3xl p-5 border border-gray-100 animate-in slide-in-from-top-2">
+                    {loadingAi[stock.id] ? <SkeletonText width="w-full" height="h-16" /> : stock.analysis ? (
+                      <div className="space-y-3">
+                        <div className={`inline-block px-3 py-1 rounded-full text-[10px] font-black border \${getActionColor(stock.analysis.action)}`}>{stock.analysis.action}</div>
                         <p className="text-sm text-gray-600 leading-relaxed font-medium">{stock.analysis.reason}</p>
                       </div>
                     ) : null}
@@ -414,31 +452,32 @@ export default function PortfolioPage() {
 
       {/* Add Modal */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 z-[100] bg-white animate-in slide-in-from-bottom duration-300 p-6 flex flex-col">
-          <div className="flex justify-between items-center mb-10 mt-4">
-            <h2 className="text-2xl font-bold">어떤 종목을{"\n"}추가할까요?</h2>
-            <button onClick={() => setIsAddModalOpen(false)} className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-400"><X size={20} /></button>
+        <div className="fixed inset-0 z-[100] bg-white animate-in slide-in-from-bottom duration-500 p-6 pt-16 flex flex-col">
+          <div className="flex justify-between items-center mb-10">
+            <h2 className="text-2xl font-bold leading-snug">어떤 종목을{"\n"}포트폴리오에 담을까요?</h2>
+            <button onClick={() => setIsAddModalOpen(false)} className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center text-gray-400"><X size={20} /></button>
           </div>
           
-          <div className="space-y-10 flex-1">
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-gray-400 uppercase tracking-widest ml-1">종목 코드/명</label>
-              <input type="text" className="w-full border-b-2 border-gray-100 py-3 text-lg font-bold focus:border-[#3182f6] outline-none transition-colors" placeholder="예: 삼성전자 또는 005930.KS" value={newStock.symbol} onChange={e => setNewStock({...newStock, symbol: e.target.value})} />
+          <div className="space-y-8 flex-1">
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest ml-1">종목 코드 또는 이름</label>
+              <input type="text" className="w-full border-b-2 border-gray-100 py-3 text-lg font-bold focus:border-[#3182f6] outline-none transition-colors" placeholder="예: 삼성전자 또는 005930" value={newStock.symbol} onChange={e => setNewStock({...newStock, symbol: e.target.value})} />
             </div>
-            {/* ... Other inputs can be abbreviated for brevity but full code principle requires complete logic ... */}
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest ml-1">종목명</label>
+              <input type="text" className="w-full border-b-2 border-gray-100 py-3 text-lg font-bold focus:border-[#3182f6] outline-none" value={newStock.name} onChange={e => setNewStock({...newStock, name: e.target.value})} />
+            </div>
             <div className="grid grid-cols-2 gap-8">
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-gray-400 ml-1">매수단가</label>
-                <input type="number" className="w-full border-b-2 border-gray-100 py-2 text-base font-bold focus:border-[#3182f6] outline-none" value={newStock.avgPrice || ''} onChange={e => setNewStock({...newStock, avgPrice: Number(e.target.value)})} />
-              </div>
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-gray-400 ml-1">수량</label>
-                <input type="number" className="w-full border-b-2 border-gray-100 py-2 text-base font-bold focus:border-[#3182f6] outline-none" value={newStock.quantity || ''} onChange={e => setNewStock({...newStock, quantity: Number(e.target.value)})} />
-              </div>
+              <div className="space-y-1.5"><label className="text-[11px] font-bold text-gray-400 ml-1">매수단가</label><input type="number" className="w-full border-b-2 border-gray-100 py-2 text-base font-bold focus:border-[#3182f6] outline-none" value={newStock.avgPrice || ''} onChange={e => setNewStock({...newStock, avgPrice: Number(e.target.value)})} /></div>
+              <div className="space-y-1.5"><label className="text-[11px] font-bold text-gray-400 ml-1">수량</label><input type="number" className="w-full border-b-2 border-gray-100 py-2 text-base font-bold focus:border-[#3182f6] outline-none" value={newStock.quantity || ''} onChange={e => setNewStock({...newStock, quantity: Number(e.target.value)})} /></div>
+            </div>
+            <div className="grid grid-cols-2 gap-8">
+              <div className="space-y-1.5"><label className="text-[11px] font-bold text-gray-400 ml-1">목표가</label><input type="number" className="w-full border-b-2 border-gray-100 py-2 text-base font-bold focus:border-[#3182f6] outline-none" value={newStock.target || ''} onChange={e => setNewStock({...newStock, target: Number(e.target.value)})} /></div>
+              <div className="space-y-1.5"><label className="text-[11px] font-bold text-gray-400 ml-1">손절가</label><input type="number" className="w-full border-b-2 border-gray-100 py-2 text-base font-bold focus:border-[#3182f6] outline-none" value={newStock.stopLoss || ''} onChange={e => setNewStock({...newStock, stopLoss: Number(e.target.value)})} /></div>
             </div>
           </div>
           
-          <button className="w-full py-5 bg-[#3182f6] text-white rounded-2xl font-bold text-lg shadow-xl shadow-blue-100 mb-8 mt-auto active:scale-95 transition-all">등록하기</button>
+          <button onClick={handleAddStock} className="w-full py-5 bg-[#3182f6] text-white rounded-2xl font-bold text-lg shadow-xl shadow-blue-100 mb-8 active:scale-95 transition-all">등록하기</button>
         </div>
       )}
     </div>
