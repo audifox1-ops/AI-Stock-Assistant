@@ -71,10 +71,13 @@ export default function ChartComponent() {
       const fetchHistory = async () => {
         setIsDataLoading(true);
         try {
-          const res = await fetch(`/api/history?symbol=\${selectedStock.symbol}`);
+          const res = await fetch(`/api/history?symbol=\${selectedStock.symbol}`, { cache: 'no-store' });
           const data = await res.json();
           setChartData(Array.isArray(data) ? data : []);
-        } catch (error) { setChartData([]); }
+        } catch (error) { 
+          console.error("[Chart] History Fetch Error:", error);
+          setChartData([]); 
+        }
         finally { setIsDataLoading(false); }
       };
       fetchHistory();
@@ -88,9 +91,9 @@ export default function ChartComponent() {
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
       return (
-        <div className="bg-white border border-gray-100 p-6 rounded-[2.5rem] shadow-[0_10px_40px_rgba(0,0,0,0.06)] min-w-[140px] overflow-visible">
-          <p className="text-[11px] text-gray-400 font-black mb-1.5 uppercase tracking-widest leading-none">{label}</p>
-          <p className="text-lg font-black text-[#191f28] leading-none whitespace-nowrap overflow-visible">{payload[0].value.toLocaleString()}원</p>
+        <div className="bg-white border border-gray-100 p-8 rounded-[3rem] shadow-[0_20px_60px_rgba(0,0,0,0.08)] min-w-fit overflow-visible border-opacity-50">
+          <p className="text-[10px] text-gray-400 font-black mb-2 uppercase tracking-[0.2em] leading-none px-1">{label}</p>
+          <p className="text-xl font-black text-[#191f28] leading-none whitespace-nowrap px-1">{payload[0].value.toLocaleString()}원</p>
         </div>
       );
     }
@@ -98,74 +101,74 @@ export default function ChartComponent() {
   };
 
   return (
-    <div className="min-h-screen bg-white text-[#191f28] pb-40 animate-in fade-in duration-500">
-      <header className="px-6 pt-12 pb-8">
-        <h1 className="text-2xl font-black tracking-tight mb-10">차트 분석</h1>
+    <div className="min-h-screen bg-white text-[#191f28] pb-40 animate-in fade-in duration-500 overflow-visible">
+      <header className="px-6 pt-12 pb-8 overflow-visible">
+        <h1 className="text-3xl font-black tracking-tight mb-12 px-1">차트 분석</h1>
         
         {/* Tab Selection */}
-        <div className="flex gap-6 border-b border-gray-100">
+        <div className="flex gap-10 border-b-[2px] border-gray-100 overflow-visible">
           <button 
             onClick={() => setActiveTab('holdings')}
-            className={`pb-4 px-3 text-sm font-black transition-all relative w-fit \${activeTab === 'holdings' ? 'text-[#3182f6]' : 'text-gray-400'}`}
+            className={`pb-5 px-4 text-base font-black transition-all relative min-w-fit \${activeTab === 'holdings' ? 'text-[#3182f6]' : 'text-gray-400 hover:text-gray-600'}`}
           >
-            내 주식
-            {activeTab === 'holdings' && <div className="absolute bottom-[-1.5px] left-0 right-0 h-[3px] bg-[#3182f6] rounded-full"></div>}
+            내 자산
+            {activeTab === 'holdings' && <div className="absolute bottom-[-2px] left-0 right-0 h-[4px] bg-[#3182f6] rounded-full animate-in fade-in zoom-in-95"></div>}
           </button>
           <button 
             onClick={() => setActiveTab('interests')}
-            className={`pb-4 px-3 text-sm font-black transition-all relative w-fit \${activeTab === 'interests' ? 'text-gray-400' : 'text-gray-400 hover:text-gray-600'}`}
+            className={`pb-5 px-4 text-base font-black transition-all relative min-w-fit \${activeTab === 'interests' ? 'text-[#3182f6]' : 'text-gray-400 hover:text-gray-600'}`}
           >
             관심 종목
-            {activeTab === 'interests' && <div className="absolute bottom-[-1.5px] left-0 right-0 h-[3px] bg-[#3182f6] rounded-full"></div>}
+            {activeTab === 'interests' && <div className="absolute bottom-[-2px] left-0 right-0 h-[4px] bg-[#3182f6] rounded-full animate-in fade-in zoom-in-95"></div>}
           </button>
         </div>
       </header>
 
       {/* Stock Selection List */}
-      <div className="flex gap-4 overflow-x-auto px-6 pb-8 no-scrollbar scroll-smooth">
+      <div className="flex gap-6 overflow-x-auto px-6 pb-12 no-scrollbar scroll-smooth overflow-y-visible">
         {stocks.map(stock => (
           <button 
             key={stock.id}
             onClick={() => setSelectedStock(stock)}
-            className={`min-w-fit px-8 py-5 rounded-[2rem] border transition-all text-center whitespace-nowrap overflow-visible \${selectedStock?.id === stock.id ? 'bg-[#3182f6] border-[#3182f6] text-white shadow-xl shadow-blue-100 scale-[1.02]' : 'bg-gray-50 border-transparent text-gray-600 hover:bg-gray-100'}`}
+            className={`px-10 py-6 rounded-[2.5rem] border-[2px] transition-all text-center whitespace-nowrap min-w-fit overflow-visible \${selectedStock?.id === stock.id ? 'bg-[#3182f6] border-[#3182f6] text-white shadow-[0_15px_40px_-10px_rgba(49,130,246,0.3)] scale-[1.03]' : 'bg-gray-50 border-transparent text-gray-500 hover:bg-gray-100'}`}
           >
-            <p className="text-sm font-black whitespace-nowrap overflow-visible px-1">{stock.name}</p>
+            <span className="text-base font-black whitespace-nowrap overflow-visible">{stock.name}</span>
           </button>
         ))}
       </div>
 
       {selectedStock && (
-        <div className="px-6 space-y-10 animate-in slide-in-from-bottom-2 duration-500">
-          <div className="bg-white rounded-[3rem] py-10 shadow-[0_0_30px_rgba(0,0,0,0.02)]">
-            <div className="flex justify-between items-start mb-10 overflow-visible px-2">
-              <div className="overflow-visible flex-1">
-                <h2 className="text-3xl font-black text-[#191f28] leading-tight mb-2 break-all whitespace-normal">{selectedStock.name}</h2>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-black text-gray-400 uppercase tracking-widest">{selectedStock.symbol}</span>
-                  <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full font-black text-[10px] shadow-sm \${isTrendUp ? 'bg-red-50 text-red-500' : 'bg-blue-50 text-[#3182f6]'}`}>
-                    {isTrendUp ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
-                    {isTrendUp ? '상승세' : '조정기'}
+        <div className="px-6 space-y-12 animate-in slide-in-from-bottom-5 duration-700 overflow-visible">
+          <div className="bg-white rounded-[4rem] py-12 shadow-[0_0_50px_rgba(0,0,0,0.03)] border border-gray-50 overflow-visible">
+            <div className="flex justify-between items-start mb-12 overflow-visible px-4">
+              <div className="overflow-visible min-w-fit">
+                <h2 className="text-4xl font-black text-[#191f28] leading-none mb-4 whitespace-nowrap overflow-visible">{selectedStock.name}</h2>
+                <div className="flex items-center gap-3 overflow-visible">
+                  <span className="text-sm font-black text-gray-300 uppercase tracking-[0.15em] ml-1">{selectedStock.symbol}</span>
+                  <div className={`flex items-center gap-2 px-5 py-2 rounded-full font-black text-xs shadow-sm \${isTrendUp ? 'bg-red-50 text-red-500' : 'bg-blue-50 text-[#3182f6]'}`}>
+                    {isTrendUp ? <TrendingUp size={16} strokeWidth={3} /> : <TrendingDown size={16} strokeWidth={3} />}
+                    <span className="mb-0.5">{isTrendUp ? '상승 테세' : '조정 기간'}</span>
                   </div>
                 </div>
               </div>
             </div>
 
-            <div className="h-[320px] w-full px-1">
+            <div className="h-[360px] w-full px-2 overflow-visible">
               {isDataLoading ? (
-                <div className="w-full h-full flex flex-col items-center justify-center gap-4">
-                  <div className="w-12 h-12 border-4 border-[#3182f6] border-t-transparent rounded-full animate-spin"></div>
-                  <p className="text-xs font-black text-gray-300 animate-pulse uppercase tracking-[0.2em]">Designing Chart</p>
+                <div className="w-full h-full flex flex-col items-center justify-center gap-6">
+                  <div className="w-14 h-14 border-[5px] border-[#3182f6] border-t-transparent rounded-full animate-spin"></div>
+                  <p className="text-sm font-black text-gray-300 animate-pulse uppercase tracking-[0.3em]">Drawing Analysis</p>
                 </div>
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={chartData} margin={{ top: 20, right: 10, left: 10, bottom: 0 }}>
+                  <AreaChart data={chartData} margin={{ top: 30, right: 15, left: 15, bottom: 0 }}>
                     <defs>
                       <linearGradient id="colorUp" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#ef4444" stopOpacity={0.2}/>
+                        <stop offset="5%" stopColor="#ef4444" stopOpacity={0.25}/>
                         <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
                       </linearGradient>
                       <linearGradient id="colorDown" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#3182f6" stopOpacity={0.2}/>
+                        <stop offset="5%" stopColor="#3182f6" stopOpacity={0.25}/>
                         <stop offset="95%" stopColor="#3182f6" stopOpacity={0}/>
                       </linearGradient>
                     </defs>
@@ -173,21 +176,21 @@ export default function ChartComponent() {
                       dataKey="date" 
                       axisLine={false} 
                       tickLine={false} 
-                      tick={{ fill: '#adb5bd', fontSize: 10, fontWeight: 900 }}
-                      minTickGap={40}
-                      dy={15}
+                      tick={{ fill: '#ced4da', fontSize: 11, fontWeight: 900 }}
+                      minTickGap={45}
+                      dy={20}
                     />
                     <YAxis hide={true} domain={['auto', 'auto']} />
-                    <Tooltip content={<CustomTooltip />} />
+                    <Tooltip content={<CustomTooltip />} cursor={{ stroke: '#f1f3f5', strokeWidth: 2 }} />
                     <Area 
                       type="monotone" 
                       dataKey="price" 
                       stroke={trendColor} 
-                      strokeWidth={4} 
+                      strokeWidth={5} 
                       strokeLinecap="round"
                       fillOpacity={1} 
                       fill={trendGradient} 
-                      animationDuration={1500}
+                      animationDuration={1800}
                     />
                   </AreaChart>
                 </ResponsiveContainer>
@@ -196,15 +199,17 @@ export default function ChartComponent() {
           </div>
 
           {/* AI Insight Row */}
-          <div className="bg-gray-50 rounded-[2.5rem] p-8 space-y-5 border border-gray-100 shadow-sm overflow-visible">
-            <div className="flex items-center gap-3">
-              <Sparkles size={22} className="text-[#3182f6]" />
-              <h4 className="text-lg font-black text-[#191f28]">전문가 기술 분석</h4>
+          <div className="bg-gray-50 rounded-[3rem] p-10 space-y-7 border border-gray-100 shadow-sm overflow-visible">
+            <div className="flex items-center gap-4">
+              <div className="p-3 bg-white rounded-2xl shadow-sm text-[#3182f6]">
+                <Sparkles size={26} strokeWidth={2.5} />
+              </div>
+              <h4 className="text-xl font-black text-[#191f28]">AI 기술적 분석 리포트</h4>
             </div>
-            <p className="text-sm text-gray-700 leading-relaxed font-black break-words whitespace-normal px-1">
+            <p className="text-base text-gray-700 leading-relaxed font-bold break-words whitespace-normal px-1">
               {isTrendUp 
-                ? `${selectedStock.name}은(는) 안정적인 우상향 궤도에 진입했습니다. 현재 구간에서는 단기 과매수 여부를 체크한 뒤, 지지선을 이탈하지 않는 한 비중을 유지하는 전략이 유효합니다.` 
-                : `${selectedStock.name}은(는) 현재 기술적 조정을 거치고 있습니다. 섣부른 추격 매수보다는 하방 지지력이 확인되고 거래량이 실리는 저점 구간까지 관망하는 미덕이 필요합니다.`}
+                ? `${selectedStock.name}은(는) 현재 강력한 전고점 돌파 이후 안정적인 지지선을 구축하고 있습니다. 수급의 질이 개선되고 있어, 단기 숨고르기 발생 시 추가 비중 확대가 유리한 구간입니다.` 
+                : `${selectedStock.name}은(는) 매물벽 저항으로 인해 단기 박스권 하단 테스트를 진행 중입니다. 현재는 공격적인 매수보다는 주요 이평선 회복 여부를 확인하며 보수적으로 접근할 시기입니다.`}
             </p>
           </div>
         </div>
