@@ -13,7 +13,7 @@ export async function POST(request: Request) {
     const results = await Promise.all(
       symbols.map(async (symbol) => {
         try {
-          const quote = await yahooFinance.quote(symbol);
+          const quote: any = await yahooFinance.quote(symbol);
           return {
             symbol,
             price: quote.regularMarketPrice,
