@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { createChart } from 'lightweight-charts';
+import { Sparkles } from 'lucide-react';
 
 export default function AnalysisPage() {
   const chartContainerRef = useRef<HTMLDivElement>(null);
@@ -42,8 +43,8 @@ export default function AnalysisPage() {
         fontFamily: 'Inter',
       },
       grid: {
-        vertLines: { color: 'rgba(30, 41, 59, 0.5)' },
-        horzLines: { color: 'rgba(30, 41, 59, 0.5)' },
+        vertLines: { color: 'rgba(255, 255, 255, 0.05)' },
+        horzLines: { color: 'rgba(255, 255, 255, 0.05)' },
       },
       crosshair: {
         mode: 0,
@@ -59,11 +60,11 @@ export default function AnalysisPage() {
 
     const series = (chart as any).addCandlestickSeries({
       upColor: '#ef4444',
-      downColor: '#38bdf8',
+      downColor: '#3b82f6',
       borderUpColor: '#ef4444',
-      borderDownColor: '#38bdf8',
+      borderDownColor: '#3b82f6',
       wickUpColor: '#ef4444',
-      wickDownColor: '#38bdf8',
+      wickDownColor: '#3b82f6',
     });
 
     series.setData(mockData[activePeriod]);
@@ -94,22 +95,24 @@ export default function AnalysisPage() {
 
   const toggleIndicator = (id: string) => {
     setActiveIndicator(prev => 
-      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+      prev.includes(id) ? prev.filter((i: string) => i !== id) : [...prev, id]
     );
   };
 
   return (
-    <div className="chart-container fade-in">
-      <div className="chart-header">
-        <div className="stock-selector glass-panel">
-          <h3>삼성전자</h3>
-          <span className="stock-symbol">005930</span>
+    <div className="flex flex-col gap-5 animate-in fade-in duration-500 pb-10">
+      <div className="flex justify-between items-center px-1">
+        <div className="flex items-center gap-3">
+          <h3 className="text-xl font-bold font-heading">삼성전자</h3>
+          <span className="text-xs text-slate-500 font-medium">005930</span>
         </div>
-        <div className="period-toggles glass-panel">
+        <div className="flex p-1 bg-navy-900/50 border border-white/5 rounded-xl">
           {['일', '주', '월'].map(p => (
             <button 
               key={p} 
-              className={`period-btn ${activePeriod === p ? 'active' : ''}`}
+              className={`px-3 py-1 text-xs rounded-lg transition-all ${
+                activePeriod === p ? "bg-navy-800 text-white shadow-lg" : "text-slate-500 hover:text-slate-300"
+              }`}
               onClick={() => setActivePeriod(p)}
             >
               {p}
@@ -118,48 +121,36 @@ export default function AnalysisPage() {
         </div>
       </div>
       
-      <div className="chart-wrapper-container glass-panel">
-        <div ref={chartContainerRef} className="chart-inner" />
+      <div className="bg-navy-900/40 border border-white/5 rounded-3xl p-3 h-[400px]">
+        <div ref={chartContainerRef} className="w-full h-full" />
       </div>
 
-      <div className="indicator-panel">
+      <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-none">
         {['5일선', '20일선', '60일선', '120일선'].map(ind => (
           <button 
             key={ind}
-            className={`indicator-chip ${activeIndicator.includes(ind) ? 'active' : ''}`}
+            className={`px-4 py-2 rounded-xl text-xs font-bold border whitespace-nowrap transition-all ${
+              activeIndicator.includes(ind) 
+              ? 'bg-accent-primary/10 text-accent-primary border-accent-primary/20' 
+              : 'bg-white/5 text-slate-500 border-white/5'
+            }`}
             onClick={() => toggleIndicator(ind)}
           >
             {ind}
           </button>
         ))}
-        <button className="add-indicator">+</button>
       </div>
 
-      <div className="analysis-summary glass-panel slide-up">
-        <div className="summary-title">⭐ AI 차트 분석 의견</div>
-        <p className="summary-text">
+      <div className="p-6 bg-navy-900/50 border border-white/5 rounded-3xl animate-in slide-in-from-bottom-3 duration-600">
+        <div className="flex items-center gap-2 mb-3 text-accent-primary">
+          <Sparkles size={16} />
+          <h4 className="text-sm font-bold">AI 차트 분석 의견</h4>
+        </div>
+        <p className="text-xs text-slate-400 leading-relaxed">
           현재 20일 이동평균선 지지를 받으며 반등 시도 중입니다. 
           최근 외국인 수급이 개선되고 있어 76,000원 돌파 시 추가 상승이 기대되는 기술적 구간입니다.
         </p>
       </div>
-      <style jsx>{`
-        .chart-container { display: flex; flex-direction: column; gap: 16px; }
-        .chart-header { display: flex; justify-content: space-between; align-items: center; }
-        .stock-selector { padding: 8px 16px; display: flex; align-items: center; gap: 12px; }
-        .stock-symbol { font-size: 12px; color: var(--text-muted); }
-        .period-toggles { display: flex; padding: 4px; }
-        .period-btn { background: transparent; border: none; color: var(--text-secondary); padding: 4px 12px; border-radius: 8px; font-size: 13px; cursor: pointer; }
-        .period-btn.active { background: var(--bg-tertiary); color: white; }
-        .chart-wrapper-container { padding: 12px; overflow: hidden; height: 424px; }
-        .chart-inner { width: 100%; height: 100%; }
-        .indicator-panel { display: flex; gap: 8px; align-items: center; overflow-x: auto; padding-bottom: 4px; }
-        .indicator-chip { font-size: 11px; color: var(--text-muted); padding: 6px 14px; border-radius: 12px; background: var(--bg-tertiary); border: 1px solid var(--glass-border); cursor: pointer; white-space: nowrap; transition: all 0.2s; }
-        .indicator-chip.active { background: var(--accent-gradient); color: white; border-color: transparent; }
-        .add-indicator { width: 28px; height: 28px; min-width: 28px; border-radius: 50%; border: 1px dashed var(--text-muted); background: transparent; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; justify-content: center; }
-        .analysis-summary { padding: 20px; margin-top: 8px; }
-        .summary-title { font-weight: 700; font-size: 15px; margin-bottom: 12px; color: var(--accent-primary); }
-        .summary-text { font-size: 13px; color: var(--text-secondary); line-height: 1.6; }
-      `}</style>
     </div>
   );
 }
