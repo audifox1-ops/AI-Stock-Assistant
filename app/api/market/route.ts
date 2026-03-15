@@ -6,8 +6,8 @@ export const dynamic = 'force-dynamic';
 
 // 비상용 임시 지수값
 const EMERGENCY_FALLBACK = [
-  { name: '코스피', symbol: '^KS11', price: 2605.4, changePercent: 0.2, success: false, status: "비상 폴백" },
-  { name: '코스닥', symbol: '^KQ11', price: 872.1, changePercent: -0.1, success: false, status: "비상 폴백" }
+  { name: '코스피', symbol: '^KS11', price: 2605.4, changePercent: 0, success: false, status: "비상 폴백" },
+  { name: '코스닥', symbol: '^KQ11', price: 872.1, changePercent: 0, success: false, status: "비상 폴백" }
 ];
 
 /**
@@ -19,7 +19,7 @@ function maskUrl(url: string) {
     const key = urlObj.searchParams.get('serviceKey');
     if (key) {
       const masked = key.length > 6 
-        ? `\${key.substring(0, 3)}***\${key.substring(key.length - 3)}`
+        ? `${key.substring(0, 3)}***${key.substring(key.length - 3)}`
         : "***";
       urlObj.searchParams.set('serviceKey', masked);
     }
@@ -30,62 +30,83 @@ function maskUrl(url: string) {
 }
 
 /**
- * 공공데이터포털 지수 정보 가져오기 (전면 리팩토링)
+ * 날짜 포맷팅 (YYYYMMDD)
+ */
+function formatDate(date: Date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}${m}${d}`;
+}
+
+/**
+ * 공공데이터포털 지수 정보 가져오기 (역추적 + URLSearchParams + 에러 노출)
  */
 async function getPublicIndexData(name: string) {
   const rawKey = process.env.PUBLIC_DATA_PORTAL_KEY;
-  if (!rawKey || rawKey.includes('YOUR_PUBLIC')) return null;
+  if (!rawKey || rawKey.includes('YOUR_PUBLIC')) return { success: false, status: "Key Missing" };
 
   try {
-    // 1. 인증키 정규화: 기인코딩된 경우를 대비해 디코딩 후 사용
     const serviceKey = decodeURIComponent(rawKey);
+    const baseUrl = "http://apis.data.go.kr/1160100/service/GetIndexPriceInfoService/getMarketIndexInfo";
     
-    // URLSearchParams를 쓰지 않고 명시적으로 URL 구성 (이중 인코딩 방지)
-    const baseUrl = "http://apis.data.go.kr/1160100/service/GetIndexPriceInfoService/getIndexPriceInfo";
-    const queryParams = `?serviceKey=\${serviceKey}&resultType=json&numOfRows=1&idxNm=\${encodeURIComponent(name)}`;
-    const fullUrl = baseUrl + queryParams;
-    
-    // 마스킹된 URL 로깅 (Vercel 로그 확인용)
-    console.log(`[Market API] Requesting: \${maskUrl(fullUrl)}`);
+    // 최대 7일 전까지 역추적
+    for (let i = 0; i < 7; i++) {
+      const targetDate = new Date();
+      targetDate.setDate(targetDate.getDate() - i);
+      const basDt = formatDate(targetDate);
 
-    const res = await fetch(fullUrl, { cache: 'no-store' });
-    const text = await res.text();
-    
-    let data;
-    try {
-      data = JSON.parse(text);
-    } catch (e) {
-      console.error(`[Market API] JSON Parse Error (\${name}): \${text.substring(0, 200)}`);
-      return null;
-    }
+      const params = new URLSearchParams({
+        serviceKey: serviceKey,
+        resultType: 'json',
+        numOfRows: '1',
+        pageNo: '1',
+        basDt: basDt,
+        idxNm: name
+      });
 
-    // 상세 응답 로깅
-    const header = data?.response?.header;
-    const resultCode = header?.resultCode;
-    const resultMsg = header?.resultMsg;
+      const fullUrl = `${baseUrl}?${params.toString()}`;
+      
+      console.log(`[Market API] Requesting (D-${i}): ${maskUrl(fullUrl)}`);
 
-    if (resultCode !== "00") {
-      console.error(`[Market API] FAIL (\${name}) - Code: \${resultCode}, Msg: \${resultMsg}`);
-      return null;
-    }
+      const res = await fetch(fullUrl, { cache: 'no-store' });
+      const text = await res.text();
+      
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        console.error(`[Market API] JSON Parse Error: ${text.substring(0, 100)}`);
+        continue;
+      }
 
-    const item = data?.response?.body?.items?.item?.[0];
+      const header = data?.response?.header;
+      const resultCode = header?.resultCode;
 
-    if (item) {
-      console.log(`[Market API] SUCCESS (\${name}): \${item.clpr}`);
-      return {
-        price: parseFloat(item.clpr),
-        changePercent: parseFloat(item.fltRt),
-        success: true,
-        status: "공공데이터"
-      };
-    } else {
-      console.warn(`[Market API] EMPTY (\${name}): Data exists but item not found in response.`);
+      if (resultCode !== "00") {
+        console.error(`[Market API] FAIL (${name}) - Code: ${resultCode}, Msg: ${header?.resultMsg}`);
+        if (i === 6) return { success: false, status: `API 에러: ${resultCode}` };
+        continue;
+      }
+
+      const item = data?.response?.body?.items?.item?.[0];
+
+      if (item) {
+        console.log(`[Market API] SUCCESS (${name}, ${basDt}): ${item.clpr}`);
+        return {
+          price: parseFloat(item.clpr),
+          changePercent: parseFloat(item.fltRt),
+          success: true,
+          status: "공공데이터",
+          basDt: basDt
+        };
+      }
     }
   } catch (e: any) {
-    console.error(`[Market API] ERROR (\${name}):`, e.message);
+    console.error(`[Market API] ERROR (${name}):`, e.message);
+    return { success: false, status: `에러: ${e.message.substring(0, 10)}` };
   }
-  return null;
+  return { success: false, status: "데이터 없음" };
 }
 
 export async function GET() {
@@ -95,28 +116,26 @@ export async function GET() {
       kosdaq: { name: '코스닥', ySymbol: '^KQ11' }
     };
 
-    console.log("[Market API] Fetching Indices...");
-
     const results = await Promise.all([
       (async () => {
         const pData = await getPublicIndexData('코스피');
-        if (pData) return pData;
+        if (pData.success) return pData;
         
         console.log("[Market API] KOSPI Primary Fail -> Trying Yahoo...");
         const yData = await (yahooFinance.quote(symbols.kospi.ySymbol) as Promise<any>).catch(() => null);
         if (yData) return { price: yData.regularMarketPrice, changePercent: yData.regularMarketChangePercent, success: true, status: "야후 폴백" };
         
-        return { ...EMERGENCY_FALLBACK[0] };
+        return { ...EMERGENCY_FALLBACK[0], status: pData.status || "비상 폴백" };
       })(),
       (async () => {
         const pData = await getPublicIndexData('코스닥');
-        if (pData) return pData;
+        if (pData.success) return pData;
 
         console.log("[Market API] KOSDAQ Primary Fail -> Trying Yahoo...");
         const yData = await (yahooFinance.quote(symbols.kosdaq.ySymbol) as Promise<any>).catch(() => null);
         if (yData) return { price: yData.regularMarketPrice, changePercent: yData.regularMarketChangePercent, success: true, status: "야후 폴백" };
         
-        return { ...EMERGENCY_FALLBACK[1] };
+        return { ...EMERGENCY_FALLBACK[1], status: pData.status || "비상 폴백" };
       })()
     ]);
 
