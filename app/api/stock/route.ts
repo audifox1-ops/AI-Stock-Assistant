@@ -35,14 +35,13 @@ function formatDate(date: Date) {
 }
 
 /**
- * 공공데이터포털 주식 시세 정보 (역추적 + URLSearchParams + 에러 노출)
+ * 공공데이터포털 주식 시세 정보 (하드코딩급 인증 + 10일 역추적)
  */
 async function getPublicStockData(tickerOrName: string) {
   const rawKey = process.env.PUBLIC_DATA_PORTAL_KEY;
   if (!rawKey || rawKey.includes('YOUR_PUBLIC')) return { success: false, status: "Key Missing" };
 
   try {
-    const serviceKey = decodeURIComponent(rawKey);
     const baseUrl = "http://apis.data.go.kr/1160100/service/GetStockSecuritiesInfoService/getStockPriceInfo";
     
     const cleanTicker = tickerOrName.trim();
@@ -50,32 +49,35 @@ async function getPublicStockData(tickerOrName: string) {
     const isATicker = /^A\d{6}$/i.test(cleanTicker);
 
     // 검색 대상 설정
-    const searchParamsEntries: Record<string, string>[] = [];
+    const searchEntries: Record<string, string>[] = [];
     if (isNumericTicker || isATicker) {
       const srtnCd = isNumericTicker ? `A${cleanTicker}` : cleanTicker.toUpperCase();
-      searchParamsEntries.push({ srtnCd });
+      searchEntries.push({ srtnCd });
     } else {
-      searchParamsEntries.push({ itmsNm: cleanTicker });
+      searchEntries.push({ itmsNm: cleanTicker });
     }
 
-    // 최대 7일 전까지 역추적
-    for (let i = 0; i < 7; i++) {
+    // [초긴급] 최대 10일 전까지 역추적 (오늘 포함)
+    for (let i = 0; i < 10; i++) {
       const targetDate = new Date();
       targetDate.setDate(targetDate.getDate() - i);
       const basDt = formatDate(targetDate);
 
-      for (const entry of searchParamsEntries) {
-        const params = new URLSearchParams({
-          serviceKey: serviceKey,
+      for (const entry of searchEntries) {
+        const key = Object.keys(entry)[0];
+        const val = Object.values(entry)[0];
+
+        // [초긴급] Service Key는 인코딩 없이 생(Raw)으로 연결
+        // 나머지 파라미터만 URLSearchParams로 구성
+        const otherParams = new URLSearchParams({
           resultType: 'json',
           numOfRows: '1',
           pageNo: '1',
           basDt: basDt,
-          ...entry
+          [key]: val
         });
 
-        // URLSearchParams에 의해 serviceKey가 자동 인코딩되므로 그대로 사용
-        const fullUrl = `${baseUrl}?${params.toString()}`;
+        const fullUrl = `${baseUrl}?serviceKey=${process.env.PUBLIC_DATA_PORTAL_KEY}&${otherParams.toString()}`;
         
         console.log(`[Stock API] Requesting (D-${i}): ${maskUrl(fullUrl)}`);
 
@@ -92,10 +94,11 @@ async function getPublicStockData(tickerOrName: string) {
 
         const header = data?.response?.header;
         const resultCode = header?.resultCode;
+
         if (resultCode !== "00") {
           console.error(`[Stock API] FAIL - Code: ${resultCode}, Msg: ${header?.resultMsg}`);
-          // '00'이 아니면 에러 정보를 들고 넘어감 (마지막 시도에서 사용될 수 있음)
-          if (i === 6) return { success: false, status: `API 에러: ${resultCode}` };
+          // 마지막 시도(D-9)에서 실패하면 에러 코드 반환
+          if (i === 9) return { success: false, status: `API Error: ${resultCode}` };
           continue;
         }
 
@@ -115,7 +118,7 @@ async function getPublicStockData(tickerOrName: string) {
     }
   } catch (e: any) {
     console.error(`[Stock API] Critical Error:`, e.message);
-    return { success: false, status: `에러: ${e.message.substring(0, 10)}` };
+    return { success: false, status: `Error: ${e.message.substring(0, 10)}` };
   }
   return { success: false, status: "데이터 없음" };
 }
@@ -206,7 +209,7 @@ export async function POST(request: Request) {
             changePercent: 0, 
             success: fallbackPrice > 0, 
             isFallback: true,
-            status: e.message.startsWith('API 에러') ? e.message : "DB 폴백"
+            status: e.message.includes('API Error') ? e.message : "DB 폴백"
           };
         }
       })

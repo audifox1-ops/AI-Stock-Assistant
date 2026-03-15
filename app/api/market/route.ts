@@ -40,24 +40,22 @@ function formatDate(date: Date) {
 }
 
 /**
- * 공공데이터포털 지수 정보 가져오기 (역추적 + URLSearchParams + 에러 노출)
+ * 공공데이터포털 지수 정보 가져오기 (하드코딩급 인증 + 10일 역추적)
  */
 async function getPublicIndexData(name: string) {
   const rawKey = process.env.PUBLIC_DATA_PORTAL_KEY;
   if (!rawKey || rawKey.includes('YOUR_PUBLIC')) return { success: false, status: "Key Missing" };
 
   try {
-    const serviceKey = decodeURIComponent(rawKey);
     const baseUrl = "http://apis.data.go.kr/1160100/service/GetIndexPriceInfoService/getMarketIndexInfo";
     
-    // 최대 7일 전까지 역추적
-    for (let i = 0; i < 7; i++) {
+    // [초긴급] 최대 10일 전까지 역추적
+    for (let i = 0; i < 10; i++) {
       const targetDate = new Date();
       targetDate.setDate(targetDate.getDate() - i);
       const basDt = formatDate(targetDate);
 
-      const params = new URLSearchParams({
-        serviceKey: serviceKey,
+      const otherParams = new URLSearchParams({
         resultType: 'json',
         numOfRows: '1',
         pageNo: '1',
@@ -65,7 +63,8 @@ async function getPublicIndexData(name: string) {
         idxNm: name
       });
 
-      const fullUrl = `${baseUrl}?${params.toString()}`;
+      // [초긴급] Service Key는 Raw로 직접 연결
+      const fullUrl = `${baseUrl}?serviceKey=${process.env.PUBLIC_DATA_PORTAL_KEY}&${otherParams.toString()}`;
       
       console.log(`[Market API] Requesting (D-${i}): ${maskUrl(fullUrl)}`);
 
@@ -85,7 +84,7 @@ async function getPublicIndexData(name: string) {
 
       if (resultCode !== "00") {
         console.error(`[Market API] FAIL (${name}) - Code: ${resultCode}, Msg: ${header?.resultMsg}`);
-        if (i === 6) return { success: false, status: `API 에러: ${resultCode}` };
+        if (i === 9) return { success: false, status: `API Error: ${resultCode}` };
         continue;
       }
 
@@ -104,7 +103,7 @@ async function getPublicIndexData(name: string) {
     }
   } catch (e: any) {
     console.error(`[Market API] ERROR (${name}):`, e.message);
-    return { success: false, status: `에러: ${e.message.substring(0, 10)}` };
+    return { success: false, status: `Error: ${e.message.substring(0, 10)}` };
   }
   return { success: false, status: "데이터 없음" };
 }

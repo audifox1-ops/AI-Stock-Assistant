@@ -301,9 +301,9 @@ export default function PortfolioPage() {
                   {market.price > 0 ? market.price.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '--'}
                 </span>
                 {/* Badge Standard: px-10 py-3 whitespace-nowrap min-w-max */}
-                <span className={`text-xs font-black px-10 py-3 rounded-full flex items-center gap-2 whitespace-nowrap min-w-max \${market.changePercent >= 0 ? 'text-red-500 bg-red-50' : 'text-blue-600 bg-blue-50'} shadow-sm border border-transparent`}>
+                <span className={`text-xs font-black px-10 py-3 rounded-full flex items-center gap-2 whitespace-nowrap min-w-max ${market.changePercent >= 0 ? 'text-red-500 bg-red-50' : 'text-blue-600 bg-blue-50'} shadow-sm border border-transparent`}>
                   {market.changePercent >= 0 ? '▲' : '▼'}{Math.abs(market.changePercent).toFixed(1)}%
-                  <span className="text-[10px] opacity-70 ml-1">(\${market.status === '공공데이터' ? '실시간' : market.status})</span>
+                  <span className="text-[10px] opacity-70 ml-1">({market.status === '공공데이터' ? '실시간' : market.status})</span>
                 </span>
               </div>
             ))
@@ -456,7 +456,7 @@ export default function PortfolioPage() {
                     </div>
                     <div className={`px-10 py-3 rounded-full text-xs font-black inline-flex items-center whitespace-nowrap shadow-sm border \${isUp ? 'text-red-500 bg-red-50 border-red-100' : 'text-blue-600 bg-blue-50 border-blue-100'} overflow-visible min-w-max`}>
                       {isUp ? '+' : ''}{stock.change?.toFixed(2) || '0.00'}%
-                      <span className="ml-2 text-[10px] opacity-70">(\${stock.status === '공공데이터' ? '실시간' : stock.status || '대기'})</span>
+                      <span className="ml-2 text-[10px] opacity-70">({stock.status === '공공데이터' ? '실시간' : stock.status || '대기'})</span>
                     </div>
                   </div>
                 </div>
