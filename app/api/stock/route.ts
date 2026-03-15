@@ -25,17 +25,7 @@ function maskUrl(url: string) {
 }
 
 /**
- * 날짜 포맷팅 (YYYYMMDD)
- */
-function formatDate(date: Date) {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
-  return `${y}${m}${d}`;
-}
-
-/**
- * 공공데이터포털 주식 시세 정보 (강제 연결 + 7일 역추적)
+ * 공공데이터포털 주식 시세 정보 (날짜 하드코딩 + Raw 인증키)
  */
 async function getPublicStockData(tickerOrName: string) {
   const rawKey = process.env.PUBLIC_DATA_PORTAL_KEY;
@@ -44,6 +34,9 @@ async function getPublicStockData(tickerOrName: string) {
   try {
     const baseUrl = "http://apis.data.go.kr/1160100/service/GetStockSecuritiesInfoService/getStockPriceInfo";
     
+    // [하드코딩] 월요일 아침 대응: 지난주 금요일 데이터 강제 지정
+    const basDt = "20260313";
+
     const cleanTicker = tickerOrName.trim();
     const isNumericTicker = /^\d{6}$/.test(cleanTicker);
     const isATicker = /^A\d{6}$/i.test(cleanTicker);
@@ -57,70 +50,61 @@ async function getPublicStockData(tickerOrName: string) {
       searchEntries.push({ itmsNm: cleanTicker });
     }
 
-    // [강제 반영] 최대 7일 전까지 역추적
-    for (let i = 0; i < 7; i++) {
-      const targetDate = new Date();
-      targetDate.setDate(targetDate.getDate() - i);
-      const basDt = formatDate(targetDate);
+    for (const entry of searchEntries) {
+      const key = Object.keys(entry)[0];
+      const val = Object.values(entry)[0];
 
-      for (const entry of searchEntries) {
-        const key = Object.keys(entry)[0];
-        const val = Object.values(entry)[0];
+      // [핵심] Service Key를 인코딩 없이 'Raw'로 직접 연결
+      const otherParams = new URLSearchParams({
+        resultType: 'json',
+        numOfRows: '1',
+        pageNo: '1',
+        basDt: basDt,
+        [key]: val
+      });
 
-        // [핵심] Service Key를 인코딩 없이 'Raw'로 직접 연결
-        const otherParams = new URLSearchParams({
-          resultType: 'json',
-          numOfRows: '1',
-          pageNo: '1',
-          basDt: basDt,
-          [key]: val
-        });
+      // 문자열 템플릿을 통한 강제 결합
+      const fullUrl = `${baseUrl}?serviceKey=${process.env.PUBLIC_DATA_PORTAL_KEY}&${otherParams.toString()}`;
+      
+      console.log(`[Stock API] Requesting (Hardcoded): ${maskUrl(fullUrl)}`);
 
-        // 문자열 템플릿을 통한 강제 결합
-        const fullUrl = `${baseUrl}?serviceKey=${process.env.PUBLIC_DATA_PORTAL_KEY}&${otherParams.toString()}`;
-        
-        console.log(`[Stock API] Requesting (D-${i}): ${maskUrl(fullUrl)}`);
+      const res = await fetch(fullUrl, { cache: 'no-store' });
+      const text = await res.text();
+      
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        console.error(`[Stock API] JSON Parse Error: ${text.substring(0, 100)}`);
+        return { success: false, status: "(Error: JSON)" };
+      }
 
-        const res = await fetch(fullUrl, { cache: 'no-store' });
-        const text = await res.text();
-        
-        let data;
-        try {
-          data = JSON.parse(text);
-        } catch (e) {
-          console.error(`[Stock API] JSON Parse Error: ${text.substring(0, 100)}`);
-          continue;
-        }
+      const header = data?.response?.header;
+      const resultCode = header?.resultCode;
 
-        const header = data?.response?.header;
-        const resultCode = header?.resultCode;
+      if (resultCode !== "00") {
+        console.error(`[Stock API] FAIL - Code: ${resultCode}, Msg: ${header?.resultMsg}`);
+        return { success: false, status: `(Error: ${resultCode})` };
+      }
 
-        if (resultCode !== "00") {
-          console.error(`[Stock API] FAIL - Code: ${resultCode}, Msg: ${header?.resultMsg}`);
-          // 마지막 시도(D-6)에서 실패하면 에러 코드 반환
-          if (i === 6) return { success: false, status: `(Error: ${resultCode})` };
-          continue;
-        }
-
-        const item = data?.response?.body?.items?.item?.[0];
-        if (item) {
-          console.log(`[Stock API] SUCCESS (D-${i}, ${basDt}): ${item.clpr}`);
-          return {
-            price: parseFloat(item.clpr),
-            change: parseFloat(item.vs),
-            changePercent: parseFloat(item.fltRt),
-            success: true,
-            status: "공공데이터",
-            basDt: basDt
-          };
-        }
+      const item = data?.response?.body?.items?.item?.[0];
+      if (item) {
+        console.log(`[Stock API] SUCCESS (${basDt}): ${item.clpr}`);
+        return {
+          price: parseFloat(item.clpr),
+          change: parseFloat(item.vs),
+          changePercent: parseFloat(item.fltRt),
+          success: true,
+          status: "공공데이터",
+          basDt: basDt
+        };
       }
     }
   } catch (e: any) {
     console.error(`[Stock API] Critical Error:`, e.message);
     return { success: false, status: `(Error: Connection)` };
   }
-  return { success: false, status: "(Error: 03)" }; // 데이터 없음
+  return { success: false, status: "(Error: 03)" };
 }
 
 /**
