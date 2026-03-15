@@ -300,8 +300,7 @@ export default function PortfolioPage() {
                 <span className={`text-lg font-black \${market.changePercent >= 0 ? 'text-red-500' : 'text-blue-600'}`}>
                   {market.price > 0 ? market.price.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '--'}
                 </span>
-                {/* Badge Standard: px-10 py-3 whitespace-nowrap min-w-max */}
-                <span className={`text-xs font-black px-10 py-3 rounded-full flex items-center gap-2 whitespace-nowrap min-w-max ${market.changePercent >= 0 ? 'text-red-500 bg-red-50' : 'text-blue-600 bg-blue-50'} shadow-sm border border-transparent`}>
+                <span className={`text-xs font-black px-10 py-3 rounded-full flex items-center gap-2 whitespace-nowrap min-w-max \${market.changePercent >= 0 ? 'text-red-500 bg-red-50' : 'text-blue-600 bg-blue-50'} shadow-sm border border-transparent`}>
                   {market.changePercent >= 0 ? '▲' : '▼'}{Math.abs(market.changePercent).toFixed(1)}%
                   <span className="text-[10px] opacity-70 ml-1">({market.status === '공공데이터' ? '실시간' : market.status})</span>
                 </span>
@@ -344,7 +343,7 @@ export default function PortfolioPage() {
             ))}
           </div>
         ) : stocks.length === 0 ? (
-          <div className="py-24 bg-gray-50/50 rounded-[4rem] text-center border-2 border-dashed border-gray-100 px-10">
+          <div className="py-24 bg-gray-50/50 rounded-[4rem] text-center border-2 border-dashed border-gray-100 px-10 mt-12">
             <p className="text-gray-400 font-black mb-10 leading-relaxed whitespace-pre-line text-base overflow-visible">보유하신 종목을 한 번만 등록해 보세요.{"\n"}AI가 즉시 승률 높은 전략을 제안합니다.</p>
             <button onClick={() => setIsAddModalOpen(true)} className="bg-[#3182f6] text-white px-10 py-4 rounded-full font-black shadow-2xl shadow-blue-100 active:scale-95 transition-all text-xl min-w-max whitespace-nowrap">지금 시작하기</button>
           </div>
@@ -357,16 +356,13 @@ export default function PortfolioPage() {
               
               return (
                 <div key={stock.id} className="overflow-visible">
-                  {/* Physical Separation: NO absolute, flex items-center, gap-x-8 (32px) */}
                   <div className="flex justify-between items-center active:bg-gray-50/80 p-5 -m-5 rounded-[3rem] transition-all cursor-pointer overflow-visible group" onClick={() => analyzeStockOrInterest(stock, true)}>
-                    <div className="flex items-center gap-x-8 min-w-0 overflow-visible">
-                      {/* Icon Section (Physical) */}
+                    <div className="flex items-center gap-x-12 min-w-0 overflow-visible">
                       <div className={`flex-shrink-0 w-16 h-16 rounded-[1.75rem] flex items-center justify-center font-black text-white text-lg \${isProfit ? 'bg-red-400 shadow-red-100/50' : 'bg-blue-400 shadow-blue-100/50'} shadow-2xl transition-transform group-hover:scale-110 duration-500`}>
                         {stock.name.charAt(0)}
                       </div>
                       
-                      {/* Text Section (pl-16 for absolute safety) */}
-                      <div className="overflow-visible min-w-0 flex-1 pl-16">
+                      <div className="overflow-visible min-w-0 flex-1">
                         <h4 className="text-2xl font-black text-[#191f28] tracking-tight mb-2 break-all overflow-visible whitespace-nowrap px-0.5">{stock.name}</h4>
                         <p className="text-xs font-bold text-gray-400 uppercase tracking-widest overflow-visible whitespace-nowrap">
                           {stock.status === '공공데이터' ? '실시간' : stock.status || '대기'} · {stock.quantity.toLocaleString()}주
@@ -388,7 +384,6 @@ export default function PortfolioPage() {
                     </div>
                   </div>
 
-                  {/* AI Macro Info (pl-16 for alignment) */}
                   {(isExpanded || loadingAi[stock.id]) && (
                     <div className="mt-10 ml-16 bg-white border border-gray-100 rounded-[3.5rem] p-10 animate-in slide-in-from-top-6 duration-700 shadow-[0_15px_40px_rgba(0,0,0,0.02)] overflow-visible">
                       {loadingAi[stock.id] ? (
@@ -434,17 +429,17 @@ export default function PortfolioPage() {
             
             return (
               <div key={stock.id} className="overflow-visible">
-                {/* Physical Separation: NO absolute, flex items-center, gap-x-8 (32px) */}
-                <div className="flex justify-between items-center active:bg-gray-50/80 p-6 -m-6 rounded-[3.5rem] transition-all cursor-pointer overflow-visible group" onClick={() => analyzeStockOrInterest(stock, false)}>
-                  <div className="flex items-center gap-x-8 min-w-0 overflow-visible">
-                    {/* Icon Section (Physical) */}
+                {/* [물리적 분리] absolute 제거, flex-row items-center, gap-x-12 */}
+                <div className="flex flex-row items-center justify-between active:bg-gray-50/80 p-6 -m-6 rounded-[3.5rem] transition-all cursor-pointer overflow-visible group" onClick={() => analyzeStockOrInterest(stock, false)}>
+                  <div className="flex flex-row items-center gap-x-12 min-w-0 overflow-visible">
+                    {/* Icon Section (absolute 제거) */}
                     <div className="flex-shrink-0 w-20 h-20 rounded-full bg-white flex items-center justify-center text-gray-300 shadow-xl border border-gray-100 group-hover:scale-110 transition-transform duration-500">
                       <Bell size={32} strokeWidth={2.5} />
                     </div>
                     
-                    {/* Text Section (pl-16 for absolute safety) */}
-                    <div className="overflow-visible min-w-0 flex-1 pl-16">
-                      <h4 className="text-2xl font-black leading-tight mb-2 px-0.5 whitespace-nowrap overflow-visible">{stock.name}</h4>
+                    {/* Text Section */}
+                    <div className="overflow-visible min-w-0 flex-1">
+                      <h4 className="text-2xl font-black leading-tight mb-2 px-0.5 whitespace-nowrap overflow-visible uppercase">{stock.name}</h4>
                       <p className="text-xs font-black text-gray-400 uppercase tracking-[0.25em] overflow-visible whitespace-nowrap">{stock.symbol}</p>
                     </div>
                   </div>
@@ -461,9 +456,9 @@ export default function PortfolioPage() {
                   </div>
                 </div>
 
-                {/* AI Interest Card (pl-16 for orientation) */}
+                {/* AI Interest Card */}
                 {(isExpanded || loadingAi[stock.id]) && (
-                  <div className="mt-10 ml-16 bg-gray-50 border border-gray-100 rounded-[3.5rem] p-10 animate-in slide-in-from-top-6 duration-700 overflow-visible shadow-inner">
+                  <div className="mt-10 ml-20 bg-gray-50 border border-gray-100 rounded-[3.5rem] p-10 animate-in slide-in-from-top-6 duration-700 overflow-visible shadow-inner">
                     {loadingAi[stock.id] ? <SkeletonText width="w-full" height="h-28" /> : stock.analysis ? (
                       <div className="space-y-6 overflow-visible">
                         <div className={`px-10 py-3 rounded-full text-base font-black border min-w-max shadow-md whitespace-nowrap \${getActionColor(stock.analysis.action)} overflow-visible bg-white`}>

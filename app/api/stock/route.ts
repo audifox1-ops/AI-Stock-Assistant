@@ -35,7 +35,7 @@ function formatDate(date: Date) {
 }
 
 /**
- * 공공데이터포털 주식 시세 정보 (하드코딩급 인증 + 10일 역추적)
+ * 공공데이터포털 주식 시세 정보 (강제 연결 + 7일 역추적)
  */
 async function getPublicStockData(tickerOrName: string) {
   const rawKey = process.env.PUBLIC_DATA_PORTAL_KEY;
@@ -57,8 +57,8 @@ async function getPublicStockData(tickerOrName: string) {
       searchEntries.push({ itmsNm: cleanTicker });
     }
 
-    // [초긴급] 최대 10일 전까지 역추적 (오늘 포함)
-    for (let i = 0; i < 10; i++) {
+    // [강제 반영] 최대 7일 전까지 역추적
+    for (let i = 0; i < 7; i++) {
       const targetDate = new Date();
       targetDate.setDate(targetDate.getDate() - i);
       const basDt = formatDate(targetDate);
@@ -67,8 +67,7 @@ async function getPublicStockData(tickerOrName: string) {
         const key = Object.keys(entry)[0];
         const val = Object.values(entry)[0];
 
-        // [초긴급] Service Key는 인코딩 없이 생(Raw)으로 연결
-        // 나머지 파라미터만 URLSearchParams로 구성
+        // [핵심] Service Key를 인코딩 없이 'Raw'로 직접 연결
         const otherParams = new URLSearchParams({
           resultType: 'json',
           numOfRows: '1',
@@ -77,6 +76,7 @@ async function getPublicStockData(tickerOrName: string) {
           [key]: val
         });
 
+        // 문자열 템플릿을 통한 강제 결합
         const fullUrl = `${baseUrl}?serviceKey=${process.env.PUBLIC_DATA_PORTAL_KEY}&${otherParams.toString()}`;
         
         console.log(`[Stock API] Requesting (D-${i}): ${maskUrl(fullUrl)}`);
@@ -97,8 +97,8 @@ async function getPublicStockData(tickerOrName: string) {
 
         if (resultCode !== "00") {
           console.error(`[Stock API] FAIL - Code: ${resultCode}, Msg: ${header?.resultMsg}`);
-          // 마지막 시도(D-9)에서 실패하면 에러 코드 반환
-          if (i === 9) return { success: false, status: `API Error: ${resultCode}` };
+          // 마지막 시도(D-6)에서 실패하면 에러 코드 반환
+          if (i === 6) return { success: false, status: `(Error: ${resultCode})` };
           continue;
         }
 
@@ -118,9 +118,9 @@ async function getPublicStockData(tickerOrName: string) {
     }
   } catch (e: any) {
     console.error(`[Stock API] Critical Error:`, e.message);
-    return { success: false, status: `Error: ${e.message.substring(0, 10)}` };
+    return { success: false, status: `(Error: Connection)` };
   }
-  return { success: false, status: "데이터 없음" };
+  return { success: false, status: "(Error: 03)" }; // 데이터 없음
 }
 
 /**
@@ -194,7 +194,7 @@ export async function POST(request: Request) {
             };
           }
           
-          throw new Error(data.status || "No data found");
+          throw new Error(data.status || "(Error: 03)");
         } catch (e: any) {
           console.error(`[Stock API] Fallback for ${originalSymbol}: ${e.message}`);
           
@@ -209,7 +209,7 @@ export async function POST(request: Request) {
             changePercent: 0, 
             success: fallbackPrice > 0, 
             isFallback: true,
-            status: e.message.includes('API Error') ? e.message : "DB 폴백"
+            status: e.message.includes('Error') ? `비상 폴백 ${e.message}` : "비상 폴백"
           };
         }
       })

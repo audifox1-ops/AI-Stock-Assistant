@@ -40,7 +40,7 @@ function formatDate(date: Date) {
 }
 
 /**
- * 공공데이터포털 지수 정보 가져오기 (하드코딩급 인증 + 10일 역추적)
+ * 공공데이터포털 지수 정보 가져오기 (강제 연결 + 7일 역추적)
  */
 async function getPublicIndexData(name: string) {
   const rawKey = process.env.PUBLIC_DATA_PORTAL_KEY;
@@ -49,8 +49,8 @@ async function getPublicIndexData(name: string) {
   try {
     const baseUrl = "http://apis.data.go.kr/1160100/service/GetIndexPriceInfoService/getMarketIndexInfo";
     
-    // [초긴급] 최대 10일 전까지 역추적
-    for (let i = 0; i < 10; i++) {
+    // [강제 반영] 최대 7일 전까지 역추적
+    for (let i = 0; i < 7; i++) {
       const targetDate = new Date();
       targetDate.setDate(targetDate.getDate() - i);
       const basDt = formatDate(targetDate);
@@ -63,7 +63,7 @@ async function getPublicIndexData(name: string) {
         idxNm: name
       });
 
-      // [초긴급] Service Key는 Raw로 직접 연결
+      // [핵심] Service Key를 Raw로 직접 연결
       const fullUrl = `${baseUrl}?serviceKey=${process.env.PUBLIC_DATA_PORTAL_KEY}&${otherParams.toString()}`;
       
       console.log(`[Market API] Requesting (D-${i}): ${maskUrl(fullUrl)}`);
@@ -84,7 +84,7 @@ async function getPublicIndexData(name: string) {
 
       if (resultCode !== "00") {
         console.error(`[Market API] FAIL (${name}) - Code: ${resultCode}, Msg: ${header?.resultMsg}`);
-        if (i === 9) return { success: false, status: `API Error: ${resultCode}` };
+        if (i === 6) return { success: false, status: `(Error: ${resultCode})` };
         continue;
       }
 
@@ -103,9 +103,9 @@ async function getPublicIndexData(name: string) {
     }
   } catch (e: any) {
     console.error(`[Market API] ERROR (${name}):`, e.message);
-    return { success: false, status: `Error: ${e.message.substring(0, 10)}` };
+    return { success: false, status: `(Error: Connection)` };
   }
-  return { success: false, status: "데이터 없음" };
+  return { success: false, status: "(Error: 03)" };
 }
 
 export async function GET() {
@@ -124,7 +124,7 @@ export async function GET() {
         const yData = await (yahooFinance.quote(symbols.kospi.ySymbol) as Promise<any>).catch(() => null);
         if (yData) return { price: yData.regularMarketPrice, changePercent: yData.regularMarketChangePercent, success: true, status: "야후 폴백" };
         
-        return { ...EMERGENCY_FALLBACK[0], status: pData.status || "비상 폴백" };
+        return { ...EMERGENCY_FALLBACK[0], status: pData.status ? `비상 폴백 ${pData.status}` : "비상 폴백" };
       })(),
       (async () => {
         const pData = await getPublicIndexData('코스닥');
@@ -134,7 +134,7 @@ export async function GET() {
         const yData = await (yahooFinance.quote(symbols.kosdaq.ySymbol) as Promise<any>).catch(() => null);
         if (yData) return { price: yData.regularMarketPrice, changePercent: yData.regularMarketChangePercent, success: true, status: "야후 폴백" };
         
-        return { ...EMERGENCY_FALLBACK[1], status: pData.status || "비상 폴백" };
+        return { ...EMERGENCY_FALLBACK[1], status: pData.status ? `비상 폴백 ${pData.status}` : "비상 폴백" };
       })()
     ]);
 
