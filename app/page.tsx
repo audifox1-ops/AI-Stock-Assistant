@@ -210,7 +210,7 @@ export default function PortfolioPage() {
       const { data, error } = await supabase.from('holdings').insert([{
         symbol: newStock.symbol.toUpperCase(), stock_name: newStock.name, avg_buy_price: Number(newStock.avgPrice),
         quantity: Number(newStock.quantity), position_type: newStock.type,
-        target_price: Number(newStock.target), stop_loss: Number(newStock.stop_loss)
+        target_price: Number(newStock.target), stop_loss: Number(newStock.stopLoss)
       }]).select();
       if (error) throw error;
       if (data) { 
