@@ -27,7 +27,6 @@ export default function InterestPage() {
     setIsInitialLoading(true);
     let finalStocks: InterestStock[] = [];
 
-    // 로컬 스토리지 우선 복구
     const localData = localStorage.getItem(INTERESTS_STORAGE_KEY);
     if (localData) {
       try {
@@ -116,7 +115,6 @@ export default function InterestPage() {
     if (!searchTerm) return;
     
     let symbol = searchTerm.toUpperCase().trim();
-    // 심볼 형식 보정 (한글 이름 입력 시 처리 필요하지만 일단 심볼로 가정)
     if (!symbol.includes('.') && /^\d{6}$/.test(symbol)) {
       symbol += '.KS';
     }
@@ -126,7 +124,7 @@ export default function InterestPage() {
         .from('alerts')
         .insert([{
           symbol: symbol,
-          stock_name: searchTerm, // 이름도 일단 입력값으로
+          stock_name: searchTerm,
           alert_enabled: true
         }])
         .select();
@@ -150,7 +148,6 @@ export default function InterestPage() {
       }
     } catch (err) {
       console.error("Error adding interest stock:", err);
-      // 로컬 강제 추가 (동기화 보장)
       const tempId = Date.now();
       const newItem: InterestStock = { id: tempId, name: searchTerm, symbol, price: null, change: null, alertEnabled: true };
       const updated = [newItem, ...interestStocks];
@@ -195,8 +192,8 @@ export default function InterestPage() {
   };
 
   return (
-    <div className="flex flex-col gap-6 animate-in fade-in duration-500 p-6 pb-32">
-      <div className="flex justify-between items-center">
+    <div className="flex flex-col gap-6 animate-in fade-in duration-500 p-6 pb-32 box-border overflow-x-hidden">
+      <div className="flex justify-between items-center px-2">
         <h2 className="text-2xl font-black font-heading bg-gradient-to-r from-blue-500 to-indigo-400 bg-clip-text text-transparent">관심 종목</h2>
         <button 
           onClick={() => fetchPrices()} 
@@ -241,12 +238,16 @@ export default function InterestPage() {
         ) : (
           <div className="grid grid-cols-1 gap-4">
             {interestStocks.map(stock => (
-              <div key={stock.id} className="p-6 bg-slate-800/40 border border-white/5 rounded-[2rem] hover:bg-slate-800/60 transition-all flex justify-between items-center group relative overflow-hidden">
-                <div className="absolute top-0 left-0 w-1 h-full bg-blue-500/20"></div>
-                <div>
-                  <div className="flex items-center gap-3 mb-2">
-                    <span className="font-black text-lg text-slate-100">{stock.name}</span>
-                    <span className="text-[10px] text-slate-500 font-bold bg-slate-900 px-2 py-0.5 rounded border border-white/5">{stock.symbol}</span>
+              /* [지시사항] 왼쪽 둥근 테두리에 글자가 짤리지 않도록 pl-12 pr-10 거대한 패딩 적용 */
+              <div 
+                key={stock.id} 
+                className="py-10 pl-12 pr-10 bg-slate-800/40 border border-white/5 rounded-[2.5rem] hover:bg-slate-800/60 transition-all flex justify-between items-center group relative overflow-hidden"
+              >
+                <div className="absolute top-0 left-0 w-1.5 h-full bg-blue-500/40"></div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-4 mb-2 overflow-visible">
+                    <span className="font-black text-xl text-slate-100 whitespace-normal break-keep">{stock.name}</span>
+                    <span className="text-[10px] text-slate-500 font-bold bg-slate-900 px-2 py-0.5 rounded border border-white/5 shrink-0">{stock.symbol}</span>
                   </div>
                   <div className="flex items-center gap-3">
                     {stock.price === null ? (
@@ -256,14 +257,14 @@ export default function InterestPage() {
                     ) : (
                       <>
                         <span className="text-xl font-black text-slate-100">{stock.price.toLocaleString()}원</span>
-                        <div className={`flex items-center gap-0.5 text-xs font-black ${stock.change && stock.change >= 0 ? 'text-red-500' : 'text-blue-400'}`}>
+                        <div className={`flex items-center gap-0.5 text-sm font-black ${stock.change && stock.change >= 0 ? 'text-red-500' : 'text-blue-400'}`}>
                           {stock.change && stock.change >= 0 ? '▲' : '▼'}{stock.change ? Math.abs(stock.change).toFixed(2) : '0.00'}%
                         </div>
                       </>
                     )}
                   </div>
                 </div>
-                <div className="flex gap-3">
+                <div className="flex gap-4 ml-4 shrink-0">
                   <button 
                     onClick={() => toggleAlert(stock.id, stock.alertEnabled)}
                     className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all ${
