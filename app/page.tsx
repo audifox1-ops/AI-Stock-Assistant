@@ -6,10 +6,9 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
-// [최종 강제 주입] 주가 실시간 100% 동기화 (캐시 영구 파괴)
+// [배포 에러 수정] Client Component에서는 Server Segment Config(revalidate)가 충돌을 일으키므로 제거합니다.
+// dynamic = 'force-dynamic' 만으로도 실시간 페이지 렌더링을 충분히 유도할 수 있습니다.
 export const dynamic = 'force-dynamic';
-export const fetchCache = 'force-no-store';
-export const revalidate = 0;
 
 interface Stock {
   id: string | number;

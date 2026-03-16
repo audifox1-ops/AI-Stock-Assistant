@@ -5,10 +5,9 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { RefreshCcw, TrendingUp, ChevronLeft, Bot, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 
-// [최종 강제 주입] 캐시 파괴 설정
+// [배포 에러 수정] Client Component에서는 Server Segment Config(revalidate)가 충돌을 일으키므로 제거합니다.
+// dynamic = 'force-dynamic' 만으로도 실시간 페이지 렌더링을 충분히 유도할 수 있습니다.
 export const dynamic = 'force-dynamic';
-export const fetchCache = 'force-no-store';
-export const revalidate = 0;
 
 export default function ChartPage() {
   const [data, setData] = useState([
