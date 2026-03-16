@@ -5,7 +5,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { 
   Home, 
-  LayoutDashboard, 
   Bell, 
   LineChart, 
   Settings 
@@ -16,14 +15,15 @@ export default function Navigation() {
 
   const navItems = [
     { href: "/", icon: Home, label: "홈" },
-    { href: "/interest", icon: Bell, label: "관심" },
+    { href: "/watchlist", icon: Bell, label: "관심" }, // 경로 확인 후 수정 (/interest -> /watchlist)
     { href: "/chart", icon: LineChart, label: "차트" },
     { href: "/settings", icon: Settings, label: "설정" },
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 flex justify-center pb-safe">
-      <div className="w-full max-w-md bg-white/80 backdrop-blur-xl border-t border-gray-100 px-6 py-2 flex justify-around items-center h-16 shadow-[0_-5px_20px_rgba(0,0,0,0.02)]">
+    /* 컨테이너 바닥에 고정되도록 absolute w-full 적용 (레이아웃 상 부모가 relative) */
+    <nav className="absolute bottom-0 left-0 right-0 z-50 flex justify-center bg-white/90 backdrop-blur-md border-t border-gray-100">
+      <div className="w-full flex justify-around items-center h-16 px-4">
         {navItems.map(({ href, icon: Icon, label }) => {
           const isActive = pathname === href;
           return (
@@ -39,7 +39,7 @@ export default function Navigation() {
                 strokeWidth={isActive ? 2.5 : 2} 
                 className={`transition-transform duration-200 ${isActive ? "scale-110" : "scale-100"}`}
               />
-              <span className={`text-[10px] mt-1 font-bold ${isActive ? "opacity-100" : "opacity-80"}`}>
+              <span className={`text-[10px] mt-0.5 font-bold ${isActive ? "opacity-100" : "opacity-80"}`}>
                 {label}
               </span>
             </Link>
