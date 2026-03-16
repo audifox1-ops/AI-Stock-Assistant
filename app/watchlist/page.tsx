@@ -2,8 +2,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { 
-  Plus, X, RefreshCcw, Bell, Trash2, BellRing, 
-  ArrowRight, TrendingUp, TrendingDown, Eye, Search, ChevronLeft, Landmark, Info, Star, BarChart3
+  Plus, X, RefreshCcw, Bell, Trash2, 
+  TrendingUp, TrendingDown, Eye, Search, ChevronLeft, Landmark, Star, BarChart3
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useSession } from "next-auth/react";
@@ -48,7 +48,7 @@ export default function WatchlistPage() {
         method: 'POST', 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ symbols }), 
-        cache: 'no-store' // 100% 실시간 데이터 강제 동기화 (캐시 완전 멸균)
+        cache: 'no-store'
       });
       const data = await res.json();
       setInterestStocks(prev => prev.map(s => data[s.symbol] ? { 
@@ -63,12 +63,9 @@ export default function WatchlistPage() {
 
   useEffect(() => {
     fetchInterests();
-    
-    // 5초마다 실시간 주가 데이터 새로고침 (Polling)
     const interval = setInterval(() => {
       fetchPrices(true);
-    }, 5000);
-    
+    }, 5000); // 5초 실시간 동기화
     return () => clearInterval(interval);
   }, []);
 
@@ -130,7 +127,6 @@ export default function WatchlistPage() {
       {/* Header Section */}
       <header className="px-6 pt-16 pb-12 bg-white border-b border-gray-100 sticky top-0 z-50 shadow-sm overflow-hidden">
         <div className="absolute top-0 right-0 w-64 h-64 bg-blue-50/20 rounded-bl-[160px] -z-10" />
-        
         <div className="flex justify-between items-center mb-10 px-2 relative z-10">
            <div className="flex items-center gap-5">
               <Link href="/" className="p-3 bg-gray-50 rounded-2xl text-gray-400 hover:text-[#3182f6] transition-all border border-gray-100">
@@ -168,7 +164,6 @@ export default function WatchlistPage() {
 
       {/* Main Content Section */}
       <div className="max-w-xl mx-auto px-6 mt-12 space-y-8">
-        
         <div className="flex justify-between items-center px-2">
            <div className="flex flex-col gap-1">
               <h3 className="text-sm font-black text-gray-400 uppercase tracking-widest">Active Watchlist</h3>
@@ -187,9 +182,10 @@ export default function WatchlistPage() {
           {interestStocks.map(stock => {
             const isUp = (stock.change || 0) >= 0;
             return (
+              /* 물리적 강제 복구: 모든 종목 카드는 rounded-2xl 스타일과 flex justify-between 구조를 가짐 */
               <div 
                 key={stock.id} 
-                className="bg-white rounded-2xl p-6 mb-4 shadow-sm border border-gray-100 flex items-center justify-between group hover:border-[#3182f6]/30 transition-all"
+                className="bg-white p-6 rounded-2xl shadow-sm mb-4 flex justify-between items-center border border-gray-100 group hover:border-[#3182f6]/30 transition-all"
               >
                 <div className="flex items-center gap-6 min-w-0 flex-1">
                    <div className="w-14 h-14 bg-gray-50 rounded-2xl flex items-center justify-center text-gray-400 group-hover:bg-blue-50 group-hover:text-[#3182f6] transition-colors flex-shrink-0">
@@ -200,7 +196,7 @@ export default function WatchlistPage() {
                         {stock.name}
                       </h4>
                       <div className="flex items-center gap-2.5">
-                         <span className="text-[10px] font-black text-blue-500 bg-blue-50 px-2 py-0.5 rounded uppercase tracking-wider">
+                         <span className="text-[10px] font-black text-blue-500 bg-blue-50 px-2 py-0.5 rounded-lg uppercase tracking-wider">
                            {stock.symbol}
                          </span>
                          {stock.updatedAt && (
@@ -269,7 +265,6 @@ export default function WatchlistPage() {
         <div className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-lg p-8 flex items-center justify-center animate-in fade-in duration-300">
            <div className="bg-white w-full max-w-lg rounded-[2.5rem] p-10 space-y-10 animate-in slide-in-from-bottom-10 shadow-2xl relative overflow-hidden">
               <div className="absolute top-0 left-0 w-32 h-32 bg-blue-50/50 rounded-br-[120px] -z-10" />
-              
               <div className="flex justify-between items-center border-b border-gray-50 pb-6">
                  <div>
                     <h2 className="text-3xl font-black text-[#191f28] tracking-tighter">관심 종목 등록</h2>
@@ -282,7 +277,6 @@ export default function WatchlistPage() {
                     <X size={24} />
                  </button>
               </div>
-              
               <div className="space-y-8">
                  <div className="space-y-2.5">
                     <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] px-1">종목 이름</label>
@@ -305,7 +299,6 @@ export default function WatchlistPage() {
                     />
                  </div>
               </div>
-
               <div className="pt-2 flex flex-col gap-4">
                  <button 
                   onClick={handleAddInterest}
@@ -327,7 +320,7 @@ export default function WatchlistPage() {
             <BarChart3 className="text-gray-900" size={28} />
             <span className="text-2xl font-black tracking-tighter text-gray-900 uppercase">AI STOCK Monitoring</span>
          </div>
-         <p className="text-[9px] font-black text-gray-500 uppercase tracking-[0.8em]">Deep Analysis Engine v1.7.0X</p>
+         <p className="text-[9px] font-black text-gray-500 uppercase tracking-[0.8em]">Deep Analysis Engine v1.8.0X</p>
       </footer>
     </div>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   AreaChart, 
   Area, 
@@ -10,10 +10,9 @@ import {
   Tooltip, 
   ResponsiveContainer 
 } from 'recharts';
-import { RefreshCcw, TrendingUp, ChevronLeft, Calendar, Info, BarChart3, Bot, Sparkles, TrendingDown, Loader2, Gauge } from 'lucide-react';
+import { RefreshCcw, TrendingUp, ChevronLeft, Bot, Sparkles, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 
-// --- Types ---
 interface ChartData {
   time: string;
   price: number;
@@ -30,7 +29,6 @@ export default function ChartPage() {
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
 
-  // Mock initial data
   const initialData = [
     { time: '09:00', price: 51200 },
     { time: '10:00', price: 51800 },
@@ -41,12 +39,9 @@ export default function ChartPage() {
     { time: '15:00', price: 53500 },
   ];
 
-  // 실시간 주가 데이터 업데이트 로직 (캐시 방지 강제 적용)
   const fetchLiveChartData = async () => {
     setIsRefreshing(true);
     try {
-      // 실제 구현 시: await fetch('/api/stock/history', { cache: 'no-store' })
-      // 여기서는 데모를 위해 변동성을 부여한 실시간 시뮬레이션 수행
       setTimeout(() => {
         const lastPrice = chartData.length > 0 ? chartData[chartData.length - 1].price : 53500;
         const volatility = Math.random() * 500 - 250;
@@ -63,7 +58,6 @@ export default function ChartPage() {
         setIsRefreshing(false);
       }, 700);
     } catch (err) {
-      console.error("[Chart] Polling Error:", err);
       setIsRefreshing(false);
     }
   };
@@ -73,7 +67,6 @@ export default function ChartPage() {
     setAiStrategy(null);
     setAiError(null);
     try {
-      // 분석 요청 시 캐시 방지 옵션 강제
       const res = await fetch('/api/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -82,7 +75,6 @@ export default function ChartPage() {
           name: "태웅",
           price: chartData.length > 0 ? chartData[chartData.length - 1].price : 53500,
           changePercent: 4.6,
-          // 수급 데이터 시뮬레이션 전달
           institutional: 2450000, 
           foreigner: 120000
         }),
@@ -92,6 +84,8 @@ export default function ChartPage() {
       
       if (data.analysis) {
         setAiStrategy(data.analysis);
+      } else if (data.error) {
+        setAiError(data.error);
       } else {
         setAiError("AI 엔진이 유효한 응답을 생성하지 못했습니다.");
       }
@@ -105,13 +99,8 @@ export default function ChartPage() {
   useEffect(() => {
     setIsMounted(true);
     setChartData(initialData);
-    
-    // 1분(60초)마다 데이터 강제 갱신 인터벌
     const interval = setInterval(fetchLiveChartData, 60000);
-    
-    // 초기 AI 분석 실행
     runAiStrategyAnalysis();
-    
     return () => clearInterval(interval);
   }, []);
 
@@ -131,7 +120,6 @@ export default function ChartPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 pb-40">
-      {/* 1. Header & Stock Info - No rounded-full */}
       <header className="px-6 pt-12 pb-10 bg-white border-b border-gray-100 sticky top-0 z-50 shadow-sm">
         <div className="flex items-center gap-5 mb-10">
            <Link href="/" className="p-3 bg-gray-50 rounded-2xl text-gray-400 hover:text-[#3182f6] border border-gray-100 transition-all">
@@ -172,9 +160,7 @@ export default function ChartPage() {
         </div>
       </header>
 
-      {/* 2. Chart Section - Modern Wide Card, No rounded-full */}
       <section className="px-6 mt-12 space-y-8">
-         {/* Period Selection Tabs - No rounded-full */}
          <div className="flex gap-2 p-2 bg-white rounded-2xl border border-gray-100 w-fit mx-auto shadow-sm">
             {periods.map(p => (
                <button 
@@ -187,8 +173,8 @@ export default function ChartPage() {
             ))}
          </div>
 
-         {/* Main Chart Box - Squared, No rounded-full */}
-         <div className="bg-white rounded-[2.5rem] p-10 border border-gray-100 shadow-sm h-[420px] relative overflow-hidden group">
+         {/* 차트 부모 div에 명시적 높이와 최소 높이 부여하여 Recharts 에러 해결 */}
+         <div className="bg-white rounded-[2.5rem] p-10 border border-gray-100 shadow-sm w-full h-[420px] min-h-[420px] relative overflow-hidden group">
             <ResponsiveContainer width="100%" height="100%">
                <AreaChart
                   data={chartData}
@@ -200,9 +186,7 @@ export default function ChartPage() {
                         <stop offset="95%" stopColor="#3182f6" stopOpacity={0}/>
                      </linearGradient>
                   </defs>
-                  
                   <CartesianGrid vertical={false} strokeDasharray="6 12" stroke="#F1F5F9" />
-                  
                   <XAxis 
                      dataKey="time" 
                      axisLine={false} 
@@ -211,7 +195,6 @@ export default function ChartPage() {
                      dy={20}
                   />
                   <YAxis hide={true} domain={['auto', 'auto']} />
-                  
                   <Tooltip 
                      cursor={{ stroke: '#E2E8F0', strokeWidth: 3 }}
                      contentStyle={{ 
@@ -221,7 +204,6 @@ export default function ChartPage() {
                      labelStyle={{ color: '#94A3B8', marginBottom: '6px', fontSize: '11px', fontWeight: '900', textTransform: 'uppercase' }}
                      itemStyle={{ color: '#3182f6' }}
                   />
-                  
                   <Area 
                      type="monotone" 
                      dataKey="price" 
@@ -236,7 +218,6 @@ export default function ChartPage() {
          </div>
       </section>
 
-      {/* 3. 🤖 Gemini AI 실시간 투자 전략 - px-8 wide card, No rounded-full */}
       <section className="mt-16 px-6 pb-24 space-y-6">
          <div className="flex items-center justify-between px-2">
             <div className="flex items-center gap-3">
@@ -248,7 +229,6 @@ export default function ChartPage() {
             <span className="text-[10px] font-black text-gray-300 uppercase tracking-widest">Powered by Gemini AI</span>
          </div>
 
-         {/* AI Strategy Card - Wide px-8 */}
          <div className="bg-white rounded-[2.5rem] p-12 border border-blue-100 shadow-[0_40px_80px_-20px_rgba(49,130,246,0.1)] relative overflow-hidden min-h-[300px] flex flex-col justify-center">
             <div className="absolute top-0 right-0 p-12 opacity-5 pointer-events-none">
                <Sparkles size={140} className="text-[#3182f6]" />
@@ -263,7 +243,6 @@ export default function ChartPage() {
                   <div className="space-y-4">
                      <div className="w-full h-4.5 bg-gray-50 rounded-full" />
                      <div className="w-11/12 h-4.5 bg-gray-50 rounded-full" />
-                     <div className="w-4/5 h-4.5 bg-gray-50 rounded-full" />
                   </div>
                   <div className="pt-8 flex flex-col items-center gap-3">
                      <Loader2 className="text-[#3182f6] animate-spin" size={32} />
@@ -273,11 +252,11 @@ export default function ChartPage() {
             ) : aiError ? (
                <div className="flex flex-col items-center justify-center gap-6 py-6 animate-in fade-in duration-500">
                   <div className="w-20 h-20 bg-red-50 rounded-[2rem] flex items-center justify-center text-[#EF4444]">
-                     <Info size={40} />
+                     <RefreshCcw size={40} />
                   </div>
                   <div className="text-center space-y-2">
                      <h4 className="text-lg font-black text-[#191f28]">전략을 생성할 수 없습니다</h4>
-                     <p className="text-sm font-bold text-gray-400">{aiError}</p>
+                     <p className="text-sm font-bold text-red-400">{aiError}</p>
                   </div>
                   <button 
                     onClick={runAiStrategyAnalysis} 
@@ -297,11 +276,9 @@ export default function ChartPage() {
                         <RefreshCcw size={20} />
                      </button>
                   </div>
-                  
                   <div className="text-[17px] text-gray-700 font-bold leading-[1.8] whitespace-pre-line space-y-6 border-l-[6px] border-[#3182f6] pl-10 my-6 italic">
                      {aiStrategy}
                   </div>
-                  
                   <div className="mt-12 pt-10 border-t border-gray-50 flex justify-between items-center text-[10px] font-black text-gray-300 uppercase tracking-[0.25em]">
                      <span>Model Status: Optimized for Alpha</span>
                      <div className="flex items-center gap-2 text-[#3182f6] bg-blue-50 px-4 py-2 rounded-xl">
@@ -310,33 +287,7 @@ export default function ChartPage() {
                      </div>
                   </div>
                </div>
-            ) : (
-               <div className="flex flex-col items-center justify-center py-16 gap-5">
-                  <Loader2 className="animate-spin text-gray-100" size={60} />
-                  <div className="text-center space-y-1">
-                     <p className="text-base font-black text-gray-400">전략 레포트 대기 중</p>
-                     <p className="text-[10px] font-bold text-gray-300 uppercase tracking-widest">Waiting for Intelligence Response...</p>
-                  </div>
-               </div>
-            )}
-         </div>
-
-         {/* Extra Sentiment Analysis Cards - No rounded-full */}
-         <div className="grid grid-cols-2 gap-6">
-            <div className="bg-white p-10 rounded-[2rem] border border-gray-100 shadow-sm flex flex-col items-center gap-3 group hover:border-[#EF4444] transition-all duration-700">
-               <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">실시간 수급 모멘텀</span>
-               <div className="text-3xl font-black text-[#EF4444] tracking-tight group-hover:scale-110 transition-transform">매수 우위</div>
-               <div className="h-2 w-full bg-gray-50 rounded-sm mt-3 overflow-hidden">
-                  <div className="h-full bg-[#EF4444] w-4/5 rounded-sm" />
-               </div>
-            </div>
-            <div className="bg-white p-10 rounded-[2rem] border border-gray-100 shadow-sm flex flex-col items-center gap-3 group hover:border-[#3B82F6] transition-all duration-700">
-               <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">기술적 차트 강도</span>
-               <div className="text-3xl font-black text-[#3B82F6] tracking-tight group-hover:scale-110 transition-transform">돌파 임박</div>
-               <div className="h-2 w-full bg-gray-50 rounded-sm mt-3 overflow-hidden">
-                  <div className="h-full bg-[#3B82F6] w-3/4 rounded-sm" />
-               </div>
-            </div>
+            ) : null}
          </div>
       </section>
     </div>

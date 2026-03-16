@@ -1,10 +1,9 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextResponse } from "next/server";
 
 /**
- * Gemini AI 주식 분석 API
- * GOOGLE_GEMINI_API_KEY 환경변수를 사용합니다.
- * 종목 데이터(가격, 등락률, 수급 등)를 기반으로 3줄 투자 전략을 생성합니다.
+ * Gemini AI 주식 분석 API (Raw Fetch 방식)
+ * GOOGLE_GEMINI_API_KEY 환경변수를 사용하여 Google AI Studio API를 직접 호출합니다.
+ * SDK 의존성을 제거하여 패키지 충돌을 방지하고 상세한 에러 메시지를 반환합니다.
  */
 
 export async function POST(req: Request) {
@@ -15,7 +14,7 @@ export async function POST(req: Request) {
     // 1. 필수 데이터 유효성 검사
     if (!symbol || !name) {
       return NextResponse.json(
-        { analysis: "분석을 위한 종목 정보(이름, 티커)가 누락되었습니다." },
+        { error: "분석을 위한 종목 정보(이름, 티커)가 누락되었습니다." },
         { status: 400 }
       );
     }
@@ -23,17 +22,12 @@ export async function POST(req: Request) {
     // 2. API 키 확인
     const apiKey = process.env.GOOGLE_GEMINI_API_KEY;
     if (!apiKey || apiKey === "your_gemini_api_key_here") {
-      console.error("[AI API] GOOGLE_GEMINI_API_KEY is not configured properly.");
       return NextResponse.json({
-        analysis: "AI 엔진의 API 키가 설정되지 않았습니다. 환경변수 설정을 확인해 주세요.",
-      });
+        error: "Gemini API 키가 프로젝트에 설정되지 않았습니다. .env 환경변수를 확인해 주세요.",
+      }, { status: 500 });
     }
 
-    // 3. Gemini SDK 초기화
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-
-    // 4. 프롬프트 구성 (데이터가 누락된 경우를 대비한 가공)
+    // 3. 프롬프트 구성
     const currentPriceStr = price ? `${Number(price).toLocaleString()}원` : "데이터 없음";
     const changeStr = changePercent !== undefined ? `${changePercent}%` : "데이터 없음";
     const instStr = institutional !== undefined ? `${Number(institutional).toLocaleString()}원` : "분석 중";
@@ -56,31 +50,61 @@ export async function POST(req: Request) {
       4. 데이터가 부족한 경우 추측보다는 현재 시장 흐름에 따른 조언을 제공할 것.
     `;
 
-    // 5. AI 스트리밍 요청 (성능을 위해 일반 생성 사용)
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const text = response.text();
+    // 4. Gemini Raw Fetch API 호출
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [
+              {
+                text: prompt
+              }
+            ]
+          }
+        ],
+        generationConfig: {
+          temperature: 0.7,
+          topK: 40,
+          topP: 0.95,
+          maxOutputTokens: 1024,
+        }
+      })
+    });
 
-    if (!text) {
-      throw new Error("AI response text is empty");
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error?.message || `Gemini API 호출 실패: ${response.statusText}`);
     }
 
-    return NextResponse.json({ analysis: text });
+    const data = await response.json();
+    const analysisText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+    if (!analysisText) {
+      throw new Error("AI 응답 데이터에서 전략을 추출할 수 없습니다.");
+    }
+
+    return NextResponse.json({ analysis: analysisText });
 
   } catch (error: any) {
     console.error("[AI API] Error during Gemini analysis:", error);
     
-    // 구체적인 에러 원인 분석
-    let errorMessage = "AI 분석 리포트를 생성하는 중 오류가 발생했습니다.";
-    if (error.message?.includes("API_KEY_INVALID")) {
-      errorMessage = "Gemini API 키가 유효하지 않습니다.";
-    } else if (error.message?.includes("quota")) {
-      errorMessage = "AI 서비스 할당량이 초과되었습니다. 잠시 후 다시 시도해 주세요.";
+    // 에러 메시지 세분화
+    let errorMessage = error.message || "AI 분석 중 알 수 없는 오류가 발생했습니다.";
+    if (errorMessage.includes("API Key")) {
+      errorMessage = "유효하지 않은 API 키입니다. Google AI Studio에서 키를 재발급받으세요.";
+    } else if (errorMessage.includes("quota")) {
+      errorMessage = "API 호출 할당량이 초과되었습니다. 잠시 후 상위 모델로 시도해 주세요.";
     }
 
     return NextResponse.json(
-      { analysis: errorMessage, details: error.message },
-      { status: 200 } // 프론트엔드에서 에러 메시지를 자연스럽게 노출하기 위해 200 반환
+      { error: errorMessage },
+      { status: 500 }
     );
   }
 }
