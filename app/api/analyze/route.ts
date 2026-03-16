@@ -22,18 +22,18 @@ export async function POST(req: Request) {
 
     const prompt = `주식 분석가로서 [${name} (${symbol})]를 분석하세요. 현재가 ${price}, 변동 ${changePercent}%. 핵심 3줄 대응 전략을 작성하세요.`;
 
-    // 3. 가장 원초적인 fetch 방식으로 통신
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`, {
+    // 3. [최초 지침 반영] 가장 빠르고 안정적인 최신 모델 gemini-3.0-flash로 엔드포인트 교체
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.0-flash:generateContent?key=${apiKey}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
       cache: 'no-store'
     });
 
-    // 4. 통신 실패 시 원본 에러 포착 (사용자 지침: 구글 서버가 뱉은 리얼 에러 노출)
+    // 4. 통신 실패 시 원본 에러 포착 (프론트로 에러 텍스트 그대로 전달)
     if (!response.ok) {
       const errText = await response.text();
-      console.error("GOOGLE API RAW ERROR:", errText);
+      console.error("GOOGLE API RAW ERROR (Gemini 3.0):", errText);
       return NextResponse.json({ error: `구글 서버 에러: ${errText}` }, { status: 200 });
     }
 
@@ -47,7 +47,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ analysis: resultText }, { status: 200 });
 
   } catch (error: any) {
-    console.error("SYSTEM CRITICAL ERROR:", error);
+    console.error("SYSTEM CRITICAL ERROR IN ANALYZE:", error);
     return NextResponse.json({ error: `내부 시스템 장애: ${error.message || "알 수 없는 오류"}` }, { status: 200 });
   }
 }
