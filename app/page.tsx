@@ -6,13 +6,6 @@ import { supabase } from '@/lib/supabase';
 import { useSession } from "next-auth/react";
 
 // --- Interfaces ---
-interface AiAnalysisResult {
-  position: string;
-  action: string;
-  targetPrice: number;
-  reason: string;
-}
-
 interface Stock {
   id: string | number;
   symbol: string;
@@ -23,8 +16,6 @@ interface Stock {
   type: string;
   target: number;
   stopLoss: number;
-  analysis?: AiAnalysisResult;
-  error?: string;
   changePercent?: number;
   updatedAt?: string;
 }
@@ -91,9 +82,17 @@ export default function PortfolioPage() {
           applicationServerKey: urlBase64ToUint8Array(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!)
         });
         setPushSubscription(sub);
-        fetch('/api/push', { method: 'POST', body: JSON.stringify({ subscription: sub, title: "알림 연동 완료", body: "실시간 시세를 알려드릴게요.", url: "/" }) });
+        fetch('/api/push', { 
+            method: 'POST', 
+            body: JSON.stringify({ 
+                subscription: sub, 
+                title: "알림 설정 완료", 
+                body: "이제 실시간 가격 도달 알림을 보내드립니다.", 
+                url: "/" 
+            }) 
+        });
       }
-    } catch (err) { alert('알림 설정을 확인해주세요.'); }
+    } catch (err) { alert('브라우저 알림 권한을 허용해주세요.'); }
   };
 
   const fetchMarketIndices = async (silent = false) => {
@@ -131,10 +130,10 @@ export default function PortfolioPage() {
   };
 
   const fetchPrices = async (silent = false) => {
+    const symbols = Array.from(new Set([...stocks.map(s => s.symbol), ...interestStocks.map(s => s.symbol)])).filter(Boolean);
+    if (symbols.length === 0) return;
     if (!silent) setIsRefreshing(true);
     try {
-      const symbols = Array.from(new Set([...stocks.map(s => s.symbol), ...interestStocks.map(s => s.symbol)])).filter(Boolean);
-      if (symbols.length === 0) return;
       const res = await fetch('/api/stock', { method: 'POST', body: JSON.stringify({ symbols }), cache: 'no-store' });
       const data = await res.json();
       setStocks(prev => prev.map(s => data[s.symbol] ? { ...s, currentPrice: data[s.symbol].price, changePercent: data[s.symbol].changePercent, updatedAt: data[s.symbol].updatedAt } : s));
@@ -159,123 +158,111 @@ export default function PortfolioPage() {
   }, [stocks.length, interestStocks.length]);
 
   const removeInterest = async (id: string | number) => {
-    if (!confirm('삭제하시겠습니까?')) return;
+    if (!confirm('관심 종목에서 삭제할까요?')) return;
     try { await supabase.from('alerts').delete().eq('id', id); fetchInterests(); } catch (err) {}
   };
 
-  const totalBuyAmount = stocks.reduce((acc, s) => acc + s.avgPrice * s.quantity, 0);
   const totalCurrentAmount = stocks.reduce((acc, s) => acc + (s.currentPrice || s.avgPrice) * s.quantity, 0);
+  const totalBuyAmount = stocks.reduce((acc, s) => acc + (s.avgPrice * s.quantity), 0);
   const totalRate = totalBuyAmount > 0 ? ((totalCurrentAmount / totalBuyAmount - 1) * 100).toFixed(2) : '0.00';
 
   return (
     <div className="min-h-screen">
-      
-      {/* Tosh Header */}
-      <header className="px-6 pt-10 pb-4 bg-white flex justify-between items-center">
-        <div className="flex items-center gap-2">
-          <div className="w-9 h-9 bg-blue-50 rounded-xl flex items-center justify-center">
-             <span className="text-xl font-black text-blue-600">A</span>
+      <header className="px-6 pt-10 pb-4 bg-white flex justify-between items-center bg-white/70 backdrop-blur-xl sticky top-0 z-20">
+        <div className="flex items-center gap-2.5">
+          <div className="w-10 h-10 bg-blue-50 rounded-2xl flex items-center justify-center shadow-sm border border-blue-100/50">
+             <span className="text-2xl font-black text-[#3182f6] tracking-tighter">A</span>
           </div>
           <h1 className="text-xl font-extrabold tracking-tight text-gray-900">AI Stock</h1>
         </div>
         <div className="flex items-center gap-4">
-          <button className="p-2.5 bg-gray-50 rounded-full text-gray-400">
-            <Bell size={22} />
+          <button onClick={() => fetchMarketIndices()} className="p-3 bg-gray-50 rounded-full text-gray-400 hover:text-gray-900 transition-colors">
+            <RefreshCcw size={22} className={isMarketLoading ? 'animate-spin' : ''} />
           </button>
-          {session?.user?.image ? (
-            <img src={session.user.image} alt="U" className="w-10 h-10 rounded-full border-2 border-white shadow-sm" />
-          ) : (
-            <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center text-gray-400">
-              <Plus size={20} />
-            </div>
-          )}
+          <img src={session?.user?.image || ''} alt="U" className="w-10 h-10 rounded-full border-2 border-white shadow-md bg-gray-100" />
         </div>
       </header>
 
-      {/* Main Container */}
-      <div className="max-w-xl mx-auto space-y-8 px-6 pb-20">
+      <div className="max-w-xl mx-auto space-y-8 px-6 pb-20 mt-6 overflow-hidden">
         
-        {/* Market Index Section - Big & Bold */}
-        <section className="pt-6 space-y-6">
-          {isMarketLoading ? (
-            <div className="h-24 bg-white rounded-3xl animate-pulse" />
-          ) : marketIndices.slice(0, 1).map(market => (
-            <div key={market.symbol} className="bg-white p-8 rounded-[2.5rem] shadow-[0_4px_30px_rgba(0,0,0,0.03)] border border-gray-50/50">
-              <div className="flex justify-between items-start mb-6">
-                <p className="text-sm font-black text-gray-300 uppercase tracking-widest">{market.name}</p>
-                <div className="flex items-center gap-1.5 px-3 py-1 bg-red-50 rounded-full">
-                   <p className="text-xs font-black text-[#EF4444]">+ {market.changePercent.toFixed(1)}%</p>
+        {/* Market Index */}
+        <section>
+          {marketIndices.slice(0, 1).map(market => (
+            <div key={market.symbol} className="bg-white p-8 rounded-[2.5rem] shadow-[0_10px_40px_rgba(0,0,0,0.03)] border border-gray-50">
+              <div className="flex justify-between items-center mb-6">
+                <span className="text-xs font-black text-gray-300 uppercase tracking-[0.2em]">{market.name}</span>
+                <div className={`px-4 py-1.5 rounded-full text-xs font-black flex items-center gap-1.5 ${market.changePercent >= 0 ? 'bg-red-50 text-[#EF4444]' : 'bg-blue-50 text-[#3B82F6]'}`}>
+                   {market.changePercent >= 0 ? '+' : ''}{market.changePercent.toFixed(1)}% 
+                   <span className="text-[10px]">{market.changePercent >= 0 ? '▲' : '▼'}</span>
                 </div>
               </div>
               <h2 className={`text-5xl font-extrabold tracking-tighter ${market.changePercent >= 0 ? 'text-[#EF4444]' : 'text-[#3B82F6]'}`}>
                 {market.price.toLocaleString()}
               </h2>
-              <div className="flex justify-between items-center mt-8">
-                 <p className="text-[10px] font-black text-gray-300 uppercase">Real-time Trading Vol.</p>
-                 <RefreshCcw size={14} className={`text-gray-200 ${isRefreshing ? 'animate-spin' : ''}`} />
-              </div>
             </div>
           ))}
         </section>
 
-        {/* Portfolio Card */}
-        <section className="bg-white p-8 rounded-[2.5rem] shadow-[0_8px_40px_rgba(0,0,0,0.04)] border border-gray-50">
-          <p className="text-xs font-black text-gray-300 mb-2 uppercase tracking-widest">Total My Assets</p>
-          <div className="flex items-baseline gap-2 mb-8">
-            <h3 className="text-3xl font-black text-gray-900">{totalCurrentAmount.toLocaleString()}</h3>
-            <span className="text-xl font-black text-gray-500">{'원'}</span>
+        {/* Assets Summary */}
+        <section className="bg-white p-9 rounded-[2.5rem] shadow-[0_15px_60px_rgba(49,130,246,0.05)] border border-blue-50/50 relative overflow-hidden group">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-blue-50 rounded-bl-[5rem] -mr-10 -mt-10 group-hover:scale-110 transition-transform duration-700 opacity-50" />
+          <p className="text-xs font-black text-gray-300 mb-2 uppercase tracking-[0.2em] relative z-10">Portfolio Value</p>
+          <div className="flex items-baseline gap-2 mb-10 relative z-10">
+            <h3 className="text-4xl font-black text-[#191f28]">{totalCurrentAmount.toLocaleString()}</h3>
+            <span className="text-xl font-black text-gray-400">{'원'}</span>
           </div>
           
           <button 
              onClick={requestNotificationPermission}
-             className="w-full py-4.5 bg-[#3182f6] text-white rounded-2xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-blue-200 active:scale-[0.98] transition-all"
+             className="w-full h-16 bg-[#3182f6] text-white rounded-[1.25rem] font-black flex items-center justify-center gap-3 shadow-[0_10px_30px_rgba(49,130,246,0.3)] active:scale-[0.97] transition-all relative z-10"
           >
-            <BellRing size={18} />
-            <span>관심 종목 추가로 알림 받기</span>
-            <ArrowRight size={16} />
+            <BellRing size={20} />
+            <span>나의 목표가 알림 받기</span>
+            <ArrowRight size={18} />
           </button>
         </section>
 
-        {/* Watchlist Section */}
+        {/* Watchlist - 짤림 방지 강화 레이아웃 */}
         <section className="space-y-6">
           <div className="flex justify-between items-center px-2">
-            <h4 className="text-xl font-extrabold text-gray-900">내 관심 종목</h4>
-            <button onClick={() => setIsAddModalOpen(true)} className="text-sm font-black text-blue-500">추가하기</button>
+            <h4 className="text-xl font-extrabold text-gray-900 flex items-center gap-2">
+              최근 본 종목
+              <span className="text-sm font-black text-blue-500 bg-blue-50 px-2.5 py-0.5 rounded-full">{interestStocks.length}</span>
+            </h4>
+            <button onClick={() => setIsAddModalOpen(true)} className="text-sm font-black text-gray-400 hover:text-[#3182f6] transition-colors">추가</button>
           </div>
 
-          <div className="space-y-4">
-            {interestStocks.length === 0 ? (
-              <div className="py-20 bg-white rounded-[2rem] border border-dashed border-gray-100 text-center">
-                <p className="text-gray-300 font-bold">궁금한 종목을 추가해보세요</p>
-              </div>
-            ) : interestStocks.map(stock => {
+          <div className="grid gap-4">
+            {interestStocks.map(stock => {
               const isUp = (stock.change || 0) >= 0;
               return (
-                <div key={stock.id} className="bg-white p-6 rounded-2xl border border-gray-50 shadow-sm flex items-center justify-between gap-6 group">
-                  <div className="flex flex-col min-w-0 flex-1">
-                    <h5 className="text-lg font-extrabold text-gray-900 truncate uppercase">{stock.name}</h5>
-                    <span className="text-[10px] font-black text-gray-300 uppercase tracking-tighter">{stock.symbol}</span>
+                <div key={stock.id} className="bg-white p-6 rounded-[2rem] border border-gray-100/50 shadow-sm flex items-center justify-between gap-x-6">
+                  {/* 종목명 영역: flex-1과 min-w-0으로 가용 공간 전체 활용 및 짤림 방지 */}
+                  <div className="flex-1 min-w-0">
+                    <h5 className="text-lg font-extrabold text-[#191f28] truncate mb-0.5 uppercase">{stock.name}</h5>
+                    <div className="flex items-center gap-2">
+                       <span className="text-[10px] font-black text-gray-300 uppercase tracking-[0.1em]">{stock.symbol}</span>
+                    </div>
                   </div>
                   
+                  {/* 시세 영역: 고정 너비와 우측 정렬로 레이아웃 고정 */}
                   <div className="flex flex-col items-end flex-shrink-0">
-                    <p className="text-lg font-black text-gray-900 leading-none mb-1">
+                    <p className="text-lg font-black text-[#191f28] leading-none mb-1.5">
                       {(stock.price?.toLocaleString() || '--')}{'원'}
                     </p>
-                    <div className={`flex items-center gap-1 font-black text-xs ${isUp ? 'text-[#EF4444]' : 'text-[#3B82F6]'}`}>
+                    <div className={`text-xs font-black flex items-center gap-1 ${isUp ? 'text-[#EF4444]' : 'text-[#3B82F6]'}`}>
                        <span>{isUp ? '+' : ''}{stock.change?.toFixed(2)}%</span>
-                       {isUp ? <ArrowRight className="-rotate-45" size={12} /> : <ArrowRight className="rotate-45" size={12} />}
+                       {isUp ? <ArrowRight className="-rotate-45" size={12} strokeWidth={3} /> : <ArrowRight className="rotate-45" size={12} strokeWidth={3} />}
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    <div className="p-3 bg-gray-50 rounded-xl text-gray-300">
-                      <Bell size={18} />
-                    </div>
-                    <button 
-                      onClick={() => removeInterest(stock.id)}
-                      className="p-3 bg-gray-50 rounded-xl text-gray-100 group-hover:text-red-400 transition-colors"
-                    >
-                      <Trash2 size={18} />
+                  {/* 액션 버튼 */}
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <button className="w-12 h-12 flex items-center justify-center bg-gray-50 rounded-2xl text-gray-300 group-hover:bg-blue-50 group-hover:text-blue-500 transition-all">
+                      <Bell size={20} strokeWidth={2.5} />
+                    </button>
+                    <button onClick={() => removeInterest(stock.id)} className="w-12 h-12 flex items-center justify-center bg-gray-50 rounded-2xl text-gray-200 hover:bg-red-50 hover:text-[#EF4444] transition-all">
+                      <Trash2 size={20} strokeWidth={2.5} />
                     </button>
                   </div>
                 </div>
@@ -285,42 +272,42 @@ export default function PortfolioPage() {
         </section>
       </div>
 
-      {/* Modern Add Modal */}
+      {/* Add Modal */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-[100] bg-white p-8 pt-24 flex flex-col animate-in slide-in-from-bottom duration-500">
-          <div className="flex justify-between items-center mb-16">
-            <h2 className="text-4xl font-extrabold tracking-tight">종목 추가</h2>
-            <button onClick={() => setIsAddModalOpen(false)} className="p-4 bg-gray-50 rounded-full text-gray-400">
-              <X size={28} />
-            </button>
-          </div>
-          
-          <div className="space-y-12 flex-1">
-             <div className="space-y-4">
-                <label className="text-xs font-black text-gray-300 uppercase tracking-widest px-2">Stock Code</label>
-                <input 
-                  type="text" 
-                  autoFocus
-                  className="w-full text-4xl font-black bg-transparent border-b-4 border-gray-100 focus:border-[#3182f6] outline-none py-4 placeholder:text-gray-100"
-                  placeholder="005930"
-                  value={newStock.symbol}
-                  onChange={e => setNewStock({...newStock, symbol: e.target.value})}
-                />
-             </div>
-             <div className="space-y-4">
-                <label className="text-xs font-black text-gray-300 uppercase tracking-widest px-2">Alias Name</label>
-                <input 
-                  type="text" 
-                  className="w-full text-2xl font-black bg-transparent border-b-4 border-gray-100 focus:border-[#3182f6] outline-none py-4 placeholder:text-gray-100"
-                  placeholder="삼성전자"
-                  value={newStock.name}
-                  onChange={e => setNewStock({...newStock, name: e.target.value})}
-                />
-             </div>
-          </div>
+           <div className="flex justify-between items-center mb-16">
+              <h2 className="text-4xl font-extrabold tracking-tight text-[#191f28]">종목 찾기</h2>
+              <button onClick={() => setIsAddModalOpen(false)} className="p-4 bg-gray-50 rounded-full text-gray-400">
+                <X size={28} />
+              </button>
+           </div>
+           
+           <div className="space-y-12 flex-1 overflow-y-auto no-scrollbar pb-10">
+              <div className="space-y-4">
+                 <label className="text-xs font-black text-gray-300 uppercase tracking-[0.2em] px-2">Ticker Code</label>
+                 <input 
+                   type="text" 
+                   autoFocus
+                   className="w-full text-4xl font-black bg-transparent border-b-4 border-gray-100 focus:border-[#3182f6] outline-none py-4 placeholder:text-gray-100 transition-colors"
+                   placeholder="005930"
+                   value={newStock.symbol}
+                   onChange={e => setNewStock({...newStock, symbol: e.target.value})}
+                 />
+              </div>
+              <div className="space-y-4">
+                 <label className="text-xs font-black text-gray-300 uppercase tracking-[0.2em] px-2">Label Name</label>
+                 <input 
+                   type="text" 
+                   className="w-full text-2xl font-black bg-transparent border-b-4 border-gray-100 focus:border-[#3182f6] outline-none py-4 placeholder:text-gray-100 transition-colors"
+                   placeholder="삼성전자"
+                   value={newStock.name}
+                   onChange={e => setNewStock({...newStock, name: e.target.value})}
+                 />
+              </div>
+           </div>
 
-          <button 
-            onClick={async () => {
+           <button 
+             onClick={async () => {
                 if (!newStock.symbol || !newStock.name) return;
                 let sym = newStock.symbol.toUpperCase().trim();
                 if (!sym.includes('.') && /^\d{6}$/.test(sym)) sym += '.KS';
@@ -328,14 +315,13 @@ export default function PortfolioPage() {
                 fetchInterests();
                 setIsAddModalOpen(false);
                 setNewStock({ name: '', symbol: '' });
-            }}
-            className="w-full py-6 bg-[#3182f6] text-white rounded-[2rem] font-black text-2xl shadow-xl active:scale-95 transition-all mb-10"
-          >
-            즐겨찾기 추가
-          </button>
+             }}
+             className="w-full h-20 bg-[#3182f6] text-white rounded-[2.5rem] font-black text-2xl shadow-2xl active:scale-95 transition-all mb-10"
+           >
+             관심 종목에 담기
+           </button>
         </div>
       )}
-
     </div>
   );
 }
