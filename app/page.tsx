@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { Plus, X, RefreshCcw, Bell } from 'lucide-react';
+import { Plus, X, RefreshCcw, Bell, AlertCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 // --- Interfaces ---
@@ -329,18 +329,17 @@ export default function PortfolioPage() {
           {interestStocks.map(stock => {
             const isUp = (stock.change || 0) >= 0;
             return (
-              /* [지시사항 2] 카드 내부 패딩을 px-10으로 대폭 확대하여 여백 확보 */
+              /* [지시사항] 텍스트가 짤리지 않도록 거대한 좌우 패딩(pl-12 px-10) 적용 및 음수 마진 제거 */
               <div 
                 key={stock.id} 
-                className="flex items-center justify-between p-10 -mx-6 rounded-[3rem] transition-all cursor-pointer overflow-visible hover:bg-gray-50"
+                className="flex items-center justify-between py-10 pl-12 pr-10 rounded-[3rem] transition-all cursor-pointer overflow-visible hover:bg-gray-50 bg-gray-50/40"
                 onClick={() => analyzeStockOrInterest(stock, false)}
               >
-                {/* [지시사항 1] 아이콘과 텍스트 사이 간격(gap-x-12) 확보 */}
                 <div className="flex items-center gap-x-12 min-w-0 flex-1 overflow-visible">
-                  <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center text-gray-300 flex-shrink-0 shadow-sm border border-gray-100">
+                  <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center text-gray-300 flex-shrink-0 shadow-sm border border-gray-100">
                     <Bell size={28} />
                   </div>
-                  {/* [지시사항 3] 컨테이너를 flex-1, min-w-fit으로 설정하고 줄바꿈(whitespace-normal) 허용 */}
+                  {/* 종목명 컨테이너 - 음수 마진(-ml) 없이 유동적 확보 */}
                   <div className="min-w-fit flex-1 overflow-visible">
                     <h4 className="text-2xl font-black text-[#191f28] uppercase whitespace-normal break-keep leading-tight mb-1">
                       {stock.name}
