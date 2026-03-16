@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google"; // 'next/font'에서 'next/font/google'로 수정하여 빌드 오류 해결
+import { Inter } from "next/font/google";
 import "./globals.css";
-import AuthProvider from "@/components/auth-provider";
+import { AuthProvider } from "@/components/auth-provider"; // 중괄호를 추가하여 명명된 임포트로 수정
 import Navigation from "@/components/Navigation";
 
 const inter = Inter({ subsets: ["latin"] });
