@@ -1,6 +1,9 @@
-import yahooFinance from 'yahoo-finance2';
+import { YahooFinance } from 'yahoo-finance2';
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+
+// [최우선 수정] 야후 파이낸스 인스턴스 초기화 적용
+const yahooFinance = new YahooFinance();
 
 // 캐싱 무효화
 export const dynamic = 'force-dynamic';
@@ -33,14 +36,14 @@ async function getPublicStockData(tickerOrName: string) {
 
   try {
     const baseUrl = "http://apis.data.go.kr/1160100/service/GetStockSecuritiesInfoService/getStockPriceInfo";
-    const basDt = '20260313'; // [하드코딩]
+    const basDt = '20260313'; // 지난주 금요일 고정
 
     const cleanTicker = tickerOrName.trim();
     const isNumericTicker = /^\d{6}$/.test(cleanTicker);
     const srtnCd = isNumericTicker ? `A${cleanTicker}` : (cleanTicker.startsWith('A') ? cleanTicker.toUpperCase() : null);
 
     const params: Record<string, string> = {
-      resultType: 'json', // [지시사항] JSON 파라미터 확인
+      resultType: 'json',
       numOfRows: '1',
       pageNo: '1',
       basDt: basDt
@@ -56,7 +59,7 @@ async function getPublicStockData(tickerOrName: string) {
 
     const res = await fetch(fullUrl, { cache: 'no-store' });
     
-    // [지시사항] 원시 응답 로깅
+    // 원시 응답 로깅
     const rawText = await res.text();
     console.log(`[Stock API] API 원시 응답 (${tickerOrName}):`, rawText);
     
@@ -64,7 +67,7 @@ async function getPublicStockData(tickerOrName: string) {
     try {
       data = JSON.parse(rawText);
     } catch (e) {
-      console.error(`[Stock API] JSON Parse Error for ${tickerOrName}. Raw response: ${rawText.substring(0, 50)}`);
+      console.error(`[Stock API] JSON Parse Error for ${tickerOrName}.`);
       return { success: false, status: "(Error: JSON)" };
     }
 
@@ -96,7 +99,7 @@ async function getPublicStockData(tickerOrName: string) {
 }
 
 /**
- * 야후 폴백
+ * 야후 폴백 (인스턴스 방식 수정)
  */
 async function getYahooFallback(symbol: string) {
   const baseSymbol = symbol.split('.')[0];
@@ -104,6 +107,7 @@ async function getYahooFallback(symbol: string) {
   for (const ext of extensions) {
     try {
       const target = `${baseSymbol}${ext}`;
+      // [최우선 수정] 인스턴스를 통한 quote 호출
       const quote = (await yahooFinance.quote(target)) as any;
       if (quote && quote.regularMarketPrice) {
         return {

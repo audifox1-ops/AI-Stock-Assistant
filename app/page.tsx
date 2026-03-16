@@ -268,12 +268,12 @@ export default function PortfolioPage() {
       <section className="px-8 py-12 overflow-visible">
         <h3 className="text-2xl font-black mb-12">나의 투자 현황</h3>
         
-        {isInitialLoading ? <SkeletonCircle /> : stocks.length === 0 ? (
+        {isInitialLoading ? <div className="space-y-6"><SkeletonText width="w-full" height="h-32" /></div> : stocks.length === 0 ? (
           /* [지시사항] 고정 높이 제거, p-8 flex-col items-center gap-6 적용, 버튼 위치 강제 속성 제거 */
-          <div className="w-full h-auto min-h-fit p-8 bg-gray-50/50 rounded-[4rem] text-center border-2 border-dashed border-gray-100 flex flex-col items-center justify-center gap-6 overflow-visible">
-            <p className="text-gray-400 font-black leading-relaxed whitespace-pre-line text-base max-w-xs overflow-visible">보유하신 종목을 등록해 보세요.{"\n"}AI가 전략을 제안합니다.</p>
-            {/* 자연스럽게 아래로 쌓이는 버튼 */}
-            <button onClick={() => setIsAddModalOpen(true)} className="bg-[#3182f6] text-white px-12 py-7 rounded-full font-black shadow-2xl active:scale-95 transition-all text-2xl">지금 시작하기</button>
+          <div className="w-full h-auto min-h-fit p-8 bg-gray-50/50 rounded-[5rem] text-center border-2 border-dashed border-gray-100 flex flex-col items-center justify-center gap-8 overflow-visible">
+            <p className="text-gray-400 font-black leading-relaxed whitespace-pre-line text-lg max-w-xs overflow-visible">보유하신 종목을 등록해 보세요.{"\n"}AI가 즉시 전략을 제안합니다.</p>
+            {/* 독립된 공간에 버튼 배치 (자연스러운 수직 쌓기) */}
+            <button onClick={() => setIsAddModalOpen(true)} className="bg-[#3182f6] text-white px-12 py-7 rounded-full font-black shadow-[0_20px_40px_rgba(49,130,246,0.2)] active:scale-95 transition-all text-2xl">지금 시작하기</button>
           </div>
         ) : (
           <div className="space-y-14">
@@ -295,7 +295,6 @@ export default function PortfolioPage() {
                       <div className={`px-10 py-3 rounded-full text-xs font-black ${isProfit ? 'text-red-500 bg-red-50' : 'text-blue-600 bg-blue-50'}`}>{isProfit ? '+' : ''}{rate}%</div>
                     </div>
                   </div>
-                  {/* AI Analysis... (생략됨) */}
                 </div>
               );
             })}
@@ -304,7 +303,7 @@ export default function PortfolioPage() {
       </section>
 
       {/* Interests Section */}
-      <section className="px-8 py-12 overflow-visible border-t-2 border-gray-50 mt-8">
+      <section className="px-8 py-12 overflow-visible border-t-8 border-gray-50 mt-8">
         <h3 className="text-2xl font-black mb-12">관심있는 종목</h3>
         <div className="space-y-12">
           {interestStocks.map(stock => {
@@ -312,8 +311,7 @@ export default function PortfolioPage() {
             return (
               <div key={stock.id} className="flex items-center justify-between p-6 -m-6 rounded-[3rem] transition-all cursor-pointer overflow-visible" onClick={() => analyzeStockOrInterest(stock, false)}>
                 <div className="flex items-center gap-10 min-w-0 overflow-visible">
-                  {/* [지시사항] w-16 고정 벽 확보 */}
-                  <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center text-gray-400 flex-shrink-0">
+                  <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center text-gray-300 flex-shrink-0 shadow-sm">
                     <Bell size={28} />
                   </div>
                   <div className="min-w-0">
@@ -338,18 +336,18 @@ export default function PortfolioPage() {
             <h2 className="text-5xl font-black leading-[1.1]">자산 등록</h2>
             <button onClick={() => setIsAddModalOpen(false)} className="p-5 bg-gray-100 rounded-full text-gray-400"><X size={32} /></button>
           </div>
-          <div className="space-y-14 flex-1">
+          <div className="space-y-14 flex-1 overflow-y-auto no-scrollbar pb-10">
             <div className="space-y-4">
               <label className="text-xs font-black text-gray-400 uppercase tracking-widest ml-2">종목 코드 (6자리)</label>
-              <input type="text" className="w-full border-b-[5px] border-gray-100 py-6 text-3xl font-black focus:border-[#3182f6] outline-none placeholder:text-gray-200" placeholder="005930" value={newStock.symbol} onChange={e => setNewStock({...newStock, symbol: e.target.value})} />
+              <input type="text" className="w-full border-b-[5px] border-gray-100 py-6 text-3xl font-black focus:border-[#3182f6] outline-none placeholder:text-gray-200 bg-transparent" placeholder="005930" value={newStock.symbol} onChange={e => setNewStock({...newStock, symbol: e.target.value})} />
             </div>
             <div className="space-y-4">
               <label className="text-xs font-black text-gray-400 uppercase tracking-widest ml-2">관리용 명칭</label>
-              <input type="text" className="w-full border-b-[5px] border-gray-100 py-6 text-3xl font-black focus:border-[#3182f6] outline-none placeholder:text-gray-200" placeholder="삼성전자" value={newStock.name} onChange={e => setNewStock({...newStock, name: e.target.value})} />
+              <input type="text" className="w-full border-b-[5px] border-gray-100 py-6 text-3xl font-black focus:border-[#3182f6] outline-none placeholder:text-gray-200 bg-transparent" placeholder="삼성전자" value={newStock.name} onChange={e => setNewStock({...newStock, name: e.target.value})} />
             </div>
             <div className="grid grid-cols-2 gap-12">
-              <input type="number" className="w-full border-b-[5px] border-gray-100 py-4 text-2xl font-black focus:border-[#3182f6] outline-none" placeholder="평단가" value={newStock.avgPrice || ''} onChange={e => setNewStock({...newStock, avgPrice: Number(e.target.value)})} />
-              <input type="number" className="w-full border-b-[5px] border-gray-100 py-4 text-2xl font-black focus:border-[#3182f6] outline-none" placeholder="수량" value={newStock.quantity || ''} onChange={e => setNewStock({...newStock, quantity: Number(e.target.value)})} />
+              <input type="number" className="w-full border-b-[5px] border-gray-100 py-4 text-2xl font-black focus:border-[#3182f6] outline-none bg-transparent" placeholder="평단가" value={newStock.avgPrice || ''} onChange={e => setNewStock({...newStock, avgPrice: Number(e.target.value)})} />
+              <input type="number" className="w-full border-b-[5px] border-gray-100 py-4 text-2xl font-black focus:border-[#3182f6] outline-none bg-transparent" placeholder="수량" value={newStock.quantity || ''} onChange={e => setNewStock({...newStock, quantity: Number(e.target.value)})} />
             </div>
           </div>
           <button onClick={handleAddStock} className="w-full py-8 bg-[#3182f6] text-white rounded-[3rem] font-black text-3xl shadow-2xl active:scale-95 transition-all mb-14">연결하기</button>
