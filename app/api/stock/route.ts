@@ -4,8 +4,9 @@ import { supabase } from '@/lib/supabase';
 
 const yahooFinance = new YahooFinance();
 
-// Vercel 캐싱 차단
+// [최종 강제 주입] 주가 실시간 100% 동기화를 위한 캐시 영구 파괴
 export const dynamic = 'force-dynamic';
+export const fetchCache = 'force-no-store';
 export const revalidate = 0;
 
 // 한국 시간(KST) 포맷팅 함수
@@ -24,9 +25,6 @@ async function getPublicStockData(tickerOrName: string) {
   if (!rawKey || rawKey.includes('YOUR_PUBLIC')) return { success: false, status: "Key Missing" };
   try {
     const baseUrl = "http://apis.data.go.kr/1160100/service/GetStockSecuritiesInfoService/getStockPriceInfo";
-    
-    // 실시간성을 위해 항상 최근 영업일을 조회하도록 basDt 파라미터를 동적으로 처리하거나 제거
-    // 공공데이터포털 API 특성상 basDt가 없으면 최신 데이터를 반환하는 경우가 많음
     const cleanTicker = tickerOrName.trim();
     const isNumericTicker = /^\d{6}$/.test(cleanTicker);
     const srtnCd = isNumericTicker ? `A${cleanTicker}` : (cleanTicker.startsWith('A') ? cleanTicker.toUpperCase() : null);
@@ -35,7 +33,6 @@ async function getPublicStockData(tickerOrName: string) {
       resultType: 'json', 
       numOfRows: '1', 
       pageNo: '1'
-      // basDt를 제외하여 최신 데이터 유도
     };
     
     if (srtnCd) params.srtnCd = srtnCd; else params.itmsNm = cleanTicker;

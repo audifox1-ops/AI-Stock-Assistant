@@ -5,6 +5,11 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { RefreshCcw, TrendingUp, ChevronLeft, Bot, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 
+// [최종 강제 주입] 캐시 파괴 설정
+export const dynamic = 'force-dynamic';
+export const fetchCache = 'force-no-store';
+export const revalidate = 0;
+
 export default function ChartPage() {
   const [data, setData] = useState([
     { time: '09:00', price: 54200 },
@@ -39,22 +44,20 @@ export default function ChartPage() {
 
   return (
     <div className="bg-slate-50 min-h-screen">
-      <header className="px-6 py-12 bg-white border-b border-slate-100 sticky top-0 z-40">
-         <div className="max-w-3xl mx-auto flex items-center gap-6">
-            <Link href="/" className="p-4 bg-slate-50 rounded-2xl text-slate-400 border border-slate-100 transition-all">
-               <ChevronLeft size={28} />
-            </Link>
-            <div>
-               <h1 className="text-4xl font-bold text-slate-900 tracking-tight">태웅 실시간 차트</h1>
-               <p className="text-xs font-bold text-slate-300 uppercase tracking-widest mt-1">Real-time Analysis active</p>
-            </div>
+      <header className="px-5 py-8 bg-white border-b border-slate-100 flex items-center gap-4 sticky top-0 z-40">
+         <Link href="/" className="p-2 bg-slate-50 rounded-xl text-slate-400">
+            <ChevronLeft size={24} />
+         </Link>
+         <div>
+            <h1 className="text-xl font-bold text-slate-900 tracking-tight">태웅 실시간 차트</h1>
+            <p className="text-[10px] font-bold text-slate-300 uppercase tracking-widest leading-none">Real-time Analysis active</p>
          </div>
       </header>
 
-      <div className="max-w-3xl mx-auto px-6 mt-12 space-y-10">
-         <div className="bg-white p-12 rounded-[2.5rem] border border-gray-100 shadow-sm flex flex-col items-center">
-            {/* 사용자 지시: 차트 래퍼 물리적 높이 강제 및 width: 100% */}
-            <div style={{ width: '100%', minHeight: '300px', height: '300px' }}>
+      <div className="px-5 mt-6 space-y-8">
+         <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
+            {/* [최종 강제 주입] 차트 래퍼 물리적 높이 및 인라인 스타일 강제 */}
+            <div style={{ width: '100%', height: '300px', minHeight: '300px' }}>
                <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={data} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
                      <defs>
@@ -64,36 +67,37 @@ export default function ChartPage() {
                         </linearGradient>
                      </defs>
                      <CartesianGrid vertical={false} strokeDasharray="5 5" stroke="#f1f5f9" />
-                     <XAxis dataKey="time" axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: 700, fill: '#cbd5e1' }} />
+                     <XAxis dataKey="time" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 700, fill: '#cbd5e1' }} />
                      <YAxis hide={true} domain={['auto', 'auto']} />
                      <Tooltip />
-                     <Area type="monotone" dataKey="price" stroke="#3182f6" strokeWidth={4} fillOpacity={1} fill="url(#chartColor)" />
+                     <Area type="monotone" dataKey="price" stroke="#3182f6" strokeWidth={3} fillOpacity={1} fill="url(#chartColor)" />
                   </AreaChart>
                </ResponsiveContainer>
             </div>
          </div>
 
-         {/* Tech-AI Analysis Card */}
-         <section className="bg-slate-900 rounded-[2.5rem] p-16 text-white shadow-2xl relative overflow-hidden">
-            <div className="flex items-center gap-4 mb-10">
-               <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center">
-                  <Bot size={28} className="text-blue-400" />
-               </div>
-               <h3 className="text-2xl font-bold">전략가 AI 정밀 진단</h3>
-            </div>
+         {/* [최종 강제 주입] 기괴한 검은색 배경 철거 및 파스텔톤 클린 UI 적용 */}
+         <div className="bg-blue-50 text-slate-800 rounded-2xl p-6 shadow-sm border border-blue-100 break-words w-full">
+            <h3 className="text-lg font-bold flex items-center gap-2 mb-3">
+               <Bot size={22} className="text-blue-500" /> 전략가 AI 정밀 진단
+            </h3>
             {isAiLoading ? (
-               <div className="py-10 text-center flex flex-col items-center gap-6">
-                  <Loader2 className="animate-spin text-white opacity-40" size={48} />
-                  <p className="text-xs font-bold opacity-30 tracking-widest uppercase">Deep Learning in progress...</p>
+               <div className="py-4 flex flex-col items-center gap-3">
+                  <Loader2 className="animate-spin text-blue-300" size={24} />
+                  <p className="text-[10px] font-bold text-blue-200 tracking-widest uppercase">Deep Learning...</p>
                </div>
             ) : (
-               <div className="animate-in fade-in duration-1000">
-                  <p className="text-2xl font-bold leading-[2] text-slate-200 whitespace-pre-line italic">
-                     "{analysis || "분석 결과를 불러오는 중..."}"
-                  </p>
-               </div>
+               <p className="text-base font-bold leading-relaxed opacity-90">
+                  {analysis || "AI 분석 서버와 통신 중입니다..."}
+               </p>
             )}
-         </section>
+         </div>
+
+         <div className="pb-10">
+            <button className="w-full bg-slate-900 text-white py-4 rounded-xl font-bold text-base active:scale-[0.98] transition-all">
+               추가 정밀 분석 요청
+            </button>
+         </div>
       </div>
     </div>
   );

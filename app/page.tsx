@@ -6,6 +6,11 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
+// [최종 강제 주입] 주가 실시간 100% 동기화 (캐시 영구 파괴)
+export const dynamic = 'force-dynamic';
+export const fetchCache = 'force-no-store';
+export const revalidate = 0;
+
 interface Stock {
   id: string | number;
   symbol: string;
@@ -161,20 +166,20 @@ export default function PortfolioPage() {
            </div>
         </section>
 
-        {/* AI 인사이트 섹션 - 어두운 배경 제거 및 파스텔톤 적용 */}
+        {/* AI 인사이트 섹션 - 파스텔톤 적용 및 가독성 강화 */}
         <section className="space-y-4">
            <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
              <Sparkles className="text-blue-600" size={20} /> AI 투자 인사이트
            </h3>
-           <div className="bg-blue-50 rounded-2xl p-6 text-gray-800 shadow-sm border border-blue-100 relative overflow-hidden min-h-[160px] flex flex-col justify-center">
+           <div className="bg-blue-50 rounded-2xl p-6 text-gray-800 shadow-sm border border-blue-100 relative overflow-hidden min-h-[160px] flex flex-col justify-center break-words">
               {isAiLoading ? (
                 <div className="text-center flex flex-col items-center gap-3">
                    <Loader2 className="animate-spin text-blue-400" size={32} />
-                   <p className="text-[10px] font-bold text-blue-300 tracking-widest uppercase">Deep Analysis...</p>
+                   <p className="text-[10px] font-bold text-blue-300 tracking-widest uppercase">Analyzing...</p>
                 </div>
               ) : aiAnalysis ? (
                 <div className="animate-in fade-in duration-500">
-                   <div className="px-2 py-0.5 bg-blue-100 rounded text-[9px] font-black w-fit mb-4 text-blue-600 uppercase">AI Strategy Report</div>
+                   <div className="px-2 py-0.5 bg-blue-100 rounded text-[9px] font-black w-fit mb-4 text-blue-600 uppercase">Strategy Report</div>
                    <p className="text-[15px] font-bold leading-relaxed text-slate-700 whitespace-pre-line italic">
                       "{aiAnalysis}"
                    </p>
@@ -188,8 +193,8 @@ export default function PortfolioPage() {
            </div>
         </section>
 
-        {/* 주식 리스트 리뉴얼 - Toss 직사각형 카드 스타일 */}
-        <section className="space-y-4 pb-10">
+        {/* 주식 리스트 */}
+        <section className="space-y-4 pb-12">
            <div className="flex justify-between items-center">
               <h3 className="text-lg font-bold text-slate-900 px-1">내 주식</h3>
            </div>
