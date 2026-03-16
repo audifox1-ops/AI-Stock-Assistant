@@ -292,10 +292,7 @@ export default function PortfolioPage() {
                 </span>
                 <span className={`text-xs font-black px-10 py-3 rounded-full flex items-center gap-2 whitespace-nowrap min-w-max ${market.changePercent >= 0 ? 'text-red-500 bg-red-50' : 'text-blue-600 bg-blue-50'} shadow-sm border border-transparent`}>
                   {market.changePercent >= 0 ? '▲' : '▼'}{Math.abs(market.changePercent).toFixed(1)}%
-                  {/* 클린 UI: 공공데이터 성공 시 숫자만 표시, 실패 시에만 에러 코드 표시 */}
-                  {market.status !== '공공데이터' && (
-                    <span className="text-[10px] opacity-70 ml-1">({market.status})</span>
-                  )}
+                  <span className="text-[10px] opacity-70 ml-1">({market.status || '대기'})</span>
                 </span>
               </div>
             ))
@@ -336,12 +333,15 @@ export default function PortfolioPage() {
             ))}
           </div>
         ) : stocks.length === 0 ? (
-          /* [UI 구조 수정] mb-16 마진 확보 및 버튼 하단 별도 배치 */
+          /* [지시사항] 박스와 버튼을 물리적으로 완전히 분리하고 거대한 여백(mb-24) 확보 */
           <div className="flex flex-col items-center overflow-visible">
-            <div className="w-full py-24 bg-gray-50/50 rounded-[4rem] text-center border-2 border-dashed border-gray-100 px-10 mb-16">
+            <div className="w-full py-28 bg-gray-50/50 rounded-[4rem] text-center border-2 border-dashed border-gray-100 px-10 mb-24 relative overflow-visible">
               <p className="text-gray-400 font-black leading-relaxed whitespace-pre-line text-base overflow-visible">보유하신 종목을 한 번만 등록해 보세요.{"\n"}AI가 즉시 승률 높은 전략을 제안합니다.</p>
             </div>
-            <button onClick={() => setIsAddModalOpen(true)} className="bg-[#3182f6] text-white px-10 py-6 rounded-full font-black shadow-2xl shadow-blue-100 active:scale-95 transition-all text-xl min-w-max whitespace-nowrap">지금 시작하기</button>
+            {/* 독립된 공간에 버튼 배치 (절대 위치 금지) */}
+            <div className="w-full flex justify-center overflow-visible">
+              <button onClick={() => setIsAddModalOpen(true)} className="bg-[#3182f6] text-white px-12 py-7 rounded-full font-black shadow-2xl shadow-blue-200 active:scale-95 transition-all text-2xl min-w-max whitespace-nowrap">지금 시작하기</button>
+            </div>
           </div>
         ) : (
           <div className="space-y-14">
@@ -360,10 +360,7 @@ export default function PortfolioPage() {
                       
                       <div className="overflow-visible min-w-0 flex-1">
                         <h4 className="text-2xl font-black text-[#191f28] tracking-tight mb-2 break-all overflow-visible whitespace-nowrap px-0.5">{stock.name}</h4>
-                        <p className="text-xs font-bold text-gray-400 uppercase tracking-widest overflow-visible whitespace-nowrap">
-                          {/* 클린 UI: 성공 시 실시간만 표시, 실패 시에만 코드 표시 */}
-                          {stock.status === '공공데이터' ? '실시간' : (stock.status || '대기')} · {stock.quantity.toLocaleString()}주
-                        </p>
+                        <p className="text-xs font-bold text-gray-400 uppercase tracking-widest overflow-visible whitespace-nowrap">{(stock.status || '실시간')} · {stock.quantity.toLocaleString()}주</p>
                       </div>
                     </div>
 
@@ -426,17 +423,16 @@ export default function PortfolioPage() {
             
             return (
               <div key={stock.id} className="overflow-visible">
-                {/* [물리적 격리] 아이콘 영역 고정 폭(min-w-[50px]) 및 space-x-6 적용 */}
+                {/* [지시사항] absolute/fixed 삭제, flex-row items-center gap-10 구조 적용 */}
                 <div className="flex flex-row items-center justify-between active:bg-gray-50/80 p-6 -m-6 rounded-[3.5rem] transition-all cursor-pointer overflow-visible group" onClick={() => analyzeStockOrInterest(stock, false)}>
-                  <div className="flex flex-row items-center space-x-6 min-w-0 overflow-visible">
-                    {/* [아이콘 벽] absolute 제거, 고정폭 min-w-[60px] */}
-                    <div className="min-w-[70px] flex-shrink-0 flex items-center justify-center overflow-visible">
+                  <div className="flex flex-row items-center gap-10 min-w-0 overflow-visible">
+                    {/* [지시사항] 아이콘 박스 고정 너비 w-16 적용 (내부 아이콘 w-20 유지) */}
+                    <div className="w-16 flex-shrink-0 flex items-center justify-center overflow-visible">
                       <div className="w-20 h-20 rounded-full bg-white flex items-center justify-center text-gray-300 shadow-xl border border-gray-100 group-hover:scale-110 transition-transform duration-500">
                         <Bell size={32} strokeWidth={2.5} />
                       </div>
                     </div>
                     
-                    {/* [텍스트 영역] 아이콘 영역 밖에서 시작 */}
                     <div className="overflow-visible min-w-0 flex-1">
                       <h4 className="text-2xl font-black leading-tight mb-2 px-0.5 whitespace-nowrap overflow-visible uppercase">{stock.name}</h4>
                       <p className="text-xs font-black text-gray-400 uppercase tracking-[0.25em] overflow-visible whitespace-nowrap">{stock.symbol}</p>
@@ -450,10 +446,7 @@ export default function PortfolioPage() {
                     </div>
                     <div className={`px-10 py-3 rounded-full text-xs font-black inline-flex items-center whitespace-nowrap shadow-sm border ${isUp ? 'text-red-500 bg-red-50 border-red-100' : 'text-blue-600 bg-blue-50 border-blue-100'} overflow-visible min-w-max`}>
                       {isUp ? '+' : ''}{stock.change?.toFixed(2) || '0.00'}%
-                      {/* 클린 UI: 성공 시 코드 제거 */}
-                      {stock.status !== '공공데이터' && (
-                        <span className="ml-2 text-[10px] opacity-70">({stock.status || '대기'})</span>
-                      )}
+                      <span className="ml-2 text-[10px] opacity-70">({stock.status || '대기'})</span>
                     </div>
                   </div>
                 </div>

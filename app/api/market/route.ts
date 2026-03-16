@@ -30,17 +30,7 @@ function maskUrl(url: string) {
 }
 
 /**
- * 날짜 포맷팅 (YYYYMMDD)
- */
-function formatDate(date: Date) {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
-  return `${y}${m}${d}`;
-}
-
-/**
- * 공공데이터포털 지수 정보 가져오기 (10일 역추적 + Raw 인증키)
+ * 공공데이터포털 지수 정보 가져오기 (강제 강결합 모드)
  */
 async function getPublicIndexData(name: string) {
   const rawKey = process.env.PUBLIC_DATA_PORTAL_KEY;
@@ -49,58 +39,54 @@ async function getPublicIndexData(name: string) {
   try {
     const baseUrl = "http://apis.data.go.kr/1160100/service/GetIndexPriceInfoService/getMarketIndexInfo";
     
-    // [통일 반영] 최대 10일 전까지 자동으로 역추적
-    for (let i = 0; i < 10; i++) {
-      const targetDate = new Date();
-      targetDate.setDate(targetDate.getDate() - i);
-      const basDt = formatDate(targetDate);
+    // [하드코딩] 월요일 대응을 위한 지난주 금요일 데이터 강제 고정 테스트
+    const basDt = '20260313';
 
-      const otherParams = new URLSearchParams({
-        resultType: 'json',
-        numOfRows: '1',
-        pageNo: '1',
-        basDt: basDt,
-        idxNm: name
-      });
+    const params = {
+      resultType: 'json',
+      numOfRows: '1',
+      pageNo: '1',
+      basDt: basDt,
+      idxNm: name
+    };
 
-      // [핵심] Service Key는 Raw로 직접 연결
-      const fullUrl = `${baseUrl}?serviceKey=${process.env.PUBLIC_DATA_PORTAL_KEY}&${otherParams.toString()}`;
-      
-      console.log(`[Market API] Requesting (D-${i}): ${maskUrl(fullUrl)}`);
+    const queryParams = new URLSearchParams(params).toString();
+    
+    // [지시사항] 서비스 키를 Raw 형태로 직접 삽입하여 이중 인코딩 방지
+    const fullUrl = `${baseUrl}?serviceKey=${process.env.PUBLIC_DATA_PORTAL_KEY}&${queryParams}`;
+    
+    console.log(`[Market API] Forced Requesting: ${maskUrl(fullUrl)}`);
 
-      const res = await fetch(fullUrl, { cache: 'no-store' });
-      const text = await res.text();
-      
-      let data;
-      try {
-        data = JSON.parse(text);
-      } catch (e) {
-        console.error(`[Market API] JSON Parse Error: ${text.substring(0, 100)}`);
-        continue;
-      }
+    const res = await fetch(fullUrl, { cache: 'no-store' });
+    const text = await res.text();
+    
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch (e) {
+      console.error(`[Market API] JSON Parse Error: ${text.substring(0, 100)}`);
+      return { success: false, status: "(Error: JSON)" };
+    }
 
-      const header = data?.response?.header;
-      const resultCode = header?.resultCode;
+    const header = data?.response?.header;
+    const resultCode = header?.resultCode;
 
-      if (resultCode !== "00") {
-        console.error(`[Market API] FAIL (${name}) - Code: ${resultCode}, Msg: ${header?.resultMsg}`);
-        // 10일치 모두 실패 시 에러 코드 반환
-        if (i === 9) return { success: false, status: `(Error: ${resultCode})` };
-        continue;
-      }
+    if (resultCode !== "00") {
+      console.error(`[Market API] FAIL (${name}) - Code: ${resultCode}`);
+      return { success: false, status: `(Error: ${resultCode})` };
+    }
 
-      const item = data?.response?.body?.items?.item?.[0];
+    const item = data?.response?.body?.items?.item?.[0];
 
-      if (item) {
-        console.log(`[Market API] SUCCESS (${name}, ${basDt}): ${item.clpr}`);
-        return {
-          price: parseFloat(item.clpr),
-          changePercent: parseFloat(item.fltRt),
-          success: true,
-          status: "공공데이터", // 성공 시 깨끗하게 반환하기 위해 UI에서 이 값 확인
-          basDt: basDt
-        };
-      }
+    if (item) {
+      console.log(`[Market API] SUCCESS (${name}, ${basDt}): ${item.clpr}`);
+      return {
+        price: parseFloat(item.clpr),
+        changePercent: parseFloat(item.fltRt),
+        success: true,
+        status: "공공데이터",
+        basDt: basDt
+      };
     }
   } catch (e: any) {
     console.error(`[Market API] ERROR (${name}):`, e.message);
