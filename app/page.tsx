@@ -28,7 +28,7 @@ interface Stock {
   fetchError?: boolean;
   isFallback?: boolean;
   status?: string;
-  updatedAt?: string; // 추가
+  updatedAt?: string;
 }
 
 interface InterestStock {
@@ -42,7 +42,7 @@ interface InterestStock {
   isFallback?: boolean;
   status?: string;
   analysis?: AiAnalysisResult;
-  updatedAt?: string; // 추가
+  updatedAt?: string;
 }
 
 interface MarketIndex {
@@ -53,7 +53,7 @@ interface MarketIndex {
   success: boolean;
   isFallback?: boolean;
   status?: string;
-  updatedAt?: string; // 추가
+  updatedAt?: string;
 }
 
 // --- Skeleton UI Components ---
@@ -174,9 +174,6 @@ export default function PortfolioPage() {
     // 10초마다 자동 갱신 (무음)
     const pollInterval = setInterval(() => {
       fetchMarketIndices(true);
-      // 의존성 배열로 인해 stocks, interestStocks 접근을 위해 prev 패턴 권장되나
-      // 여기서는 fetchPrices가 setStocks/setInterestStocks 내부에서 맵핑하므로
-      // 호출 시점의 상태를 그대로 넘겨도 됨 (setInterval 클로저 주의 필요시 Ref 사용)
       setStocks(currentStocks => {
         setInterestStocks(currentInterests => {
           fetchPrices(currentStocks, currentInterests, true);
@@ -236,6 +233,7 @@ export default function PortfolioPage() {
 
   return (
     <div className="min-h-screen bg-white text-[#191f28] pb-44 animate-in fade-in duration-500 overflow-x-hidden overflow-y-visible">
+      {/* Header */}
       <header className="w-full px-8 pt-14 pb-8 overflow-hidden box-border">
         <div className="flex justify-between items-center mb-12 overflow-visible">
           <h1 className="text-3xl font-black tracking-tight text-[#3182f6]">AI Stock</h1>
@@ -261,7 +259,6 @@ export default function PortfolioPage() {
                   {market.changePercent >= 0 ? '▲' : '▼'}{Math.abs(market.changePercent).toFixed(1)}%
                 </span>
               </div>
-              {/* [지시사항] 업데이트 시간 표시 */}
               <p className="text-[10px] text-gray-400 font-bold ml-1">({market.updatedAt || '--:--:--'} 기준)</p>
             </div>
           ))}
@@ -332,19 +329,34 @@ export default function PortfolioPage() {
           {interestStocks.map(stock => {
             const isUp = (stock.change || 0) >= 0;
             return (
-              <div key={stock.id} className="flex items-center justify-between p-6 -m-6 rounded-[3rem] transition-all cursor-pointer overflow-visible" onClick={() => analyzeStockOrInterest(stock, false)}>
-                <div className="flex items-center gap-10 min-w-0 overflow-visible">
+              /* [지시사항 2] 카드 내부 패딩을 px-10으로 대폭 확대하여 여백 확보 */
+              <div 
+                key={stock.id} 
+                className="flex items-center justify-between p-10 -mx-6 rounded-[3rem] transition-all cursor-pointer overflow-visible hover:bg-gray-50"
+                onClick={() => analyzeStockOrInterest(stock, false)}
+              >
+                {/* [지시사항 1] 아이콘과 텍스트 사이 간격(gap-x-12) 확보 */}
+                <div className="flex items-center gap-x-12 min-w-0 flex-1 overflow-visible">
                   <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center text-gray-300 flex-shrink-0 shadow-sm border border-gray-100">
                     <Bell size={28} />
                   </div>
-                  <div className="min-w-0">
-                    <h4 className="text-2xl font-black text-[#191f28] whitespace-nowrap overflow-visible uppercase">{stock.name}</h4>
-                    <p className="text-xs font-black text-gray-400 tracking-widest">{stock.symbol} {stock.updatedAt && `(${stock.updatedAt})`}</p>
+                  {/* [지시사항 3] 컨테이너를 flex-1, min-w-fit으로 설정하고 줄바꿈(whitespace-normal) 허용 */}
+                  <div className="min-w-fit flex-1 overflow-visible">
+                    <h4 className="text-2xl font-black text-[#191f28] uppercase whitespace-normal break-keep leading-tight mb-1">
+                      {stock.name}
+                    </h4>
+                    <p className="text-xs font-black text-gray-400 tracking-widest">
+                      {stock.symbol} {stock.updatedAt && `(${stock.updatedAt})`}
+                    </p>
                   </div>
                 </div>
-                <div className="text-right min-w-max">
-                  <p className="text-2xl font-black text-[#191f28] mb-2">{(stock.price?.toLocaleString() || '--')}원</p>
-                  <div className={`px-10 py-3 rounded-full text-xs font-black ${isUp ? 'text-red-500 bg-red-50' : 'text-blue-600 bg-blue-50'}`}>{isUp ? '+' : ''}{stock.change?.toFixed(2) || '0.00'}%</div>
+                <div className="text-right min-w-max ml-8">
+                  <p className="text-2xl font-black text-[#191f28] mb-2">
+                    {(stock.price?.toLocaleString() || '--')}원
+                  </p>
+                  <div className={`px-10 py-3 rounded-full text-xs font-black ${isUp ? 'text-red-500 bg-red-50' : 'text-blue-600 bg-blue-50'}`}>
+                    {isUp ? '+' : ''}{stock.change?.toFixed(2) || '0.00'}%
+                  </div>
                 </div>
               </div>
             );
