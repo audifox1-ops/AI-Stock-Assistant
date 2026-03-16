@@ -1,88 +1,42 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextResponse } from "next/server";
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
+const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GEMINI_API_KEY || "");
 
 export async function POST(request: Request) {
   try {
-    const data = await request.json();
-    const { name, currentPrice, rate, supplyTrend, type } = data; // type: 'holding' | 'interest'
+    const { symbol, name, price, changePercent, institutional, foreigner } = await request.json();
 
-    const model = genAI.getGenerativeModel({ model: "gemini-pro" });
-
-    let modeSpecificPrompt = "";
-    if (type === 'interest') {
-      modeSpecificPrompt = `
-        분석 모드: 관심종목 (신규 진입 분석)
-        - 목표: 신규 진입 적정성 및 매수 타이밍 도출
-        - action 항목: "매수권장", "관망", "진입금지" 중 반드시 하나 선택
-        - targetPrice: 단기 목표가 또는 적정 매집가 수준 제안
-        - reason: 현재 가격대에서의 진입 매력도와 수급 상황을 기술 (2줄 요약)
-      `;
-    } else {
-      modeSpecificPrompt = `
-        분석 모드: 보유종목 (수익/리스크 관리)
-        - 목표: 수익 실현 및 리스크 관리 (익절/손절/홀딩) 전략 수립
-        - action 항목: "추매", "익절", "손절", "홀딩" 중 반드시 하나 선택
-        - targetPrice: 최종 목표가(익절가) 제안
-        - reason: 현재 수익률(${rate}%) 대비 향후 상승 여력 및 대응 전략 기술 (2줄 요약)
-      `;
+    if (!symbol || !name) {
+      return NextResponse.json({ error: "Symbol and Name are required" }, { status: 400 });
     }
 
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
     const prompt = `
-      주식 종목 전문 분석 요청 (JSON 응답 필수):
-      - 종목명: ${name}
-      - 현재가: ${currentPrice}원
-      - 최근 수급 동향: ${supplyTrend}
-      ${modeSpecificPrompt}
+      당신은 전문 주식 투자 분석가입니다. 아래 제공된 주식 데이터를 바탕으로 현재 시장 상황을 분석하고 향후 투자 전략을 제안하세요.
+      
+      [주식 데이터]
+      - 종목명: ${name} (${symbol})
+      - 현재가: ${price?.toLocaleString()}원
+      - 등락률: ${changePercent}%
+      - 기관 순매수량: ${institutional?.toLocaleString() || '데이터 없음'}
+      - 외국인 순매수량: ${foreigner?.toLocaleString() || '데이터 없음'}
 
-      반드시 아래의 JSON 구조로만 응답하고, 마크다운 태그(\`\`\`json) 등 추가 텍스트 없이 순수 JSON 문자열만 반환해.
-
-      구조:
-      {
-        "position": "단기/스윙/장기 중 택 1",
-        "action": "지정된 action 항목 중 택 1",
-        "targetPrice": 숫자만 입력,
-        "reason": "분석 근거 요약"
-      }
-
-      조건: 
-      - 한국어 사용
-      - "reason"은 최대한 전문 용어를 섞어 핵심만 전달
+      [출력 규칙]
+      1. 응답은 '차트 분석', '수급 분석', '최종 의견' 세 가지 섹션으로 구분하세요.
+      2. 각 섹션은 주식 투자자에게 실질적인 도움이 되는 핵심 내용만 1~2문장으로 간결하게 작성하세요.
+      3. 마지막에는 전체 전략을 관통하는 "3줄 요약 투자 전략"을 포함하세요.
+      4. 어조는 전문적이면서도 신뢰감 있게 작성하세요.
     `;
 
     const result = await model.generateContent(prompt);
     const response = await result.response;
-    let text = response.text();
+    const text = response.text();
 
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      text = jsonMatch[0];
-    } else {
-      text = text.replace(/```json|```/g, "").trim();
-    }
-
-    try {
-      const jsonResponse = JSON.parse(text);
-      
-      return NextResponse.json({
-        position: jsonResponse.position || "분석 대기",
-        action: jsonResponse.action || "관망",
-        targetPrice: Number(jsonResponse.targetPrice) || 0,
-        reason: jsonResponse.reason || "상세 분석 내용을 생성할 수 없습니다."
-      });
-    } catch (parseError) {
-      console.error("JSON Parse Error:", text);
-      return NextResponse.json({ 
-        position: "분석 불가", 
-        action: "관망", 
-        targetPrice: 0, 
-        reason: "AI 응답 형식이 올바르지 않습니다. 잠시 후 다시 시도해 주세요." 
-      }, { status: 200 });
-    }
-
-  } catch (error) {
-    console.error("Gemini Analysis Error:", error);
-    return NextResponse.json({ error: "분석 중 서버 오류가 발생했습니다." }, { status: 500 });
+    return NextResponse.json({ analysis: text });
+  } catch (error: any) {
+    console.error("Gemini AI Analysis Error:", error);
+    return NextResponse.json({ error: "AI 분석 중 오류가 발생했습니다." }, { status: 500 });
   }
 }
