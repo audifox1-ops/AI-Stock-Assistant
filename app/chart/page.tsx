@@ -10,84 +10,93 @@ import {
   Tooltip, 
   ResponsiveContainer 
 } from 'recharts';
-import { RefreshCcw, TrendingUp, ChevronLeft } from 'lucide-react';
+import { RefreshCcw, TrendingUp, ChevronLeft, Calendar, Info } from 'lucide-react';
 import Link from 'next/link';
 
-// --- Mock Data: 최근 1주일 종가 추이 ---
+// --- Mock Data ---
 const mockData = [
-  { name: '월', price: 47200 },
-  { name: '화', price: 48500 },
-  { name: '수', price: 46800 },
-  { name: '목', price: 49200 },
-  { name: '금', price: 51000 },
-  { name: '토', price: 50200 },
-  { name: '일', price: 52500 },
+  { name: '03-10', price: 47200 },
+  { name: '03-11', price: 48500 },
+  { name: '03-12', price: 46800 },
+  { name: '03-13', price: 49200 },
+  { name: '03-14', price: 51000 },
+  { name: '03-15', price: 50200 },
+  { name: '지금', price: 52500 },
 ];
 
 export default function ChartPage() {
   const [isMounted, setIsMounted] = useState(false);
 
-  // SSR Hydration 에러 방지를 위한 클라이언트 마운트 가드
+  // Next.js 하이드레이션 에러 방지를 위한 마운트 가드
   useEffect(() => {
     setIsMounted(true);
   }, []);
 
   if (!isMounted) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <RefreshCcw className="animate-spin text-[#3182f6]" size={36} />
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center gap-4">
+        <RefreshCcw className="animate-spin text-[#3182f6]" size={40} />
+        <span className="text-xs font-black text-gray-300 uppercase tracking-widest">Loading Analytics...</span>
       </div>
     );
   }
 
   return (
     <div className="min-h-screen bg-white pb-32">
-      {/* Chart Header */}
-      <header className="px-6 pt-12 pb-8 bg-white sticky top-0 z-20 border-b border-gray-50/50">
-        <div className="flex items-center gap-4 mb-10">
-          <Link href="/" className="p-3 bg-gray-50 rounded-full text-gray-400 active:scale-90 transition-all">
-            <ChevronLeft size={24} />
+      {/* Chart Header Area */}
+      <header className="px-6 pt-12 pb-10 bg-white sticky top-0 z-30 border-b border-gray-50/50 backdrop-blur-xl bg-white/90">
+        <div className="flex items-center gap-5 mb-12">
+          <Link href="/" className="w-12 h-12 bg-gray-50 rounded-2xl flex items-center justify-center text-gray-400 hover:text-[#3182f6] hover:bg-blue-50 transition-all active:scale-90">
+            <ChevronLeft size={28} />
           </Link>
-          <div className="flex-1">
-             <h1 className="text-2xl font-black text-[#191f28] tracking-tight">수익률 리포트</h1>
-             <p className="text-xs font-bold text-gray-300 uppercase tracking-widest mt-1">Market Trend Analysis</p>
+          <div className="flex flex-col">
+             <h1 className="text-2xl font-black text-[#191f28] tracking-tight leading-none">수익 지표 분석</h1>
+             <span className="text-[10px] font-black text-gray-300 uppercase tracking-[0.2em] mt-2 flex items-center gap-2">
+                <Calendar size={12} /> Real-time Performance
+             </span>
           </div>
         </div>
 
-        {/* Big Price Display */}
-        <div className="px-2">
-          <div className="flex items-baseline gap-2 mb-2">
-            <h2 className="text-5xl font-black text-[#EF4444] tracking-tighter">52,500</h2>
-            <span className="text-2xl font-black text-gray-400">원</span>
+        {/* Visual Price Card */}
+        <div className="px-4">
+          <p className="text-[11px] font-black text-gray-300 uppercase mb-2 tracking-widest">Asset Peak Value</p>
+          <div className="flex items-baseline gap-2 mb-3">
+            <h2 className="text-6xl font-black text-[#EF4444] tracking-tighter">52,500</h2>
+            <span className="text-3xl font-black text-gray-400">원</span>
           </div>
-          <div className="flex items-center gap-2 text-sm font-black text-[#EF4444]">
-            <TrendingUp size={16} />
-            <span>+2,300 (+4.6%)</span>
-            <span className="px-2 py-0.5 bg-red-50 rounded-md text-[10px] uppercase">Bullish</span>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 rounded-xl text-xs font-black text-[#EF4444]">
+              <TrendingUp size={16} />
+              <span>+4.6% (전주 대비)</span>
+            </div>
+            <span className="text-[10px] font-bold text-gray-300">최근 업데이트: 방금 전</span>
           </div>
         </div>
       </header>
 
-      {/* Main Area Chart Section */}
-      <section className="px-4 mt-12 w-full h-[400px]">
-        <div className="w-full h-full bg-white rounded-[2.5rem] p-6 shadow-[0_30px_60px_rgba(0,0,0,0.03)] border border-gray-50 relative overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-b from-red-50/10 to-transparent pointer-events-none" />
-          
+      {/* Professional Chart Content (와이드 카드 디자인) */}
+      <section className="px-6 mt-12 w-full h-[450px]">
+        <div className="w-full h-full bg-white rounded-[3rem] p-8 shadow-[0_30px_80px_rgba(0,0,0,0.04)] border border-gray-50 relative group">
+          <div className="absolute top-8 left-8 flex items-center gap-2 opacity-50">
+             <div className="w-2 h-2 bg-[#EF4444] rounded-full animate-pulse" />
+             <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest leading-none">Live Price Stream</span>
+          </div>
+
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart
               data={mockData}
-              margin={{ top: 30, right: 10, left: -20, bottom: 0 }}
+              margin={{ top: 60, right: 10, left: -20, bottom: 0 }}
             >
               <defs>
-                <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#EF4444" stopOpacity={0.2}/>
+                <linearGradient id="premiumGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#EF4444" stopOpacity={0.25}/>
                   <stop offset="95%" stopColor="#EF4444" stopOpacity={0}/>
                 </linearGradient>
               </defs>
               
               <CartesianGrid 
                 vertical={false} 
-                strokeDasharray="4 10" 
+                strokeDasharray="5 15" 
                 stroke="#F3F4F6" 
               />
               
@@ -105,13 +114,15 @@ export default function ChartPage() {
               <Tooltip 
                 cursor={{ stroke: '#F3F4F6', strokeWidth: 2 }}
                 contentStyle={{ 
-                  borderRadius: '24px', 
+                  borderRadius: '32px', 
                   border: 'none', 
-                  boxShadow: '0 20px 40px rgba(0,0,0,0.08)',
-                  fontSize: '14px',
+                  boxShadow: '0 30px 60px rgba(0,0,0,0.12)',
+                  fontSize: '15px',
                   fontWeight: '900',
-                  padding: '16px'
+                  padding: '24px',
+                  background: '#fff'
                 }}
+                labelStyle={{ color: '#9CA3AF', marginBottom: '8px', fontSize: '11px' }}
                 itemStyle={{ color: '#EF4444' }}
               />
               
@@ -119,37 +130,47 @@ export default function ChartPage() {
                 type="monotone" 
                 dataKey="price" 
                 stroke="#EF4444" 
-                strokeWidth={5} 
+                strokeWidth={6} 
                 fillOpacity={1} 
-                fill="url(#chartGradient)" 
-                animationDuration={2500}
-                activeDot={{ r: 8, fill: '#EF4444', strokeWidth: 4, stroke: '#fff' }}
+                fill="url(#premiumGradient)" 
+                animationDuration={3000}
+                activeDot={{ r: 10, fill: '#EF4444', strokeWidth: 5, stroke: '#fff' }}
               />
             </AreaChart>
           </ResponsiveContainer>
         </div>
       </section>
 
-      {/* Insight Section */}
-      <section className="px-8 mt-16 space-y-6">
-         <div className="p-8 bg-gray-50 rounded-[2.5rem] border border-gray-100 flex items-start gap-5">
-            <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center shadow-sm flex-shrink-0">
-               <span className="text-2xl">🔥</span>
+      {/* AI Performance Insights */}
+      <section className="px-8 mt-16 space-y-8">
+         <div className="p-9 bg-gray-50/50 rounded-[3rem] border border-gray-100 flex items-start gap-6 hover:bg-blue-50 transition-colors duration-700">
+            <div className="w-16 h-16 bg-white rounded-3xl flex items-center justify-center shadow-md flex-shrink-0">
+               <span className="text-3xl">🤖</span>
             </div>
             <div>
-               <h4 className="text-lg font-black text-[#191f28] mb-1">인공지능 분석 결과</h4>
-               <p className="text-sm font-bold text-gray-400 leading-relaxed">자산의 장기적인 추세가 매우 견고합니다. 현재의 변동성은 매수 기회로 작용할 가능성이 78% 이상입니다.</p>
+               <h4 className="text-xl font-black text-[#191f28] mb-1.5 flex items-center gap-2">
+                  AI 인텔리전스 리포트
+                  <Info size={16} className="text-[#3182f6]" />
+               </h4>
+               <p className="text-sm font-bold text-gray-400 leading-relaxed tracking-tight">
+                  이 종목은 최근 5거래일간 **기관의 집중적인 매수세**가 확인되었습니다. 
+                  기술적 분석 결과 RSI 과매수 구간에 진입했으나, 수급 강도가 이를 압도하고 있습니다. 
+                  목표 수익률 12%를 유지하십시오.
+               </p>
             </div>
          </div>
 
-         <div className="grid grid-cols-2 gap-4">
-            <div className="bg-white p-7 rounded-[2.5rem] border border-gray-100 shadow-sm text-center">
-               <span className="text-[10px] font-black text-gray-300 uppercase tracking-widest block mb-2">Max Profit</span>
-               <p className="text-2xl font-black text-[#EF4444] tracking-tighter">+5,300원</p>
+         {/* Advanced Metrics Grid */}
+         <div className="grid grid-cols-2 gap-5">
+            <div className="bg-white p-8 rounded-[3rem] border border-gray-100 shadow-sm flex flex-col items-center">
+               <span className="text-[10px] font-black text-gray-300 uppercase tracking-widest mb-3">Profitability</span>
+               <div className="text-3xl font-black text-[#EF4444] tracking-tighter">92%</div>
+               <span className="text-[10px] font-bold text-red-300 mt-2">Optimal Zone</span>
             </div>
-            <div className="bg-white p-7 rounded-[2.5rem] border border-gray-100 shadow-sm text-center">
-               <span className="text-[10px] font-black text-gray-300 uppercase tracking-widest block mb-2">Stability</span>
-               <p className="text-2xl font-black text-blue-500 tracking-tighter">High</p>
+            <div className="bg-white p-8 rounded-[3rem] border border-gray-100 shadow-sm flex flex-col items-center">
+               <span className="text-[10px] font-black text-gray-300 uppercase tracking-widest mb-3">Volatility</span>
+               <div className="text-3xl font-black text-blue-500 tracking-tighter">Low</div>
+               <span className="text-[10px] font-bold text-blue-300 mt-2">Safe Trading</span>
             </div>
          </div>
       </section>
