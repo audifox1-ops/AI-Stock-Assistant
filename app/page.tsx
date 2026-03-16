@@ -216,57 +216,80 @@ export default function PortfolioPage() {
 
   return (
     <div className="min-h-screen bg-gray-50/30 text-[#191f28] pb-44 animate-in fade-in duration-500 overflow-x-hidden overflow-y-visible">
-      {/* Header */}
-      <header className="w-full px-8 pt-14 pb-8 bg-white border-b border-gray-100">
-        <div className="flex justify-between items-center mb-12">
-          <div className="flex items-center gap-4">
-            <h1 className="text-3xl font-black tracking-tight text-[#3182f6]">AI Stock</h1>
-            {!pushSubscription && (
-              <button 
-                onClick={requestNotificationPermission}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-500 rounded-full text-xs font-bold animate-pulse"
-              >
-                <BellRing size={16} /> 알림 연동
+      
+      {/* Header - 모바일에서 px-4로 공간 확보 */}
+      <header className="w-full px-4 md:px-8 pt-10 md:pt-14 pb-6 md:pb-8 bg-white border-b border-gray-100">
+        
+        {/* 상단바 모바일 최적화: 세로 스태킹 */}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 md:gap-0 mb-10 md:mb-12">
+          
+          <div className="flex items-center justify-between w-full md:w-auto">
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl md:text-3xl font-black tracking-tight text-[#3182f6]">AI Stock</h1>
+              {!pushSubscription && (
+                <button 
+                  onClick={requestNotificationPermission}
+                  className="flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-2 bg-blue-50 text-blue-500 rounded-full text-[10px] md:text-xs font-bold animate-pulse touch-manipulation"
+                >
+                  <BellRing size={14} /> 알림 연동
+                </button>
+              )}
+            </div>
+            
+            {/* 모바일에서만 보이는 상단 우측 버튼들 (간격 확보) */}
+            <div className="flex md:hidden gap-3">
+              <button onClick={() => { fetchMarketIndices(); fetchPrices(stocks, interestStocks); }} className="p-3 text-gray-400 bg-gray-50 rounded-full shadow-sm touch-manipulation">
+                <RefreshCcw size={20} className={isRefreshing ? 'animate-spin' : ''} />
               </button>
-            )}
+              <button onClick={() => setIsAddModalOpen(true)} className="p-3 text-[#3182f6] bg-blue-50 rounded-full shadow-sm touch-manipulation">
+                <Plus size={24} strokeWidth={3} />
+              </button>
+            </div>
           </div>
           
-          {/* Auth UI */}
-          <div className="flex items-center gap-6">
+          {/* Auth UI - 모바일에서 가로로 길게 */}
+          <div className="flex items-center gap-4 w-full md:w-auto justify-between md:justify-end">
             {session ? (
-              <div className="flex items-center gap-4 bg-gray-50 px-5 py-3 rounded-full border border-gray-100 shadow-sm">
+              <div className="flex items-center gap-3 bg-gray-50 px-4 md:px-5 py-2.5 md:py-3 rounded-full border border-gray-100 shadow-sm flex-1 md:flex-none">
                 {session.user?.image ? (
-                  <img src={session.user.image} alt="profile" className="w-8 h-8 rounded-full border-2 border-white shadow-sm" />
+                  <img src={session.user.image} alt="profile" className="w-7 h-7 md:w-8 md:h-8 rounded-full border-2 border-white shadow-sm" />
                 ) : (
-                  <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-500"><User size={18} /></div>
+                  <div className="w-7 h-7 md:w-8 md:h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-500"><User size={16} /></div>
                 )}
-                <span className="text-sm font-black text-gray-700 hidden sm:block">{session.user?.name}님</span>
-                <button onClick={() => signOut()} className="p-2 text-gray-400 hover:text-red-500 transition-colors"><LogOut size={20} /></button>
+                <span className="text-xs md:text-sm font-black text-gray-700 truncate max-w-[80px] sm:max-w-none">{session.user?.name}님</span>
+                <button onClick={() => signOut()} className="p-1.5 md:p-2 text-gray-400 hover:text-red-500 transition-colors touch-manipulation"><LogOut size={18} /></button>
               </div>
             ) : (
               <button 
                 onClick={() => signIn('google')}
-                className="flex items-center gap-3 px-6 py-4 bg-[#3182f6] text-white rounded-full font-black text-sm shadow-xl hover:bg-[#2067d9] transition-all active:scale-95"
+                className="flex items-center gap-3 px-5 py-3 md:px-6 md:py-4 bg-[#3182f6] text-white rounded-full font-black text-xs md:text-sm shadow-xl hover:bg-[#2067d9] transition-all active:scale-95 flex-1 md:flex-none justify-center touch-manipulation"
               >
-                <LogIn size={20} /> 구글로 시작하기
+                <LogIn size={18} /> 구글로 시작하기
               </button>
             )}
-            <button onClick={() => { fetchMarketIndices(); fetchPrices(stocks, interestStocks); }} className="p-4 text-gray-400 bg-gray-50 rounded-full shadow-sm hover:bg-gray-100">
-              <RefreshCcw size={24} className={isRefreshing ? 'animate-spin' : ''} />
-            </button>
-            <button onClick={() => setIsAddModalOpen(true)} className="p-4 text-[#3182f6] bg-blue-50 rounded-full shadow-sm hover:bg-blue-100">
-              <Plus size={30} strokeWidth={3} />
-            </button>
+            
+            {/* 데스크톱에서만 보이는 버튼들 */}
+            <div className="hidden md:flex gap-4">
+              <button onClick={() => { fetchMarketIndices(); fetchPrices(stocks, interestStocks); }} className="p-4 text-gray-400 bg-gray-50 rounded-full shadow-sm hover:bg-gray-100 touch-manipulation">
+                <RefreshCcw size={24} className={isRefreshing ? 'animate-spin' : ''} />
+              </button>
+              <button onClick={() => setIsAddModalOpen(true)} className="p-4 text-[#3182f6] bg-blue-50 rounded-full shadow-sm hover:bg-blue-100 touch-manipulation">
+                <Plus size={30} strokeWidth={3} />
+              </button>
+            </div>
           </div>
         </div>
 
-        <div className="flex gap-10 items-center overflow-x-auto no-scrollbar py-4 w-full">
+        {/* 지수 정보 - 좌우 스크롤 및 폰트 확대 */}
+        <div className="flex gap-8 md:gap-10 items-center overflow-x-auto no-scrollbar py-2 w-full">
           {isMarketLoading ? <div className="w-40 h-4 bg-gray-100 animate-pulse rounded" /> : marketIndices.map(market => (
             <div key={market.symbol} className="flex flex-col gap-1 min-w-fit">
-              <div className="flex items-center gap-4 whitespace-nowrap">
-                <span className="text-sm font-black text-gray-400">{market.name}</span>
-                <span className={`text-lg font-black ${market.changePercent >= 0 ? 'text-red-500' : 'text-blue-600'}`}>{market.price.toLocaleString()}</span>
-                <span className={`text-xs font-black px-10 py-3 rounded-full ${market.changePercent >= 0 ? 'text-red-500 bg-red-50' : 'text-blue-600 bg-blue-50'}`}>{market.changePercent >= 0 ? '\u25B2' : '\u25BC'}{Math.abs(market.changePercent).toFixed(1)}%</span>
+              <div className="flex items-center gap-3 md:gap-4 whitespace-nowrap">
+                <span className="text-xs md:text-sm font-black text-gray-400">{market.name}</span>
+                <span className={`text-xl md:text-2xl font-black ${market.changePercent >= 0 ? 'text-red-500' : 'text-blue-600'}`}>{market.price.toLocaleString()}</span>
+                <span className={`text-[10px] md:text-xs font-black px-4 md:px-10 py-1.5 md:py-3 rounded-full ${market.changePercent >= 0 ? 'text-red-500 bg-red-50' : 'text-blue-600 bg-blue-50'}`}>
+                  {market.changePercent >= 0 ? '\u25B2' : '\u25BC'}{Math.abs(market.changePercent).toFixed(1)}%
+                </span>
               </div>
               <p className="text-[10px] text-gray-400 font-bold ml-1">({market.updatedAt || '--:--:--'} {'기준'})</p>
             </div>
@@ -274,40 +297,40 @@ export default function PortfolioPage() {
         </div>
       </header>
 
-      {/* Asset Summary */}
-      <section className="px-8 py-12 bg-white">
-        <p className="text-sm font-black text-gray-400 mb-3 tracking-wider uppercase">Portfolio Balance</p>
-        <div className="flex flex-wrap items-center gap-6">
-          <h2 className="text-5xl font-black tracking-tight leading-none">{totalCurrentAmount.toLocaleString()}{'원'}</h2>
-          <div className={`px-10 py-3 rounded-full text-sm font-black min-w-max shadow-sm border ${parseFloat(totalRate) >= 0 ? 'text-red-600 bg-red-50 border-red-100' : 'text-blue-600 bg-blue-50 border-blue-100'}`}>
+      {/* Asset Summary - 모바일에서 p-4로 여백 다이어트 */}
+      <section className="px-4 md:px-8 py-10 md:py-12 bg-white">
+        <p className="text-xs md:text-sm font-black text-gray-400 mb-2 md:mb-3 tracking-wider uppercase">Portfolio Balance</p>
+        <div className="flex flex-col md:flex-row items-start md:items-center gap-4 md:gap-6">
+          <h2 className="text-4xl md:text-5xl font-black tracking-tight leading-none">{totalCurrentAmount.toLocaleString()}{'원'}</h2>
+          <div className={`px-6 md:px-10 py-2 md:py-3 rounded-full text-xs md:text-sm font-black min-w-max shadow-sm border ${parseFloat(totalRate) >= 0 ? 'text-red-600 bg-red-50 border-red-100' : 'text-blue-600 bg-blue-50 border-blue-100'}`}>
             {parseFloat(totalRate) >= 0 ? '+' : ''}{totalRate}%
           </div>
         </div>
       </section>
 
-      {/* Interests Section - 모던 클린 카드형 */}
-      <section className="px-8 py-12 bg-gray-50/50">
-        <h3 className="text-2xl font-black mb-12">관심있는 종목</h3>
+      {/* Interests Section - 모바일 카드 최적화 */}
+      <section className="px-4 md:px-8 py-10 md:py-12 bg-gray-50/50">
+        <h3 className="text-xl md:text-2xl font-black mb-8 md:mb-12 ml-1">관심있는 종목</h3>
         <div className="space-y-4">
           {interestStocks.map(stock => {
             const isUp = (stock.change || 0) >= 0;
             return (
-              <div key={stock.id} className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 flex flex-row items-center justify-between transition-all hover:bg-gray-50">
+              <div key={stock.id} className="bg-white rounded-2xl p-4 md:p-6 shadow-sm border border-gray-100 flex flex-row items-center justify-between transition-all hover:bg-gray-50">
                 <div className="flex flex-col min-w-0 flex-1">
-                  <h4 className="text-xl font-bold text-gray-900 mb-1 truncate uppercase">{stock.name}</h4>
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs font-black text-blue-500 bg-blue-50 px-2 py-0.5 rounded uppercase">{stock.symbol}</span>
-                    {stock.updatedAt && <span className="text-[10px] font-bold text-gray-400">{stock.updatedAt} {'기준'}</span>}
+                  <h4 className="text-lg md:text-xl font-bold text-gray-900 mb-1 truncate uppercase">{stock.name}</h4>
+                  <div className="flex items-center gap-2 md:gap-3">
+                    <span className="text-[10px] md:text-xs font-black text-blue-500 bg-blue-50 px-2 py-0.5 rounded uppercase">{stock.symbol}</span>
+                    {stock.updatedAt && <span className="text-[10px] font-bold text-gray-400 truncate">{stock.updatedAt} {'기준'}</span>}
                   </div>
                 </div>
-                <div className="flex flex-row items-center gap-6 flex-shrink-0 ml-4">
+                <div className="flex flex-row items-center gap-3 md:gap-6 flex-shrink-0 ml-3 md:ml-4">
                   <div className="text-right">
-                    <p className="text-xl font-black text-gray-900 leading-tight">{(stock.price?.toLocaleString() || '--')}{'원'}</p>
-                    <p className={`text-xs font-black mt-1 ${isUp ? 'text-red-500' : 'text-blue-600'}`}>{isUp ? '\u25B2' : '\u25BC'}{Math.abs(stock.change || 0).toFixed(2)}%</p>
+                    <p className="text-lg md:text-xl font-black text-gray-900 leading-tight">{(stock.price?.toLocaleString() || '--')}{'원'}</p>
+                    <p className={`text-[10px] md:text-xs font-black mt-0.5 md:mt-1 ${isUp ? 'text-red-500' : 'text-blue-600'}`}>{isUp ? '\u25B2' : '\u25BC'}{Math.abs(stock.change || 0).toFixed(2)}%</p>
                   </div>
-                  <div className="flex items-center gap-3 border-l border-gray-100 pl-6 ml-2">
-                    <button className="p-3 text-gray-300 bg-gray-50 rounded-xl"><Bell size={20} /></button>
-                    <button onClick={() => removeInterest(stock.id)} className="p-3 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"><Trash2 size={20} /></button>
+                  <div className="flex items-center gap-1.5 md:gap-3 border-l border-gray-100 pl-3 md:pl-6 ml-1 md:ml-2">
+                    <button className="p-2.5 md:p-3 text-gray-300 bg-gray-50 rounded-xl touch-manipulation"><Bell size={18} className="md:w-5 md:h-5" /></button>
+                    <button onClick={() => removeInterest(stock.id)} className="p-2.5 md:p-3 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all touch-manipulation"><Trash2 size={18} className="md:w-5 md:h-5" /></button>
                   </div>
                 </div>
               </div>
@@ -316,28 +339,34 @@ export default function PortfolioPage() {
         </div>
       </section>
 
-      {/* Add Modal */}
+      {/* Add Modal - 모바일 슬라이드 업 최적화 */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 z-[100] bg-white p-10 pt-28 flex flex-col animate-in slide-in-from-bottom duration-500 overflow-visible">
-          <div className="flex justify-between items-start mb-20">
-            <h2 className="text-5xl font-black leading-[1.1]">자산 등록</h2>
-            <button onClick={() => setIsAddModalOpen(false)} className="p-5 bg-gray-100 rounded-full text-gray-400"><X size={32} /></button>
+        <div className="fixed inset-0 z-[100] bg-white p-6 md:p-10 pt-20 md:pt-28 flex flex-col animate-in slide-in-from-bottom duration-500 overflow-visible">
+          <div className="flex justify-between items-start mb-14 md:mb-20">
+            <h2 className="text-3xl md:text-5xl font-black leading-[1.1]">자산 등록</h2>
+            <button onClick={() => setIsAddModalOpen(false)} className="p-4 md:p-5 bg-gray-100 rounded-full text-gray-400 touch-manipulation"><X size={24} className="md:w-8 md:h-8" /></button>
           </div>
-          <div className="space-y-14 flex-1 overflow-y-auto no-scrollbar pb-10">
-            <div className="space-y-4">
-              <label className="text-xs font-black text-gray-400 uppercase tracking-widest ml-2">종목 코드 (6자리)</label>
-              <input type="text" className="w-full border-b-[5px] border-gray-100 py-6 text-3xl font-black focus:border-[#3182f6] outline-none placeholder:text-gray-200 bg-transparent" placeholder="005930" value={newStock.symbol} onChange={e => setNewStock({...newStock, symbol: e.target.value})} />
+          <div className="space-y-10 md:space-y-14 flex-1 overflow-y-auto no-scrollbar pb-10">
+            <div className="space-y-3 md:space-y-4">
+              <label className="text-[10px] md:text-xs font-black text-gray-400 uppercase tracking-widest ml-1 md:ml-2">종목 코드 (6자리)</label>
+              <input type="text" className="w-full border-b-[3px] md:border-b-[5px] border-gray-100 py-4 md:py-6 text-2xl md:text-3xl font-black focus:border-[#3182f6] outline-none placeholder:text-gray-200 bg-transparent" placeholder="005930" value={newStock.symbol} onChange={e => setNewStock({...newStock, symbol: e.target.value})} />
             </div>
-            <div className="space-y-4">
-              <label className="text-xs font-black text-gray-400 uppercase tracking-widest ml-2">관리용 명칭</label>
-              <input type="text" className="w-full border-b-[5px] border-gray-100 py-6 text-3xl font-black focus:border-[#3182f6] outline-none placeholder:text-gray-200 bg-transparent" placeholder="삼성전자" value={newStock.name} onChange={e => setNewStock({...newStock, name: e.target.value})} />
+            <div className="space-y-3 md:space-y-4">
+              <label className="text-[10px] md:text-xs font-black text-gray-400 uppercase tracking-widest ml-1 md:ml-2">관리용 명칭</label>
+              <input type="text" className="w-full border-b-[3px] md:border-b-[5px] border-gray-100 py-4 md:py-6 text-2xl md:text-3xl font-black focus:border-[#3182f6] outline-none placeholder:text-gray-200 bg-transparent" placeholder="삼성전자" value={newStock.name} onChange={e => setNewStock({...newStock, name: e.target.value})} />
             </div>
-            <div className="grid grid-cols-2 gap-12">
-              <input type="number" className="w-full border-b-[5px] border-gray-100 py-4 text-2xl font-black focus:border-[#3182f6] outline-none bg-transparent" placeholder="평단가" value={newStock.avgPrice || ''} onChange={e => setNewStock({...newStock, avgPrice: Number(e.target.value)})} />
-              <input type="number" className="w-full border-b-[5px] border-gray-100 py-4 text-2xl font-black focus:border-[#3182f6] outline-none bg-transparent" placeholder="수량" value={newStock.quantity || ''} onChange={e => setNewStock({...newStock, quantity: Number(e.target.value)})} />
+            <div className="grid grid-cols-2 gap-8 md:gap-12">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-gray-400">평단가</label>
+                <input type="number" className="w-full border-b-[3px] md:border-b-[5px] border-gray-100 py-3 md:py-4 text-xl md:text-2xl font-black focus:border-[#3182f6] outline-none bg-transparent" placeholder="0" value={newStock.avgPrice || ''} onChange={e => setNewStock({...newStock, avgPrice: Number(e.target.value)})} />
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-gray-400">수량</label>
+                <input type="number" className="w-full border-b-[3px] md:border-b-[5px] border-gray-100 py-3 md:py-4 text-xl md:text-2xl font-black focus:border-[#3182f6] outline-none bg-transparent" placeholder="0" value={newStock.quantity || ''} onChange={e => setNewStock({...newStock, quantity: Number(e.target.value)})} />
+              </div>
             </div>
           </div>
-          <button onClick={handleAddStock} className="w-full py-8 bg-[#3182f6] text-white rounded-[3rem] font-black text-3xl shadow-2xl active:scale-95 transition-all mb-14">연결하기</button>
+          <button onClick={handleAddStock} className="w-full py-6 md:py-8 bg-[#3182f6] text-white rounded-[2rem] md:rounded-[3rem] font-black text-2xl md:text-3xl shadow-2xl active:scale-95 transition-all mb-10 md:mb-14 touch-manipulation">연결하기</button>
         </div>
       )}
     </div>
