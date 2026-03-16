@@ -24,6 +24,7 @@ export default function WatchlistPage() {
   const [interestStocks, setInterestStocks] = useState<InterestStock[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   
   // Form state
   const [targetStock, setTargetStock] = useState({ name: '', symbol: '' });
@@ -65,7 +66,7 @@ export default function WatchlistPage() {
     fetchInterests();
     const interval = setInterval(() => {
       fetchPrices(true);
-    }, 5000); // 5초 실시간 동기화
+    }, 5000); 
     return () => clearInterval(interval);
   }, []);
 
@@ -96,7 +97,7 @@ export default function WatchlistPage() {
 
   const handleAddInterest = async () => {
     if (!targetStock.name || !targetStock.symbol) {
-      alert('종목명과 티커를 모두 입력해 주세요.');
+      alert('종목 정보가 누락되었습니다.');
       return;
     }
 
@@ -116,207 +117,167 @@ export default function WatchlistPage() {
       fetchInterests();
       setIsAddModalOpen(false);
       setTargetStock({ name: '', symbol: '' });
-      alert('관심 종목에 추가되었습니다.');
+      alert('관심 종목에 등록되었습니다.');
     } catch (err) {
-      alert('저장 중 오류가 발생했습니다.');
+      alert('데이터 저장 실패');
     }
   };
 
+  const filteredStocks = interestStocks.filter(s => 
+    s.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    s.symbol.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   return (
-    <div className="min-h-screen bg-gray-50 pb-40">
-      {/* Header Section */}
-      <header className="px-6 pt-16 pb-12 bg-white border-b border-gray-100 sticky top-0 z-50 shadow-sm overflow-hidden">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-blue-50/20 rounded-bl-[160px] -z-10" />
-        <div className="flex justify-between items-center mb-10 px-2 relative z-10">
-           <div className="flex items-center gap-5">
-              <Link href="/" className="p-3 bg-gray-50 rounded-2xl text-gray-400 hover:text-[#3182f6] transition-all border border-gray-100">
-                <ChevronLeft size={28} />
-              </Link>
-              <div className="flex flex-col">
-                 <h1 className="text-3xl font-black text-[#191f28] tracking-tight">전체 관심 종목</h1>
-                 <div className="flex items-center gap-1.5 mt-1.5">
-                    <div className="w-1.5 h-1.5 bg-blue-500 rounded-sm animate-pulse" />
-                    <p className="text-[10px] font-black text-blue-500 uppercase tracking-[0.3em]">
-                       Real-time Sync Active (5s)
-                    </p>
+    <div className="min-h-screen bg-slate-50 pb-40">
+      <header className="px-6 py-10 bg-white border-b border-slate-200 sticky top-0 z-50">
+        <div className="max-w-3xl mx-auto space-y-8">
+           <div className="flex justify-between items-center">
+              <div className="flex items-center gap-5">
+                 <Link href="/" className="p-3.5 bg-slate-50 rounded-2xl text-slate-400 hover:text-slate-900 transition-all border border-slate-100">
+                    <ChevronLeft size={28} />
+                 </Link>
+                 <div>
+                    <h1 className="text-3xl font-bold tracking-tight text-slate-900 uppercase">Watchlist</h1>
+                    <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest mt-1">Real-time Smart Monitoring</p>
                  </div>
               </div>
+              <button 
+                onClick={() => setIsAddModalOpen(true)}
+                className="p-4 bg-slate-900 text-white rounded-2xl shadow-xl hover:bg-slate-800 transition-all active:scale-95"
+              >
+                <Plus size={28} />
+              </button>
            </div>
-           <button 
-             onClick={() => { fetchInterests(); fetchPrices(); }}
-             className="p-3.5 bg-gray-50 rounded-2xl text-gray-500 hover:text-[#3182f6] transition-colors border border-gray-100"
-           >
-              <RefreshCcw size={22} className={isRefreshing ? 'animate-spin' : ''} />
-           </button>
-        </div>
 
-        <div className="px-2 relative z-10">
-           <div className="bg-gray-50 rounded-2xl px-8 h-18 flex items-center gap-5 border border-gray-50 focus-within:border-blue-100 transition-all">
-              <Search className="text-gray-300" size={24} />
+           <div className="bg-slate-50 rounded-2xl px-6 h-16 flex items-center gap-4 border border-slate-100 focus-within:border-slate-300 transition-all">
+              <Search className="text-slate-300" size={24} />
               <input 
                 type="text" 
-                placeholder="검색어를 입력하여 종목 필터링" 
-                className="bg-transparent border-none outline-none font-bold text-lg text-gray-600 w-full placeholder:text-gray-200"
+                placeholder="관심 종목 검색 및 필터링" 
+                className="bg-transparent border-none outline-none font-bold text-lg text-slate-600 w-full placeholder:text-slate-200"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
               />
            </div>
         </div>
       </header>
 
-      {/* Main Content Section */}
-      <div className="max-w-xl mx-auto px-6 mt-12 space-y-8">
-        <div className="flex justify-between items-center px-2">
-           <div className="flex flex-col gap-1">
-              <h3 className="text-sm font-black text-gray-400 uppercase tracking-widest">Active Watchlist</h3>
-              <p className="text-[10px] font-bold text-gray-300 uppercase leading-none">Total {interestStocks.length} Monitoring</p>
-           </div>
-           <button 
-             onClick={() => setIsAddModalOpen(true)}
-             className="flex items-center gap-2 px-6 py-3 bg-[#3182f6] text-white rounded-2xl text-sm font-black shadow-xl shadow-blue-50 hover:bg-[#1b64da] transition-all active:scale-95"
-           >
-              <Plus size={20} />
-              종목 추가
-           </button>
-        </div>
-
-        <div className="px-1">
-          {interestStocks.map(stock => {
-            const isUp = (stock.change || 0) >= 0;
-            return (
-              /* 강제 리모델링: 사용자가 지시한 클래스 구조로 물리적 교체 */
-              <div 
-                key={stock.id} 
-                className="w-full flex justify-between items-center bg-white p-6 rounded-2xl shadow-sm mb-4 border border-gray-100 group hover:border-[#3182f6] transition-all"
-              >
-                <div className="flex items-center gap-4 min-w-0">
-                  <div className="w-12 h-12 bg-gray-50 rounded-xl flex items-center justify-center text-gray-400 flex-shrink-0 group-hover:bg-blue-50 transition-colors">
-                    <Star size={20} className={stock.alertEnabled ? 'text-[#3182f6] fill-[#3182f6]' : ''} />
-                  </div>
-                  <div className="min-w-0">
-                    <h4 className="text-lg font-black text-[#191f28] truncate uppercase group-hover:text-[#3182f6] transition-colors">
-                      {stock.name}
-                    </h4>
-                    <div className="flex items-center gap-2">
-                       <span className="text-[10px] font-black text-blue-500 bg-blue-50 px-2 py-0.5 rounded-lg uppercase tracking-wider">
-                         {stock.symbol}
-                       </span>
-                    </div>
-                  </div>
+      <div className="max-w-3xl mx-auto px-6 mt-12 space-y-4">
+        {filteredStocks.map(stock => {
+          const isUp = (stock.change || 0) >= 0;
+          return (
+            <div 
+              key={stock.id} 
+              className="w-full flex justify-between items-center bg-white p-6 rounded-2xl shadow-sm border border-slate-100 group hover:border-slate-900 transition-all"
+            >
+              <div className="flex items-center gap-6 min-w-0">
+                <div className="w-14 h-14 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-300 group-hover:bg-slate-900 group-hover:text-white transition-all">
+                  <Star size={24} className={stock.alertEnabled ? 'fill-current' : ''} />
                 </div>
-
-                <div className="flex items-center gap-6 ml-4">
-                  <div className="text-right">
-                    <p className="text-lg font-black text-[#191f28] tracking-tighter leading-tight">
-                      {(stock.price?.toLocaleString() || '--')}원
-                    </p>
-                    <div className={`text-[11px] font-black flex items-center justify-end mt-1 ${isUp ? 'text-[#EF4444]' : 'text-[#3B82F6]'}`}>
-                      {isUp ? <TrendingUp size={12} className="mr-1" /> : <TrendingDown size={12} className="mr-1" />}
-                      {isUp ? '+' : ''}{stock.change?.toFixed(2)}%
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center gap-2 border-l border-gray-100 pl-4">
-                     <button 
-                       onClick={() => toggleAlert(stock)}
-                       className={`p-2 rounded-xl transition-all ${stock.alertEnabled ? 'bg-emerald-50 text-emerald-500 shadow-sm' : 'bg-gray-50 text-gray-300'}`}
-                       title="알림 토글"
-                     >
-                       <Bell size={18} className={stock.alertEnabled ? 'animate-bounce' : ''} />
-                     </button>
-                     <button 
-                        onClick={() => removeInterest(stock.id)}
-                        className="p-2 bg-red-50 text-red-400 hover:bg-[#EF4444] hover:text-white rounded-xl transition-all"
-                        title="영구 삭제"
-                     >
-                        <Trash2 size={18} />
-                     </button>
+                <div className="min-w-0">
+                  <h4 className="text-2xl font-bold text-slate-900 truncate uppercase mb-1">{stock.name}</h4>
+                  <div className="flex items-center gap-2">
+                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{stock.symbol}</span>
+                     {stock.updatedAt && (
+                       <span className="text-[10px] font-bold text-slate-200 uppercase tracking-tight tracking-tighter">Synced {stock.updatedAt}</span>
+                     )}
                   </div>
                 </div>
               </div>
-            );
-          })}
 
-          {interestStocks.length === 0 && (
-            <div className="bg-white border-2 border-dashed border-gray-100 rounded-[2.5rem] py-24 text-center flex flex-col items-center gap-6">
-              <div className="w-20 h-20 bg-gray-50 rounded-2xl flex items-center justify-center text-gray-200">
-                 <Eye size={40} />
+              <div className="flex items-center gap-10">
+                <div className="text-right flex flex-col items-end">
+                  <p className="text-2xl font-bold text-slate-900 tracking-tighter leading-none mb-2">
+                    {(stock.price?.toLocaleString() || '--')}
+                  </p>
+                  <span className={`text-[11px] font-black px-2.5 py-1 rounded-lg ${isUp ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-600'}`}>
+                    {isUp ? '+' : ''}{stock.change?.toFixed(2)}%
+                  </span>
+                </div>
+                
+                <div className="flex items-center gap-3">
+                   <button 
+                     onClick={() => toggleAlert(stock)}
+                     className={`p-3 rounded-xl transition-all ${stock.alertEnabled ? 'bg-emerald-50 text-emerald-500 shadow-sm' : 'bg-slate-50 text-slate-300'}`}
+                   >
+                     <Bell size={20} className={stock.alertEnabled ? 'animate-pulse' : ''} />
+                   </button>
+                   <button 
+                      onClick={() => removeInterest(stock.id)}
+                      className="p-3 bg-red-50 text-red-500 hover:bg-red-600 hover:text-white rounded-xl transition-all shadow-sm shadow-red-50"
+                   >
+                      <Trash2 size={20} />
+                   </button>
+                </div>
               </div>
-              <div className="space-y-2">
-                 <h4 className="text-xl font-bold text-gray-400">관심 종목을 등록해 보세요!</h4>
-                 <p className="text-sm font-bold text-gray-300 uppercase tracking-widest">Start tracking your favorate stocks</p>
-              </div>
-              <button 
-                onClick={() => setIsAddModalOpen(true)}
-                className="mt-4 px-10 py-4 bg-[#191f28] text-white rounded-2xl font-black text-base shadow-xl active:scale-95 transition-all"
-              >
-                 + 지금 첫 종목 추가
-              </button>
             </div>
-          )}
-        </div>
+          );
+        })}
+
+        {filteredStocks.length === 0 && (
+          <div className="bg-white border-2 border-dashed border-slate-200 rounded-[2.5rem] py-32 text-center flex flex-col items-center gap-6">
+            <div className="w-24 h-24 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-100">
+               <Eye size={48} />
+            </div>
+            <div className="space-y-2">
+               <h4 className="text-2xl font-bold text-slate-400">관심 종목이 없습니다.</h4>
+               <p className="text-sm font-bold text-slate-200 uppercase tracking-widest">Global Market Opportunity is waiting</p>
+            </div>
+            <button 
+              onClick={() => setIsAddModalOpen(true)}
+              className="mt-6 px-12 py-5 bg-slate-900 text-white rounded-2xl font-bold text-lg shadow-2xl shadow-slate-200 active:scale-95 transition-all"
+            >
+               + 첫 종목 등록하기
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Add Interest Modal */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-lg p-8 flex items-center justify-center animate-in fade-in duration-300">
-           <div className="bg-white w-full max-w-lg rounded-[2.5rem] p-10 space-y-10 animate-in slide-in-from-bottom-10 shadow-2xl relative overflow-hidden">
-              <div className="absolute top-0 left-0 w-32 h-32 bg-blue-50/50 rounded-br-[120px] -z-10" />
-              <div className="flex justify-between items-center border-b border-gray-50 pb-6">
+        <div className="fixed inset-0 z-[100] bg-slate-900/40 backdrop-blur-sm p-8 flex items-center justify-center">
+           <div className="bg-white w-full max-w-lg rounded-[2.5rem] p-12 space-y-12 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+              <div className="flex justify-between items-center">
                  <div>
-                    <h2 className="text-3xl font-black text-[#191f28] tracking-tighter">관심 종목 등록</h2>
-                    <p className="text-[10px] font-black text-blue-400 uppercase tracking-[0.3em] mt-2 flex items-center gap-2">
-                       <Landmark size={12} />
-                       Asset Monitoring System
-                    </p>
+                    <h2 className="text-3xl font-bold text-slate-900 tracking-tight">종목 추가</h2>
+                    <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest mt-2">Asset Intelligence Network</p>
                  </div>
-                 <button onClick={() => setIsAddModalOpen(false)} className="p-3 bg-gray-50 rounded-xl text-gray-300 hover:text-gray-900 transition-colors">
-                    <X size={24} />
+                 <button onClick={() => setIsAddModalOpen(false)} className="p-3.5 bg-slate-50 rounded-2xl text-slate-400 hover:text-slate-900 transition-all">
+                    <X size={28} />
                  </button>
               </div>
               <div className="space-y-8">
-                 <div className="space-y-2.5">
-                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] px-1">종목 이름</label>
+                 <div className="space-y-3">
+                    <label className="text-xs font-bold text-slate-400 uppercase tracking-widest px-1">종목명</label>
                     <input 
                       type="text" 
-                      className="w-full h-16 bg-gray-50 rounded-2xl px-6 font-black text-xl outline-none focus:ring-4 focus:ring-blue-50 border-2 border-transparent focus:border-blue-100 transition-all placeholder:text-gray-200"
-                      placeholder="예: 태웅"
+                      className="w-full h-18 bg-slate-50 rounded-2xl px-8 font-bold text-xl outline-none border-2 border-transparent focus:border-slate-900 transition-all placeholder:text-slate-200"
+                      placeholder="예: 카카오"
                       value={targetStock.name}
                       onChange={e => setTargetStock({...targetStock, name: e.target.value})}
                     />
                  </div>
-                 <div className="space-y-2.5">
-                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] px-1">티커 번호</label>
+                 <div className="space-y-3">
+                    <label className="text-xs font-bold text-slate-400 uppercase tracking-widest px-1">티커 번호</label>
                     <input 
                       type="text" 
-                      className="w-full h-16 bg-gray-50 rounded-2xl px-6 font-black text-xl outline-none focus:ring-4 focus:ring-blue-50 border-2 border-transparent focus:border-blue-100 transition-all placeholder:text-gray-200 uppercase tracking-widest"
-                      placeholder="예: 044490"
+                      className="w-full h-18 bg-slate-50 rounded-2xl px-8 font-bold text-xl outline-none border-2 border-transparent focus:border-slate-900 transition-all placeholder:text-slate-200 uppercase tracking-widest"
+                      placeholder="예: 035720"
                       value={targetStock.symbol}
                       onChange={e => setTargetStock({...targetStock, symbol: e.target.value})}
                     />
                  </div>
               </div>
-              <div className="pt-2 flex flex-col gap-4">
-                 <button 
-                  onClick={handleAddInterest}
-                  className="w-full h-18 bg-[#191f28] text-white rounded-2xl font-black text-xl shadow-xl hover:bg-[#3182f6] transition-all active:scale-[0.98]"
-                 >
-                   모니터링 대상에 추가
-                 </button>
-                 <p className="text-center text-[9px] font-bold text-gray-300 uppercase tracking-widest">
-                   Automatic Suffix (.KS/.KQ) applied
-                 </p>
-              </div>
+              <button 
+                onClick={handleAddInterest}
+                className="w-full h-20 bg-slate-900 text-white rounded-2xl font-bold text-xl shadow-2xl shadow-slate-100 hover:bg-slate-800 active:scale-[0.98] transition-all"
+              >
+                관심 목록에 등록
+              </button>
            </div>
         </div>
       )}
-
-      {/* Footer Branding */}
-      <footer className="mt-32 text-center px-12 pb-24 opacity-10">
-         <div className="flex justify-center items-center gap-3 mb-2">
-            <BarChart3 className="text-gray-900" size={28} />
-            <span className="text-2xl font-black tracking-tighter text-gray-900 uppercase">AI STOCK Monitoring</span>
-         </div>
-         <p className="text-[9px] font-black text-gray-500 uppercase tracking-[0.8em]">Deep Analysis Engine v1.8.0X</p>
-      </footer>
     </div>
   );
 }
