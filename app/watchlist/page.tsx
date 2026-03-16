@@ -17,7 +17,7 @@ interface InterestStock {
   change: number | null;
 }
 
-// [8차 핵심] 종목명 -> 티커 변환 맵핑 딕셔너리
+// 종목명 -> 티커 변환 맵핑 딕셔너리
 const stockMap: Record<string, string> = { 
   "태웅": "044490.KQ", 
   "삼성전자": "005930.KS", 
@@ -31,24 +31,25 @@ const stockMap: Record<string, string> = {
 export default function WatchlistPage() {
   const [interestStocks, setInterestStocks] = useState<InterestStock[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  
-  // [8차 핵심] 검색창 상태 관리
   const [searchQuery, setSearchQuery] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // 관심 종목 데이터 불러오기 (Supabase)
+  // [8차 수정] alerts -> interest_stocks 테이블명 변경 및 필드명(stock_code) 대응
   const fetchInterests = async () => {
     try {
-      const { data } = await supabase.from('alerts').select('*').order('created_at', { ascending: false });
+      const { data } = await supabase.from('interest_stocks').select('*').order('created_at', { ascending: false });
       if (data) {
         setInterestStocks(data.map(item => ({
-          id: item.id, name: item.stock_name, symbol: item.symbol, price: null, change: null
+          id: item.id, 
+          name: item.stock_name || item.stock_code, // stock_name 컬럼이 없을 경우 대비
+          symbol: item.stock_code, 
+          price: null, 
+          change: null
         })));
       }
     } catch (e) {}
   };
 
-  // 실시간 주가 데이터 패칭
   const fetchPrices = async (silent = false) => {
     const symbols = interestStocks.map(s => s.symbol).filter(Boolean);
     if (symbols.length === 0) {
@@ -71,12 +72,11 @@ export default function WatchlistPage() {
     finally { setIsRefreshing(false); }
   };
 
-  // [8차 핵심] 종목 추가 로직 구현
+  // [8차 수정] 관심 종목 저장 시 interest_stocks 테이블 사용 및 필드명 정렬
   const handleAddStock = async () => {
     const trimmedQuery = searchQuery.trim();
     if (!trimmedQuery) return;
 
-    // 이름으로 티커 찾기
     const symbol = stockMap[trimmedQuery];
     
     if (!symbol) {
@@ -86,18 +86,16 @@ export default function WatchlistPage() {
 
     setIsSubmitting(true);
     try {
-      // 중복 체크
       if (interestStocks.some(s => s.symbol === symbol)) {
         alert("이미 관심 종목에 등록된 종목입니다.");
         setSearchQuery('');
         return;
       }
 
-      const { error } = await supabase.from('alerts').insert([{
-        symbol: symbol,
-        stock_name: trimmedQuery,
-        target_price: 0,
-        is_active: true
+      // [8차 핵심] interest_stocks 스키마 준수 (stock_code)
+      const { error } = await supabase.from('interest_stocks').insert([{
+        stock_code: symbol,
+        alert_enabled: true
       }]);
 
       if (error) throw error;
@@ -111,11 +109,10 @@ export default function WatchlistPage() {
     }
   };
 
-  // 종목 삭제 로직
   const removeInterest = async (id: string | number) => {
     if (!confirm('관심 종목에서 삭제하시겠습니까?')) return;
     try {
-      await supabase.from('alerts').delete().eq('id', id);
+      await supabase.from('interest_stocks').delete().eq('id', id);
       fetchInterests();
     } catch (err) {}
   };
@@ -130,7 +127,6 @@ export default function WatchlistPage() {
 
   return (
     <div className="w-full bg-slate-50 min-h-screen">
-      {/* 헤더 */}
       <header className="px-5 py-6 bg-white border-b border-slate-100 flex items-center justify-between sticky top-0 z-40">
         <div className="flex items-center gap-3">
            <Link href="/" className="p-2 bg-slate-50 rounded-xl text-slate-400 hover:text-blue-500 transition-colors">
@@ -144,7 +140,6 @@ export default function WatchlistPage() {
       </header>
 
       <div className="px-5 mt-6 space-y-6">
-         {/* [8차 핵심] 검색 및 추가 입력창 */}
          <div className="flex gap-2">
             <div className="bg-white rounded-2xl px-5 h-14 flex items-center gap-3 border border-gray-300 shadow-sm focus-within:ring-2 focus-within:ring-blue-500 flex-1 transition-all">
                <Search className="text-slate-300" size={20} />
@@ -166,7 +161,6 @@ export default function WatchlistPage() {
             </button>
          </div>
 
-         {/* [8차 핵심] 관심 종목 리스트 - 모던 카드 레이아웃 (rounded-2xl) */}
          <div className="space-y-4 pb-24">
             <div className="flex justify-between items-center px-1">
                <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest leading-none">My Watchlist</h3>

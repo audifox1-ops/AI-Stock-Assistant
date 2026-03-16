@@ -10,7 +10,7 @@ import Link from 'next/link';
 
 export const dynamic = 'force-dynamic';
 
-// [7차 UX 개선] 종목명 기반 티커 자동 매핑 딕셔너리
+// 종목명 기반 티커 자동 매핑 딕셔너리
 const stockTickerMap: Record<string, string> = { 
   "태웅": "044490.KQ", 
   "삼성전자": "005930.KS", 
@@ -64,13 +64,18 @@ export default function PortfolioPage() {
     } catch (e) {}
   };
 
+  // [8차 수정] holdings -> portfolio_stocks 테이블명 변경 및 stock_code 필드 대응
   const fetchHoldings = async () => {
     try {
-      const { data } = await supabase.from('holdings').select('*').order('created_at', { ascending: false });
+      const { data } = await supabase.from('portfolio_stocks').select('*').order('created_at', { ascending: false });
       if (data) {
         setStocks(data.map(item => ({
-          id: item.id, symbol: item.symbol, name: item.stock_name,
-          avgPrice: Number(item.avg_buy_price), currentPrice: null, quantity: Number(item.quantity)
+          id: item.id, 
+          symbol: item.stock_code, 
+          name: item.stock_name,
+          avgPrice: Number(item.avg_buy_price), 
+          currentPrice: null, 
+          quantity: Number(item.quantity)
         })));
       }
     } catch (e) {}
@@ -121,7 +126,7 @@ export default function PortfolioPage() {
     } finally { setIsAiLoading(false); }
   };
 
-  // --- [7차 개선] 종목 추가 로직 (이름 기반 매핑 적용) ---
+  // [8차 수정] 저장 시 portfolio_stocks 테이블 사용 및 필드명(stock_code) 정렬
   const handleAddStock = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newStock.nameOrSymbol || !newStock.avgPrice || !newStock.quantity) return;
@@ -129,12 +134,11 @@ export default function PortfolioPage() {
     setIsSubmitting(true);
     try {
       const input = newStock.nameOrSymbol.trim();
-      // 맵에 종목명이 있으면 티커를 가져오고, 없으면 입력값 그대로 사용
       const mappedTicker = stockTickerMap[input] || input;
       const stockName = stockTickerMap[input] ? input : input;
 
-      const { data, error } = await supabase.from('holdings').insert([{
-        symbol: mappedTicker.toUpperCase(),
+      const { data, error } = await supabase.from('portfolio_stocks').insert([{
+        stock_code: mappedTicker.toUpperCase(),
         stock_name: stockName,
         avg_buy_price: parseFloat(newStock.avgPrice),
         quantity: parseFloat(newStock.quantity)
@@ -209,7 +213,7 @@ export default function PortfolioPage() {
                 </p>
                 <div className="flex justify-between items-end">
                    <h2 className={`text-xl font-bold ${m.changePercent >= 0 ? 'text-red-500' : 'text-blue-500'}`}>{m.price.toLocaleString()}</h2>
-                   <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-md ${m.changePercent >= 0 ? 'bg-red-50 text-red-500' : 'bg-blue-50 text-blue-500'}`}>
+                   <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-md ${m.changePercent >= 0 ? 'bg-red-50 text-red-500' : 'bg-blue-50 text-blue-600'}`}>
                       {m.changePercent >= 0 ? '+' : ''}{m.changePercent.toFixed(1)}%
                    </span>
                 </div>
@@ -338,7 +342,7 @@ export default function PortfolioPage() {
         </section>
       </div>
 
-      {/* [7차 핵심] 종목 추가 모달 - 가독성 물리적 고정 및 이름 검색 반영 */}
+      {/* 종목 추가 모달 */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center px-5">
            <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setIsAddModalOpen(false)}></div>
@@ -350,9 +354,7 @@ export default function PortfolioPage() {
               
               <form onSubmit={handleAddStock} className="space-y-5">
                  <div className="space-y-1.5">
-                    {/* [강제 지침 1] 라벨 스타일 강화 */}
                     <label className="text-xs font-bold text-slate-700 ml-1">종목명 입력</label>
-                    {/* [강제 지침 1] 입력창 가독성 물리적 고정 */}
                     <input 
                       type="text" required placeholder="종목명 입력 (예: 태웅, 삼성전자)"
                       className="w-full border border-gray-300 bg-white text-slate-900 placeholder-gray-400 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none font-bold"

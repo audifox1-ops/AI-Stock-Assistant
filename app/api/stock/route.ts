@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase';
 
 const yahooFinance = new YahooFinance();
 
-// [최종 강제 주입] 주가 실시간 100% 동기화를 위한 캐시 영구 파괴
+// 주가 실시간 100% 동기화를 위한 캐시 영구 파괴
 export const dynamic = 'force-dynamic';
 export const fetchCache = 'force-no-store';
 export const revalidate = 0;
@@ -87,15 +87,15 @@ export async function POST(request: Request) {
         let data = await getPublicStockData(originalSymbol);
         let finalData = data.success ? data : await getYahooFallback(originalSymbol);
         if (finalData && finalData.price) {
+          // [8차 수정] 공식 스키마명(portfolio_stocks, interest_stocks, stock_code) 반영
           await Promise.all([
-            supabase.from('holdings').update({ 
+            supabase.from('portfolio_stocks').update({ 
               last_price: finalData.price, 
               price_updated_at: new Date().toISOString() 
-            }).eq('symbol', originalSymbol),
-            supabase.from('alerts').update({ 
-              last_price: finalData.price, 
-              price_updated_at: new Date().toISOString() 
-            }).eq('symbol', originalSymbol)
+            }).eq('stock_code', originalSymbol),
+            supabase.from('interest_stocks').update({ 
+              last_processed_at: new Date().toISOString() 
+            }).eq('stock_code', originalSymbol)
           ]);
           return { 
             symbol: originalSymbol, 
@@ -109,7 +109,8 @@ export async function POST(request: Request) {
         }
         throw new Error("(Error: 03)");
       } catch (e: any) {
-        const { data: hData } = await supabase.from('holdings').select('last_price').eq('symbol', originalSymbol).single();
+        // [8차 수정] 조회 테이블명 및 필드명 정렬
+        const { data: hData } = await supabase.from('portfolio_stocks').select('last_price').eq('stock_code', originalSymbol).single();
         const fallbackPrice = hData?.last_price || 0;
         return { 
           symbol: originalSymbol, 
