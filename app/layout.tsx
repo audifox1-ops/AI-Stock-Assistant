@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font";
+import { Inter } from "next/font/google"; // 'next/font'에서 'next/font/google'로 수정하여 빌드 오류 해결
 import "./globals.css";
 import AuthProvider from "@/components/auth-provider";
 import Navigation from "@/components/Navigation";
