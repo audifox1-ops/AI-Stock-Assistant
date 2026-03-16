@@ -15,8 +15,6 @@ interface InterestStock {
   updatedAt?: string;
 }
 
-const INTERESTS_STORAGE_KEY = 'ai_stock_interests';
-
 export default function InterestPage() {
   const [interestStocks, setInterestStocks] = useState<InterestStock[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -47,7 +45,7 @@ export default function InterestPage() {
         return mapped;
       }
     } catch (err) {
-      console.error("Fetch failed:", err);
+      console.error(err);
     } finally {
       setIsInitialLoading(false);
     }
@@ -84,7 +82,7 @@ export default function InterestPage() {
         return stock;
       }));
     } catch (err) {
-      console.error("Price fetch error:", err);
+      console.error(err);
     } finally {
       setIsRefreshing(false);
     }
@@ -97,7 +95,6 @@ export default function InterestPage() {
     };
     init();
     
-    // 10초 주기 실시간 폴링 (무음)
     const interval = setInterval(() => {
       setInterestStocks(curr => {
         fetchPrices(curr);
@@ -120,8 +117,7 @@ export default function InterestPage() {
         alert_enabled: true
       }]).select();
 
-      if (error) throw error;
-      if (data && data[0]) {
+      if (!error && data && data[0]) {
         fetchInterests().then(loaded => fetchPrices(loaded));
         setSearchTerm('');
       }
@@ -129,7 +125,7 @@ export default function InterestPage() {
   };
 
   const removeStock = async (id: string | number) => {
-    if (!confirm('관심 종목에서 삭제할까요?')) return;
+    if (!confirm('삭제할까요?')) return;
     try {
       await supabase.from('alerts').delete().eq('id', id);
       setInterestStocks(prev => prev.filter(s => s.id !== id));
@@ -157,7 +153,6 @@ export default function InterestPage() {
           </button>
         </header>
         
-        {/* Search Bar */}
         <div className="flex gap-3 mb-12">
           <div className="flex-1 flex items-center gap-3 px-6 py-5 bg-white border border-gray-100 rounded-[2rem] shadow-sm focus-within:border-blue-400/50 transition-all">
             <Search size={22} className="text-gray-300" />
@@ -167,7 +162,7 @@ export default function InterestPage() {
               onChange={(e) => setSearchTerm(e.target.value)}
               onKeyPress={(e) => e.key === 'Enter' && addStock()}
               placeholder="종목명 또는 코드 입력" 
-              className="bg-transparent border-none outline-none text-lg w-full font-bold placeholder:text-gray-200 text-gray-900"
+              className="bg-transparent border-none outline-none text-lg w-full font-bold text-gray-900"
             />
           </div>
           <button 
@@ -178,7 +173,6 @@ export default function InterestPage() {
           </button>
         </div>
 
-        {/* Watchlist - [지시사항] 모던 클린 카드형 UX 적용 */}
         <section>
           <div className="flex justify-between items-center mb-8 px-2">
             <h3 className="text-xl font-bold text-gray-900">실시간 관심 시세</h3>
@@ -198,7 +192,6 @@ export default function InterestPage() {
                     key={stock.id} 
                     className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 flex flex-row items-center justify-between transition-all hover:border-blue-100"
                   >
-                    {/* [왼쪽 구역] 종목 정보 */}
                     <div className="flex flex-col min-w-0 flex-1">
                       <h4 className="text-xl font-bold text-gray-900 mb-1 truncate uppercase">
                         {stock.name}
@@ -209,28 +202,26 @@ export default function InterestPage() {
                         </span>
                         {stock.updatedAt && (
                           <span className="text-[10px] font-bold text-gray-400">
-                            {stock.updatedAt} 기준
+                            {stock.updatedAt} {'기준'}
                           </span>
                         )}
                       </div>
                     </div>
 
-                    {/* [오른쪽 구역] 가격 및 액션 */}
                     <div className="flex flex-row items-center gap-6 flex-shrink-0 ml-4">
                       <div className="text-right">
                         <p className="text-xl font-black text-gray-900 leading-tight">
-                          {(stock.price?.toLocaleString() || '--')}원
+                          {(stock.price?.toLocaleString() || '--')}{'원'}
                         </p>
                         <p className={`text-xs font-black mt-1 ${isUp ? 'text-red-500' : 'text-blue-600'}`}>
-                          {isUp ? '▲' : '▼'}{Math.abs(stock.change || 0).toFixed(2)}%
+                          {isUp ? '\u25B2' : '\u25BC'}{Math.abs(stock.change || 0).toFixed(2)}%
                         </p>
                       </div>
                       
-                      {/* 액션 버튼 */}
                       <div className="flex items-center gap-2 border-l border-gray-100 pl-6 ml-2">
                         <button 
                           onClick={() => toggleAlert(stock.id, stock.alertEnabled)}
-                          className={`p-3 rounded-xl transition-all ${stock.alertEnabled ? 'text-blue-500 bg-blue-50' : 'text-gray-300 hover:text-gray-500 bg-gray-50'}`}
+                          className={`p-3 rounded-xl transition-all ${stock.alertEnabled ? 'text-blue-500 bg-blue-50' : 'text-gray-300 bg-gray-50'}`}
                         >
                           <Bell size={20} className={stock.alertEnabled ? 'animate-bounce' : ''} />
                         </button>

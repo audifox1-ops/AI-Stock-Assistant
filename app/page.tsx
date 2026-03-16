@@ -58,11 +58,6 @@ function urlBase64ToUint8Array(base64String: string) {
   return outputArray;
 }
 
-// --- Skeleton UI ---
-const SkeletonCircle = () => (
-  <div className="w-16 h-16 bg-gray-100 rounded-2xl animate-pulse"></div>
-);
-
 export default function PortfolioPage() {
   const [stocks, setStocks] = useState<Stock[]>([]);
   const [interestStocks, setInterestStocks] = useState<InterestStock[]>([]);
@@ -82,16 +77,12 @@ export default function PortfolioPage() {
     if ('serviceWorker' in navigator && 'PushManager' in window) {
       navigator.serviceWorker.register('/sw.js')
         .then(reg => {
-          console.log('[SW] Registered:', reg);
           return reg.pushManager.getSubscription();
         })
         .then(sub => {
-          if (sub) {
-            console.log('[Push] Existing Sub:', sub);
-            setPushSubscription(sub);
-          }
+          if (sub) setPushSubscription(sub);
         })
-        .catch(err => console.error('[SW/Push] Error:', err));
+        .catch(err => console.error(err));
     }
   }, []);
 
@@ -104,11 +95,9 @@ export default function PortfolioPage() {
           userVisibleOnly: true,
           applicationServerKey: urlBase64ToUint8Array(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!)
         });
-        console.log('[Push] New Sub:', JSON.stringify(sub));
         setPushSubscription(sub);
-        alert('알림 권한이 승인되었습니다!');
+        alert('알림 권한 신청 완료');
 
-        // 테스트 발송 호출
         await fetch('/api/push', {
           method: 'POST',
           body: JSON.stringify({
@@ -120,8 +109,8 @@ export default function PortfolioPage() {
         });
       }
     } catch (err) {
-      console.error('[Push] Subscribe failed:', err);
-      alert('알림 구독에 실패했습니다.');
+      console.error(err);
+      alert('알림 구독 실패');
     }
   };
 
@@ -219,14 +208,16 @@ export default function PortfolioPage() {
     try { await supabase.from('alerts').delete().eq('id', id); setInterestStocks(prev => prev.filter(s => s.id !== id)); } catch (err) {}
   };
 
+  const totalBuyAmount = stocks.reduce((acc, s) => acc + s.avgPrice * s.quantity, 0);
+  const totalCurrentAmount = stocks.reduce((acc, s) => acc + (s.currentPrice || s.avgPrice) * s.quantity, 0);
+  const totalRate = totalBuyAmount > 0 ? ((totalCurrentAmount / totalBuyAmount - 1) * 100).toFixed(2) : '0.00';
+
   return (
     <div className="min-h-screen bg-gray-50/30 text-[#191f28] pb-44 animate-in fade-in duration-500 overflow-x-hidden overflow-y-visible">
-      {/* Header */}
-      <header className="w-full px-8 pt-14 pb-8 overflow-hidden box-border bg-white border-b border-gray-100">
-        <div className="flex justify-between items-center mb-12 overflow-visible">
+      <header className="w-full px-8 pt-14 pb-8 bg-white border-b border-gray-100">
+        <div className="flex justify-between items-center mb-12">
           <div className="flex items-center gap-4">
             <h1 className="text-3xl font-black tracking-tight text-[#3182f6]">AI Stock</h1>
-            {/* [지시사항] 알림 설정 버튼 */}
             {!pushSubscription && (
               <button 
                 onClick={requestNotificationPermission}
@@ -236,7 +227,7 @@ export default function PortfolioPage() {
               </button>
             )}
           </div>
-          <div className="flex gap-6 overflow-visible">
+          <div className="flex gap-6">
             <button onClick={() => { fetchMarketIndices(); fetchPrices(stocks, interestStocks); }} className="p-4 text-gray-400 bg-gray-50 rounded-full shadow-sm hover:bg-gray-100">
               <RefreshCcw size={24} className={isRefreshing ? 'animate-spin' : ''} />
             </button>
@@ -252,26 +243,24 @@ export default function PortfolioPage() {
               <div className="flex items-center gap-4 whitespace-nowrap">
                 <span className="text-sm font-black text-gray-400">{market.name}</span>
                 <span className={`text-lg font-black ${market.changePercent >= 0 ? 'text-red-500' : 'text-blue-600'}`}>{market.price.toLocaleString()}</span>
-                <span className={`text-xs font-black px-10 py-3 rounded-full ${market.changePercent >= 0 ? 'text-red-500 bg-red-50' : 'text-blue-600 bg-blue-50'}`}>{market.changePercent >= 0 ? '▲' : '▼'}{Math.abs(market.changePercent).toFixed(1)}%</span>
+                <span className={`text-xs font-black px-10 py-3 rounded-full ${market.changePercent >= 0 ? 'text-red-500 bg-red-50' : 'text-blue-600 bg-blue-50'}`}>{market.changePercent >= 0 ? '\u25B2' : '\u25BC'}{Math.abs(market.changePercent).toFixed(1)}%</span>
               </div>
-              <p className="text-[10px] text-gray-400 font-bold ml-1">({market.updatedAt || '--:--:--'} 기준)</p>
+              <p className="text-[10px] text-gray-400 font-bold ml-1">({market.updatedAt || '--:--:--'} {'기준'})</p>
             </div>
           ))}
         </div>
       </header>
 
-      {/* Asset Summary */}
       <section className="px-8 py-12 bg-white">
         <p className="text-sm font-black text-gray-400 mb-3 tracking-wider uppercase">Portfolio Balance</p>
-        <div className="flex flex-wrap items-center gap-6 overflow-visible">
-          <h2 className="text-5xl font-black tracking-tight leading-none overflow-visible">{totalCurrentAmount.toLocaleString()}원</h2>
+        <div className="flex flex-wrap items-center gap-6">
+          <h2 className="text-5xl font-black tracking-tight leading-none">{totalCurrentAmount.toLocaleString()}{'원'}</h2>
           <div className={`px-10 py-3 rounded-full text-sm font-black min-w-max shadow-sm border ${parseFloat(totalRate) >= 0 ? 'text-red-600 bg-red-50 border-red-100' : 'text-blue-600 bg-blue-50 border-blue-100'}`}>
             {parseFloat(totalRate) >= 0 ? '+' : ''}{totalRate}%
           </div>
         </div>
       </section>
 
-      {/* Interests Section - 모던 클린 카드형 */}
       <section className="px-8 py-12 bg-gray-50/50">
         <h3 className="text-2xl font-black mb-12">관심있는 종목</h3>
         <div className="space-y-4">
@@ -283,16 +272,16 @@ export default function PortfolioPage() {
                   <h4 className="text-xl font-bold text-gray-900 mb-1 truncate uppercase">{stock.name}</h4>
                   <div className="flex items-center gap-3">
                     <span className="text-xs font-black text-blue-500 bg-blue-50 px-2 py-0.5 rounded uppercase">{stock.symbol}</span>
-                    {stock.updatedAt && <span className="text-[10px] font-bold text-gray-400">{stock.updatedAt} 기준</span>}
+                    {stock.updatedAt && <span className="text-[10px] font-bold text-gray-400">{stock.updatedAt} {'기준'}</span>}
                   </div>
                 </div>
                 <div className="flex flex-row items-center gap-6 flex-shrink-0 ml-4">
                   <div className="text-right">
-                    <p className="text-xl font-black text-gray-900 leading-tight">{(stock.price?.toLocaleString() || '--')}원</p>
-                    <p className={`text-xs font-black mt-1 ${isUp ? 'text-red-500' : 'text-blue-600'}`}>{isUp ? '▲' : '▼'}{Math.abs(stock.change || 0).toFixed(2)}%</p>
+                    <p className="text-xl font-black text-gray-900 leading-tight">{(stock.price?.toLocaleString() || '--')}{'원'}</p>
+                    <p className={`text-xs font-black mt-1 ${isUp ? 'text-red-500' : 'text-blue-600'}`}>{isUp ? '\u25B2' : '\u25BC'}{Math.abs(stock.change || 0).toFixed(2)}%</p>
                   </div>
                   <div className="flex items-center gap-3 border-l border-gray-100 pl-6 ml-2">
-                    <button className={`p-3 rounded-xl transition-all ${stock.alertEnabled ? 'text-blue-500 bg-blue-50' : 'text-gray-300 bg-gray-50'}`}><Bell size={20} /></button>
+                    <button className="p-3 text-gray-300 bg-gray-50 rounded-xl"><Bell size={20} /></button>
                     <button onClick={() => removeInterest(stock.id)} className="p-3 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"><Trash2 size={20} /></button>
                   </div>
                 </div>
@@ -302,10 +291,9 @@ export default function PortfolioPage() {
         </div>
       </section>
 
-      {/* Add Modal */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-[100] bg-white p-10 pt-28 flex flex-col animate-in slide-in-from-bottom duration-500 overflow-visible">
-          <div className="flex justify-between items-start mb-20 overflow-visible">
+          <div className="flex justify-between items-start mb-20">
             <h2 className="text-5xl font-black leading-[1.1]">자산 등록</h2>
             <button onClick={() => setIsAddModalOpen(false)} className="p-5 bg-gray-100 rounded-full text-gray-400"><X size={32} /></button>
           </div>
