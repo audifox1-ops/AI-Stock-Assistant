@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { 
-  RefreshCcw, Search, ChevronLeft, Star, Trash2, Plus, Loader2, AlertCircle
+  RefreshCcw, Search, ChevronLeft, Star, Trash2, Plus, Loader2, AlertCircle, Bot
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
