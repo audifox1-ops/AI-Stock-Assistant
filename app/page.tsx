@@ -222,7 +222,8 @@ export default function PortfolioPage() {
   return (
     <div className="min-h-screen bg-white text-[#191f28] pb-44 animate-in fade-in duration-500 overflow-x-hidden overflow-y-visible">
       {/* Header */}
-      <header className="px-8 pt-14 pb-8 overflow-visible">
+      {/* [지시사항 2] 가로 넘침 방지를 위해 px-8, w-full, box-border 적용 */}
+      <header className="w-full px-8 pt-14 pb-8 overflow-hidden box-border">
         <div className="flex justify-between items-center mb-12 overflow-visible">
           <h1 className="text-3xl font-black tracking-tight text-[#3182f6]">AI Stock</h1>
           <div className="flex gap-6 overflow-visible">
@@ -235,7 +236,8 @@ export default function PortfolioPage() {
           </div>
         </div>
 
-        <div className="flex gap-10 items-center overflow-x-auto no-scrollbar py-4">
+        {/* 지수 영역 가로 정렬 */}
+        <div className="flex gap-10 items-center overflow-x-auto no-scrollbar py-4 w-full">
           {isMarketLoading ? <SkeletonText width="w-40" /> : marketIndices.map(market => (
             <div key={market.symbol} className="flex items-center gap-4 whitespace-nowrap min-w-fit">
               <span className="text-sm font-black text-gray-400">{market.name}</span>
@@ -244,7 +246,7 @@ export default function PortfolioPage() {
               </span>
               <span className={`text-xs font-black px-10 py-3 rounded-full ${market.changePercent >= 0 ? 'text-red-500 bg-red-50' : 'text-blue-600 bg-blue-50'}`}>
                 {market.changePercent >= 0 ? '▲' : '▼'}{Math.abs(market.changePercent).toFixed(1)}%
-                <span className="text-[10px] opacity-70 ml-1">({market.status || '대기'})</span>
+                {/* [지시사항 1] 디버깅 꼬리표 삭제 */}
               </span>
             </div>
           ))}
@@ -269,13 +271,17 @@ export default function PortfolioPage() {
         <h3 className="text-2xl font-black mb-12">나의 투자 현황</h3>
         
         {isInitialLoading ? <SkeletonCircle /> : stocks.length === 0 ? (
-          /* [지시사항] 사용자가 제공한 '정답 구조'로 강제 교체 */
-          <div className="flex flex-col items-center justify-center p-8 mt-4 border-2 border-dashed border-gray-200 rounded-2xl w-full">
-            <p className="text-gray-500 text-center mb-6">
+          /* [지시사항 3] 물리적 격리: absolute 및 강제 위치 속성 완전 삭제 후 flex-col gap-8 적용 */
+          <div className="flex flex-col items-center justify-center p-8 gap-8 border-2 border-dashed border-gray-200 rounded-2xl w-full box-border">
+            <p className="text-gray-500 text-center text-lg leading-relaxed">
               보유하신 종목을 한 번만 등록해 보세요.<br/>
               AI가 즉시 승률 높은 전략을 제안합니다.
             </p>
-            <button onClick={() => setIsAddModalOpen(true)} className="px-8 py-3 bg-blue-500 text-white font-bold rounded-full w-fit whitespace-nowrap">
+            {/* 겹침 방지를 위해 박스 내 하단에 자연스럽게 배치 */}
+            <button 
+              onClick={() => setIsAddModalOpen(true)} 
+              className="px-8 py-3 bg-blue-500 text-white font-bold rounded-full w-fit whitespace-nowrap shadow-md hover:bg-blue-600 transition-colors"
+            >
               지금 시작하기
             </button>
           </div>
@@ -291,7 +297,7 @@ export default function PortfolioPage() {
                       <div className={`flex-shrink-0 w-16 h-16 rounded-2xl flex items-center justify-center font-black text-white ${isProfit ? 'bg-red-400' : 'bg-blue-400'}`}>{stock.name.charAt(0)}</div>
                       <div className="min-w-0 flex-1">
                         <h4 className="text-2xl font-black text-[#191f28] leading-tight mb-2 whitespace-nowrap overflow-visible uppercase">{stock.name}</h4>
-                        <p className="text-xs font-bold text-gray-400">{(stock.status || '실시간')} · {stock.quantity.toLocaleString()}주</p>
+                        <p className="text-xs font-bold text-gray-400">실시간 시세 · {stock.quantity.toLocaleString()}주</p>
                       </div>
                     </div>
                     <div className="text-right min-w-max">
@@ -333,7 +339,7 @@ export default function PortfolioPage() {
         </div>
       </section>
 
-      {/* Adding Modal 생략 (전체 구조 유지 필요하므로 필요한 부분만 포함) */}
+      {/* Add Modal */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-[100] bg-white p-10 pt-28 flex flex-col animate-in slide-in-from-bottom duration-500 overflow-visible">
           <div className="flex justify-between items-start mb-20 overflow-visible">
@@ -341,11 +347,17 @@ export default function PortfolioPage() {
             <button onClick={() => setIsAddModalOpen(false)} className="p-5 bg-gray-100 rounded-full text-gray-400"><X size={32} /></button>
           </div>
           <div className="space-y-14 flex-1 overflow-y-auto no-scrollbar pb-10">
-            <input type="text" className="w-full border-b-[5px] border-gray-100 py-6 text-3xl font-black focus:border-[#3182f6] outline-none placeholder:text-gray-200" placeholder="종목 코드" value={newStock.symbol} onChange={e => setNewStock({...newStock, symbol: e.target.value})} />
-            <input type="text" className="w-full border-b-[5px] border-gray-100 py-6 text-3xl font-black focus:border-[#3182f6] outline-none placeholder:text-gray-200" placeholder="종목 명" value={newStock.name} onChange={e => setNewStock({...newStock, name: e.target.value})} />
+            <div className="space-y-4">
+              <label className="text-xs font-black text-gray-400 uppercase tracking-widest ml-2">종목 코드 (6자리)</label>
+              <input type="text" className="w-full border-b-[5px] border-gray-100 py-6 text-3xl font-black focus:border-[#3182f6] outline-none placeholder:text-gray-200 bg-transparent" placeholder="005930" value={newStock.symbol} onChange={e => setNewStock({...newStock, symbol: e.target.value})} />
+            </div>
+            <div className="space-y-4">
+              <label className="text-xs font-black text-gray-400 uppercase tracking-widest ml-2">관리용 명칭</label>
+              <input type="text" className="w-full border-b-[5px] border-gray-100 py-6 text-3xl font-black focus:border-[#3182f6] outline-none placeholder:text-gray-200 bg-transparent" placeholder="삼성전자" value={newStock.name} onChange={e => setNewStock({...newStock, name: e.target.value})} />
+            </div>
             <div className="grid grid-cols-2 gap-12">
-               <input type="number" className="w-full border-b-[5px] border-gray-100 py-4 text-2xl font-black focus:border-[#3182f6] outline-none" placeholder="평단가" value={newStock.avgPrice || ''} onChange={e => setNewStock({...newStock, avgPrice: Number(e.target.value)})} />
-               <input type="number" className="w-full border-b-[5px] border-gray-100 py-4 text-2xl font-black focus:border-[#3182f6] outline-none" placeholder="수량" value={newStock.quantity || ''} onChange={e => setNewStock({...newStock, quantity: Number(e.target.value)})} />
+              <input type="number" className="w-full border-b-[5px] border-gray-100 py-4 text-2xl font-black focus:border-[#3182f6] outline-none bg-transparent" placeholder="평단가" value={newStock.avgPrice || ''} onChange={e => setNewStock({...newStock, avgPrice: Number(e.target.value)})} />
+              <input type="number" className="w-full border-b-[5px] border-gray-100 py-4 text-2xl font-black focus:border-[#3182f6] outline-none bg-transparent" placeholder="수량" value={newStock.quantity || ''} onChange={e => setNewStock({...newStock, quantity: Number(e.target.value)})} />
             </div>
           </div>
           <button onClick={handleAddStock} className="w-full py-8 bg-[#3182f6] text-white rounded-[3rem] font-black text-3xl shadow-2xl active:scale-95 transition-all mb-14">연결하기</button>
