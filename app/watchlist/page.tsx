@@ -46,8 +46,9 @@ export default function WatchlistPage() {
     try {
       const res = await fetch('/api/stock', { 
         method: 'POST', 
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ symbols }), 
-        cache: 'no-store' // 캐시 방지 옵션 강제
+        cache: 'no-store' // 100% 실시간 데이터 강제 동기화 (캐시 완전 멸균)
       });
       const data = await res.json();
       setInterestStocks(prev => prev.map(s => data[s.symbol] ? { 
@@ -62,12 +63,19 @@ export default function WatchlistPage() {
 
   useEffect(() => {
     fetchInterests();
-    const interval = setInterval(() => fetchPrices(true), 15000);
+    
+    // 5초마다 실시간 주가 데이터 새로고침 (Polling)
+    const interval = setInterval(() => {
+      fetchPrices(true);
+    }, 5000);
+    
     return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
-    if (interestStocks.length > 0) fetchPrices(true);
+    if (interestStocks.length > 0 && interestStocks.some(s => s.price === null)) {
+      fetchPrices(true);
+    }
   }, [interestStocks.length]);
 
   const removeInterest = async (id: string | number) => {
@@ -119,8 +127,8 @@ export default function WatchlistPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 pb-40">
-      {/* 1. Header - Strict design system, No rounded-full */}
-      <header className="px-6 pt-16 pb-12 bg-white border-b border-gray-100 sticky top-0 z-50 shadow-sm relative overflow-hidden">
+      {/* Header Section */}
+      <header className="px-6 pt-16 pb-12 bg-white border-b border-gray-100 sticky top-0 z-50 shadow-sm overflow-hidden">
         <div className="absolute top-0 right-0 w-64 h-64 bg-blue-50/20 rounded-bl-[160px] -z-10" />
         
         <div className="flex justify-between items-center mb-10 px-2 relative z-10">
@@ -130,10 +138,12 @@ export default function WatchlistPage() {
               </Link>
               <div className="flex flex-col">
                  <h1 className="text-3xl font-black text-[#191f28] tracking-tight">전체 관심 종목</h1>
-                 <p className="text-[10px] font-black text-blue-400 uppercase tracking-[0.3em] mt-1.5 flex items-center gap-1.5">
-                    <div className="w-1.5 h-1.5 bg-blue-400 rounded-sm animate-pulse" />
-                    Advanced Watching Engine Active
-                 </p>
+                 <div className="flex items-center gap-1.5 mt-1.5">
+                    <div className="w-1.5 h-1.5 bg-blue-500 rounded-sm animate-pulse" />
+                    <p className="text-[10px] font-black text-blue-500 uppercase tracking-[0.3em]">
+                       Real-time Sync Active (5s)
+                    </p>
+                 </div>
               </div>
            </div>
            <button 
@@ -144,9 +154,8 @@ export default function WatchlistPage() {
            </button>
         </div>
 
-        {/* Search Bar Placeholder - No rounded-full */}
         <div className="px-2 relative z-10">
-           <div className="bg-gray-50 rounded-[1.5rem] px-8 h-18 flex items-center gap-5 border border-gray-50 focus-within:border-blue-100 transition-all">
+           <div className="bg-gray-50 rounded-2xl px-8 h-18 flex items-center gap-5 border border-gray-50 focus-within:border-blue-100 transition-all">
               <Search className="text-gray-300" size={24} />
               <input 
                 type="text" 
@@ -157,8 +166,8 @@ export default function WatchlistPage() {
         </div>
       </header>
 
-      {/* 2. Watchlist Section - px-8 Wide Cards, No rounded-full */}
-      <div className="max-w-xl mx-auto px-6 mt-12 space-y-10">
+      {/* Main Content Section */}
+      <div className="max-w-xl mx-auto px-6 mt-12 space-y-8">
         
         <div className="flex justify-between items-center px-2">
            <div className="flex flex-col gap-1">
@@ -174,55 +183,60 @@ export default function WatchlistPage() {
            </button>
         </div>
 
-        <div className="space-y-5 px-1">
+        <div className="px-1">
           {interestStocks.map(stock => {
             const isUp = (stock.change || 0) >= 0;
             return (
               <div 
                 key={stock.id} 
-                className="bg-white px-8 py-10 rounded-[2rem] border border-gray-100 shadow-sm flex items-center justify-between group hover:border-[#3182f6] transition-all relative overflow-hidden"
+                className="bg-white rounded-2xl p-6 mb-4 shadow-sm border border-gray-100 flex items-center justify-between group hover:border-[#3182f6]/30 transition-all"
               >
-                <div className="absolute top-0 left-0 w-2 h-full bg-blue-50 opacity-0 group-hover:opacity-100 transition-all" />
-                
-                <div className="flex items-center gap-8 flex-1 min-w-0">
-                   <div className="w-16 h-16 bg-gray-50 rounded-2xl flex items-center justify-center text-gray-300 group-hover:bg-blue-50 group-hover:text-[#3182f6] transition-colors border border-gray-50">
-                      <Star size={30} className={stock.alertEnabled ? 'fill-[#3182f6] text-[#3182f6]' : ''} />
+                <div className="flex items-center gap-6 min-w-0 flex-1">
+                   <div className="w-14 h-14 bg-gray-50 rounded-2xl flex items-center justify-center text-gray-400 group-hover:bg-blue-50 group-hover:text-[#3182f6] transition-colors flex-shrink-0">
+                      <Star size={24} className={stock.alertEnabled ? 'fill-[#3182f6] text-[#3182f6]' : ''} />
                    </div>
-                   <div className="min-w-0">
-                      <h4 className="text-2xl font-black text-[#191f28] truncate mb-1 group-hover:text-[#3182f6] transition-colors">{stock.name}</h4>
-                      <div className="flex items-center gap-3">
-                         <span className="text-[11px] font-black text-gray-400 uppercase tracking-[0.2em]">{stock.symbol}</span>
-                         <div className="flex items-center gap-1.5 px-2 py-0.5 bg-gray-50 rounded-lg">
-                            <div className={`w-1.5 h-1.5 ${stock.alertEnabled ? 'bg-emerald-500 animate-pulse' : 'bg-gray-300'} rounded-sm`} />
-                            <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">{stock.alertEnabled ? 'Alert On' : 'Muted'}</span>
-                         </div>
+                   <div className="min-w-0 flex-1">
+                      <h4 className="text-xl font-black text-[#191f28] truncate mb-0.5 group-hover:text-[#3182f6] transition-colors uppercase">
+                        {stock.name}
+                      </h4>
+                      <div className="flex items-center gap-2.5">
+                         <span className="text-[10px] font-black text-blue-500 bg-blue-50 px-2 py-0.5 rounded uppercase tracking-wider">
+                           {stock.symbol}
+                         </span>
+                         {stock.updatedAt && (
+                           <span className="text-[9px] font-bold text-gray-300 uppercase tracking-tight">
+                             Synced {stock.updatedAt}
+                           </span>
+                         )}
                       </div>
                    </div>
                 </div>
 
-                <div className="flex items-center gap-10 ml-4">
+                <div className="flex items-center gap-6 ml-4">
                   <div className="text-right">
-                    <p className="text-2xl font-black text-[#191f28] tracking-tighter mb-1">{(stock.price?.toLocaleString() || '--')}원</p>
-                    <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-black ${isUp ? 'bg-red-50 text-[#EF4444]' : 'bg-blue-50 text-[#3B82F6]'}`}>
-                      {isUp ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
+                    <p className="text-xl font-black text-[#191f28] tracking-tighter leading-tight">
+                      {(stock.price?.toLocaleString() || '--')}원
+                    </p>
+                    <div className={`text-[11px] font-black flex items-center justify-end mt-1 ${isUp ? 'text-[#EF4444]' : 'text-[#3B82F6]'}`}>
+                      {isUp ? <TrendingUp size={12} className="mr-1" /> : <TrendingDown size={12} className="mr-1" />}
                       {isUp ? '+' : ''}{stock.change?.toFixed(2)}%
                     </div>
                   </div>
                   
-                  <div className="flex flex-col gap-2">
+                  <div className="flex items-center gap-3 border-l border-gray-100 pl-6">
                      <button 
                        onClick={() => toggleAlert(stock)}
-                       className={`p-3 rounded-2xl transition-all border ${stock.alertEnabled ? 'bg-emerald-50 text-emerald-500 border-emerald-100 shadow-sm shadow-emerald-50' : 'bg-gray-50 text-gray-300 border-gray-100'}`}
+                       className={`p-2.5 rounded-xl transition-all ${stock.alertEnabled ? 'bg-emerald-50 text-emerald-500' : 'bg-gray-50 text-gray-300'}`}
                        title="알림 토글"
                      >
-                       <Bell size={22} className={stock.alertEnabled ? 'animate-bounce' : ''} />
+                       <Bell size={18} className={stock.alertEnabled ? 'animate-bounce' : ''} />
                      </button>
                      <button 
                         onClick={() => removeInterest(stock.id)}
-                        className="p-3 bg-red-50 text-red-400 hover:bg-[#EF4444] hover:text-white rounded-2xl transition-all border border-red-50 opacity-0 group-hover:opacity-100"
+                        className="p-2.5 bg-red-50 text-red-400 hover:bg-[#EF4444] hover:text-white rounded-xl transition-all"
                         title="영구 삭제"
                      >
-                        <Trash2 size={22} />
+                        <Trash2 size={18} />
                      </button>
                   </div>
                 </div>
@@ -232,7 +246,7 @@ export default function WatchlistPage() {
 
           {interestStocks.length === 0 && (
             <div className="bg-white border-2 border-dashed border-gray-100 rounded-[2.5rem] py-24 text-center flex flex-col items-center gap-6">
-              <div className="w-20 h-20 bg-gray-50 rounded-[2rem] flex items-center justify-center text-gray-200">
+              <div className="w-20 h-20 bg-gray-50 rounded-2xl flex items-center justify-center text-gray-200">
                  <Eye size={40} />
               </div>
               <div className="space-y-2">
@@ -250,47 +264,41 @@ export default function WatchlistPage() {
         </div>
       </div>
 
-      {/* 3. Add Interest Modal - Strict Design System, No rounded-full */}
+      {/* Add Interest Modal */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-lg p-8 flex items-center justify-center animate-in fade-in duration-300">
-           <div className="bg-white w-full max-w-lg rounded-[3rem] p-12 space-y-12 animate-in slide-in-from-bottom-10 duration-700 shadow-[0_50px_100px_-20px_rgba(0,0,0,0.3)] relative overflow-hidden">
+           <div className="bg-white w-full max-w-lg rounded-[2.5rem] p-10 space-y-10 animate-in slide-in-from-bottom-10 shadow-2xl relative overflow-hidden">
               <div className="absolute top-0 left-0 w-32 h-32 bg-blue-50/50 rounded-br-[120px] -z-10" />
               
-              <div className="flex justify-between items-center border-b border-gray-50 pb-8">
+              <div className="flex justify-between items-center border-b border-gray-50 pb-6">
                  <div>
-                    <h2 className="text-4xl font-black text-[#191f28] tracking-tighter">관심 종목 등록</h2>
-                    <p className="text-[11px] font-black text-blue-400 uppercase tracking-[0.4em] mt-3 flex items-center gap-2">
-                       <Landmark size={14} />
-                       Asset Monitoring System v1.7
+                    <h2 className="text-3xl font-black text-[#191f28] tracking-tighter">관심 종목 등록</h2>
+                    <p className="text-[10px] font-black text-blue-400 uppercase tracking-[0.3em] mt-2 flex items-center gap-2">
+                       <Landmark size={12} />
+                       Asset Monitoring System
                     </p>
                  </div>
-                 <button onClick={() => setIsAddModalOpen(false)} className="p-4 bg-gray-50 rounded-[1.5rem] text-gray-300 hover:text-gray-900 transition-colors border border-gray-100">
-                    <X size={32} />
+                 <button onClick={() => setIsAddModalOpen(false)} className="p-3 bg-gray-50 rounded-xl text-gray-300 hover:text-gray-900 transition-colors">
+                    <X size={24} />
                  </button>
               </div>
               
-              <div className="space-y-10">
-                 <div className="space-y-3">
-                    <label className="text-[11px] font-black text-gray-400 uppercase tracking-[0.3em] px-2 flex items-center gap-2">
-                       <div className="w-1 h-1 bg-blue-500 rounded-sm" />
-                       종목 이름 (정식 명칭)
-                    </label>
+              <div className="space-y-8">
+                 <div className="space-y-2.5">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] px-1">종목 이름</label>
                     <input 
                       type="text" 
-                      className="w-full h-20 bg-gray-50 rounded-[1.5rem] px-8 font-black text-2xl outline-none focus:ring-8 focus:ring-blue-50 border-2 border-transparent focus:border-blue-100 transition-all placeholder:text-gray-100"
+                      className="w-full h-16 bg-gray-50 rounded-2xl px-6 font-black text-xl outline-none focus:ring-4 focus:ring-blue-50 border-2 border-transparent focus:border-blue-100 transition-all placeholder:text-gray-200"
                       placeholder="예: 태웅"
                       value={targetStock.name}
                       onChange={e => setTargetStock({...targetStock, name: e.target.value})}
                     />
                  </div>
-                 <div className="space-y-3">
-                    <label className="text-[11px] font-black text-gray-400 uppercase tracking-[0.3em] px-2 flex items-center gap-2">
-                       <div className="w-1 h-1 bg-blue-500 rounded-sm" />
-                       티커 번호 (6자리)
-                    </label>
+                 <div className="space-y-2.5">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] px-1">티커 번호</label>
                     <input 
                       type="text" 
-                      className="w-full h-20 bg-gray-50 rounded-[1.5rem] px-8 font-black text-2xl outline-none focus:ring-8 focus:ring-blue-50 border-2 border-transparent focus:border-blue-100 transition-all placeholder:text-gray-100 uppercase tracking-widest"
+                      className="w-full h-16 bg-gray-50 rounded-2xl px-6 font-black text-xl outline-none focus:ring-4 focus:ring-blue-50 border-2 border-transparent focus:border-blue-100 transition-all placeholder:text-gray-200 uppercase tracking-widest"
                       placeholder="예: 044490"
                       value={targetStock.symbol}
                       onChange={e => setTargetStock({...targetStock, symbol: e.target.value})}
@@ -298,17 +306,16 @@ export default function WatchlistPage() {
                  </div>
               </div>
 
-              <div className="pt-4 flex flex-col gap-4">
+              <div className="pt-2 flex flex-col gap-4">
                  <button 
                   onClick={handleAddInterest}
-                  className="w-full h-22 bg-[#191f28] text-white rounded-[1.5rem] font-black text-2xl shadow-2xl hover:bg-[#3182f6] transition-all transform active:scale-[0.98]"
+                  className="w-full h-18 bg-[#191f28] text-white rounded-2xl font-black text-xl shadow-xl hover:bg-[#3182f6] transition-all active:scale-[0.98]"
                  >
                    모니터링 대상에 추가
                  </button>
-                 <div className="flex items-center justify-center gap-2 opacity-30">
-                    <Info size={14} />
-                    <span className="text-[9px] font-black uppercase tracking-widest text-gray-900">Automatic Ticker Suffix (.KS / .KQ) enabled</span>
-                 </div>
+                 <p className="text-center text-[9px] font-bold text-gray-300 uppercase tracking-widest">
+                   Automatic Suffix (.KS/.KQ) applied
+                 </p>
               </div>
            </div>
         </div>
@@ -316,11 +323,11 @@ export default function WatchlistPage() {
 
       {/* Footer Branding */}
       <footer className="mt-32 text-center px-12 pb-24 opacity-10">
-         <div className="flex justify-center items-center gap-4 mb-3">
-            <BarChart3 className="text-gray-900" size={36} />
-            <span className="text-3xl font-black tracking-tighter text-gray-900 uppercase">AI STOCK Monitoring Center</span>
+         <div className="flex justify-center items-center gap-3 mb-2">
+            <BarChart3 className="text-gray-900" size={28} />
+            <span className="text-2xl font-black tracking-tighter text-gray-900 uppercase">AI STOCK Monitoring</span>
          </div>
-         <p className="text-[10px] font-black text-gray-500 uppercase tracking-[1.2em]">Deep Analysis Engine v1.7.0X-Gold Edition</p>
+         <p className="text-[9px] font-black text-gray-500 uppercase tracking-[0.8em]">Deep Analysis Engine v1.7.0X</p>
       </footer>
     </div>
   );
