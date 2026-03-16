@@ -1,11 +1,8 @@
-import { YahooFinance } from 'yahoo-finance2';
+import yahooFinance from 'yahoo-finance2';
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 
-// [최우선 수정] 야후 파이낸스 인스턴스 초기화 적용
-const yahooFinance = new YahooFinance();
-
-// 캐싱 무효화
+// [긴급 수정] Vercel 빌드 오류 해결을 위해 YahooFinance 임포트 방식을 default로 수정
 export const dynamic = 'force-dynamic';
 
 /**
@@ -67,7 +64,7 @@ async function getPublicStockData(tickerOrName: string) {
     try {
       data = JSON.parse(rawText);
     } catch (e) {
-      console.error(`[Stock API] JSON Parse Error for ${tickerOrName}.`);
+      console.error(`[Stock API] JSON 파싱 에러 (${tickerOrName}).`);
       return { success: false, status: "(Error: JSON)" };
     }
 
@@ -75,13 +72,13 @@ async function getPublicStockData(tickerOrName: string) {
     const resultCode = header?.resultCode;
 
     if (resultCode !== "00") {
-      console.error(`[Stock API] FAIL - Code: ${resultCode}`);
+      console.error(`[Stock API] 호출 실패 - 코드: ${resultCode}`);
       return { success: false, status: `(Error: ${resultCode})` };
     }
 
     const item = data?.response?.body?.items?.item?.[0];
     if (item) {
-      console.log(`[Stock API] SUCCESS (${tickerOrName}): ${item.clpr}`);
+      console.log(`[Stock API] 호출 성공 (${tickerOrName}): ${item.clpr}`);
       return {
         price: parseFloat(item.clpr),
         change: parseFloat(item.vs),
@@ -92,14 +89,14 @@ async function getPublicStockData(tickerOrName: string) {
       };
     }
   } catch (e: any) {
-    console.error(`[Stock API] Error:`, e.message);
+    console.error(`[Stock API] 에러:`, e.message);
     return { success: false, status: `(Error: Connection)` };
   }
   return { success: false, status: "(Error: 03)" };
 }
 
 /**
- * 야후 폴백 (인스턴스 방식 수정)
+ * 야후 폴백 (임포트 방식 수정)
  */
 async function getYahooFallback(symbol: string) {
   const baseSymbol = symbol.split('.')[0];
@@ -107,7 +104,7 @@ async function getYahooFallback(symbol: string) {
   for (const ext of extensions) {
     try {
       const target = `${baseSymbol}${ext}`;
-      // [최우선 수정] 인스턴스를 통한 quote 호출
+      // [긴급 수정] 임포트된 yahooFinance 객체 직접 호출
       const quote = (await yahooFinance.quote(target)) as any;
       if (quote && quote.regularMarketPrice) {
         return {
@@ -148,5 +145,5 @@ export async function POST(request: Request) {
       }
     }));
     return NextResponse.json(results.reduce((acc: any, curr) => ({ ...acc, [curr.symbol]: curr }), {}));
-  } catch (error: any) { return NextResponse.json({ error: "Update Error" }, { status: 500 }); }
+  } catch (error: any) { return NextResponse.json({ error: "업데이트 에러" }, { status: 500 }); }
 }

@@ -1,8 +1,8 @@
-import { YahooFinance } from 'yahoo-finance2';
+import yahooFinance from 'yahoo-finance2';
 import { NextResponse } from 'next/server';
 
-// [최우선 수정] yahoo-finance2 v2+ 인스턴스 초기화 방식 적용
-const yahooFinance = new YahooFinance();
+// [긴급 수정] Vercel 빌드 오류 해결을 위해 YahooFinance 임포트 방식을 default로 수정
+// 최신 버전에서는 인스턴스 생성 없이 yahooFinance 객체를 직접 사용 가능합니다.
 
 // 캐싱 강제 무효화
 export const dynamic = 'force-dynamic';
@@ -40,11 +40,10 @@ async function getPublicIndexData(name: string) {
   if (!rawKey || rawKey.includes('YOUR_PUBLIC')) return { success: false, status: "Key Missing" };
 
   try {
-    // [지시사항] API Not Found 수정을 위해 엔드포인트를 공식 주소로 변경
-    // 금융위원회_지수시세정보 서비스의 GetStockMarketIndexByItem 오퍼레이션 사용
+    // [지시사항] API Not Found 수정을 위해 엔드포인트를 공식 주소로 고정
     const baseUrl = "http://apis.data.go.kr/1160100/service/GetMarketIndexInfoService/getStockMarketIndexByItem";
     
-    // 월요일 대응을 위한 지난주 금요일 데이터 고정
+    // 장 오픈 전 공백 대응을 위해 지난주 금요일 데이터 고정
     const basDt = '20260313';
 
     const params = {
@@ -64,7 +63,7 @@ async function getPublicIndexData(name: string) {
 
     const res = await fetch(fullUrl, { cache: 'no-store' });
     
-    // [지시사항] 원시 응답 로그 기록하여 분석 근거 확보
+    // [지시사항] 원시 응답 로그 기록 (디버깅용)
     const rawText = await res.text();
     console.log(`[Market API] API 원시 응답 (${name}):`, rawText);
     
@@ -72,7 +71,7 @@ async function getPublicIndexData(name: string) {
     try {
       data = JSON.parse(rawText);
     } catch (e) {
-      console.error(`[Market API] JSON Parse Error for ${name}.`);
+      console.error(`[Market API] JSON 파싱 에러 (${name}). 응답이 JSON 형식이 아닐 수 있습니다.`);
       return { success: false, status: "(Error: JSON)" };
     }
 
@@ -80,14 +79,14 @@ async function getPublicIndexData(name: string) {
     const resultCode = header?.resultCode;
 
     if (resultCode !== "00") {
-      console.error(`[Market API] FAIL (${name}) - Code: ${resultCode}`);
+      console.error(`[Market API] 호출 실패 (${name}) - 코드: ${resultCode}`);
       return { success: false, status: `(Error: ${resultCode})` };
     }
 
     const item = data?.response?.body?.items?.item?.[0];
 
     if (item) {
-      console.log(`[Market API] SUCCESS (${name}, ${basDt}): ${item.clpr}`);
+      console.log(`[Market API] 호출 성공 (${name}, ${basDt}): ${item.clpr}`);
       return {
         price: parseFloat(item.clpr),
         changePercent: parseFloat(item.fltRt),
@@ -97,7 +96,7 @@ async function getPublicIndexData(name: string) {
       };
     }
   } catch (e: any) {
-    console.error(`[Market API] ERROR (${name}):`, e.message);
+    console.error(`[Market API] 연결 에러 (${name}):`, e.message);
     return { success: false, status: `(Error: Connection)` };
   }
   return { success: false, status: "(Error: 03)" };
@@ -115,10 +114,10 @@ export async function GET() {
         const pData = await getPublicIndexData('코스피');
         if (pData.success) return pData;
         
-        console.log("[Market API] KOSPI Primary Fail -> Trying Yahoo (Instance Mode)...");
-        // [최우세 수정] 초기화된 인스턴스를 통한 호출
+        console.log("[Market API] 코스피 공공데이터 실패 -> 야후 폴백 시도");
+        // [긴급 수정] 임포트된 yahooFinance 객체 직접 호출
         const yData = await (yahooFinance.quote(symbols.kospi.ySymbol) as Promise<any>).catch((err) => {
-          console.error("[Market API] Yahoo KOSPI Crash:", err.message);
+          console.error("[Market API] 야후 코스피 크래시:", err.message);
           return null;
         });
         if (yData) return { price: yData.regularMarketPrice, changePercent: yData.regularMarketChangePercent, success: true, status: "야후 폴백" };
@@ -129,10 +128,10 @@ export async function GET() {
         const pData = await getPublicIndexData('코스닥');
         if (pData.success) return pData;
 
-        console.log("[Market API] KOSDAQ Primary Fail -> Trying Yahoo (Instance Mode)...");
-        // [최우세 수정] 초기화된 인스턴스를 통한 호출
+        console.log("[Market API] 코스닥 공공데이터 실패 -> 야후 폴백 시도");
+        // [긴급 수정] 임포트된 yahooFinance 객체 직접 호출
         const yData = await (yahooFinance.quote(symbols.kosdaq.ySymbol) as Promise<any>).catch((err) => {
-          console.error("[Market API] Yahoo KOSDAQ Crash:", err.message);
+          console.error("[Market API] 야후 코스닥 크래시:", err.message);
           return null;
         });
         if (yData) return { price: yData.regularMarketPrice, changePercent: yData.regularMarketChangePercent, success: true, status: "야후 폴백" };
@@ -148,7 +147,7 @@ export async function GET() {
 
     return NextResponse.json(marketData);
   } catch (error: any) {
-    console.error("[Market API] Critical Global Error:", error.message);
+    console.error("[Market API] 치명적 글로벌 에러:", error.message);
     return NextResponse.json(EMERGENCY_FALLBACK);
   }
 }

@@ -1,13 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { 
-  Plus, 
-  X,
-  RefreshCcw,
-  Bell,
-  AlertCircle
-} from 'lucide-react';
+import { Plus, X, RefreshCcw, Bell, AlertCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 // --- Interfaces ---
@@ -236,18 +230,20 @@ export default function PortfolioPage() {
         </div>
 
         <div className="flex gap-10 items-center overflow-x-auto no-scrollbar py-4">
-          {isMarketLoading ? <SkeletonText width="w-40" /> : marketIndices.map(market => (
-            <div key={market.symbol} className="flex items-center gap-4 whitespace-nowrap min-w-fit">
-              <span className="text-sm font-black text-gray-400">{market.name}</span>
-              <span className={`text-lg font-black ${market.changePercent >= 0 ? 'text-red-500' : 'text-blue-600'}`}>
-                {market.price.toLocaleString(undefined, { maximumFractionDigits: 1 })}
-              </span>
-              <span className={`text-xs font-black px-10 py-3 rounded-full ${market.changePercent >= 0 ? 'text-red-500 bg-red-50' : 'text-blue-600 bg-blue-50'}`}>
-                {market.changePercent >= 0 ? '▲' : '▼'}{Math.abs(market.changePercent).toFixed(1)}%
-                <span className="text-[10px] opacity-70 ml-1">({market.status || '대기'})</span>
-              </span>
-            </div>
-          ))}
+          {isMarketLoading ? <SkeletonText width="w-40" /> : (
+            marketIndices.map(market => (
+              <div key={market.symbol} className="flex items-center gap-4 whitespace-nowrap min-w-fit">
+                <span className="text-sm font-black text-gray-400">{market.name}</span>
+                <span className={`text-lg font-black ${market.changePercent >= 0 ? 'text-red-500' : 'text-blue-600'}`}>
+                  {market.price.toLocaleString(undefined, { maximumFractionDigits: 1 })}
+                </span>
+                <span className={`text-xs font-black px-10 py-3 rounded-full ${market.changePercent >= 0 ? 'text-red-500 bg-red-50' : 'text-blue-600 bg-blue-50'}`}>
+                  {market.changePercent >= 0 ? '▲' : '▼'}{Math.abs(market.changePercent).toFixed(1)}%
+                  <span className="text-[10px] opacity-70 ml-1">({market.status || '대기'})</span>
+                </span>
+              </div>
+            ))
+          )}
         </div>
       </header>
 
@@ -268,12 +264,12 @@ export default function PortfolioPage() {
       <section className="px-8 py-12 overflow-visible">
         <h3 className="text-2xl font-black mb-12">나의 투자 현황</h3>
         
-        {isInitialLoading ? <div className="space-y-6"><SkeletonText width="w-full" height="h-32" /></div> : stocks.length === 0 ? (
-          /* [지시사항] 고정 높이 제거, p-8 flex-col items-center gap-6 적용, 버튼 위치 강제 속성 제거 */
-          <div className="w-full h-auto min-h-fit p-8 bg-gray-50/50 rounded-[5rem] text-center border-2 border-dashed border-gray-100 flex flex-col items-center justify-center gap-8 overflow-visible">
-            <p className="text-gray-400 font-black leading-relaxed whitespace-pre-line text-lg max-w-xs overflow-visible">보유하신 종목을 등록해 보세요.{"\n"}AI가 즉시 전략을 제안합니다.</p>
-            {/* 독립된 공간에 버튼 배치 (자연스러운 수직 쌓기) */}
-            <button onClick={() => setIsAddModalOpen(true)} className="bg-[#3182f6] text-white px-12 py-7 rounded-full font-black shadow-[0_20px_40px_rgba(49,130,246,0.2)] active:scale-95 transition-all text-2xl">지금 시작하기</button>
+        {isInitialLoading ? <SkeletonCircle /> : stocks.length === 0 ? (
+          /* [지시사항] 고정 높이(h-32, h-40 등)를 모조리 지우고 h-auto로 개편 */
+          <div className="w-full h-auto min-h-fit p-10 bg-gray-50/50 rounded-[5rem] text-center border-2 border-dashed border-gray-100 flex flex-col items-center justify-center gap-10 overflow-visible">
+            <p className="text-gray-400 font-black leading-relaxed whitespace-pre-line text-xl max-w-sm overflow-visible px-4">보유하신 종목을 한 번만 등록해 보세요.{"\n"}AI가 즉시 승률 높은 전략을 제안합니다.</p>
+            {/* absolute를 빼고 아래쪽에 정상적으로 배치 */}
+            <button onClick={() => setIsAddModalOpen(true)} className="bg-[#3182f6] text-white px-14 py-8 rounded-full font-black shadow-[0_25px_50px_rgba(49,130,246,0.25)] active:scale-95 transition-all text-2xl">지금 시작하기</button>
           </div>
         ) : (
           <div className="space-y-14">
@@ -311,7 +307,7 @@ export default function PortfolioPage() {
             return (
               <div key={stock.id} className="flex items-center justify-between p-6 -m-6 rounded-[3rem] transition-all cursor-pointer overflow-visible" onClick={() => analyzeStockOrInterest(stock, false)}>
                 <div className="flex items-center gap-10 min-w-0 overflow-visible">
-                  <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center text-gray-300 flex-shrink-0 shadow-sm">
+                  <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center text-gray-300 flex-shrink-0 shadow-sm border border-gray-100">
                     <Bell size={28} />
                   </div>
                   <div className="min-w-0">
