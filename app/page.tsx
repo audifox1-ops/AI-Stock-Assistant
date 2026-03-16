@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { Plus, X, RefreshCcw, Bell, Trash2 } from 'lucide-react';
+import { Plus, X, RefreshCcw, Bell, Trash2, BellRing } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 // --- Interfaces ---
@@ -25,9 +25,6 @@ interface Stock {
   analysis?: AiAnalysisResult;
   error?: string;
   changePercent?: number;
-  fetchError?: boolean;
-  isFallback?: boolean;
-  status?: string;
   updatedAt?: string;
 }
 
@@ -38,10 +35,6 @@ interface InterestStock {
   price: number | null;
   change: number | null;
   alertEnabled: boolean;
-  fetchError?: boolean;
-  isFallback?: boolean;
-  status?: string;
-  analysis?: AiAnalysisResult;
   updatedAt?: string;
 }
 
@@ -50,40 +43,87 @@ interface MarketIndex {
   symbol: string;
   price: number;
   changePercent: number;
-  success: boolean;
-  isFallback?: boolean;
-  status?: string;
   updatedAt?: string;
 }
 
-// --- Skeleton UI Components ---
-const SkeletonText = ({ width = "w-32", height = "h-4", className = "" }) => (
-  <div className={` ${width} ${height} bg-gray-100 rounded-lg animate-pulse ${className}`}></div>
+// --- Utility: Base64 to Uint8Array for VAPID ---
+function urlBase64ToUint8Array(base64String: string) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}
+
+// --- Skeleton UI ---
+const SkeletonCircle = () => (
+  <div className="w-16 h-16 bg-gray-100 rounded-2xl animate-pulse"></div>
 );
 
-const SkeletonCircle = ({ size = "w-16 h-16" }) => (
-  <div className={` ${size} bg-gray-100 rounded-2xl animate-pulse`}></div>
-);
-
-// --- Main Page ---
 export default function PortfolioPage() {
-  // State
   const [stocks, setStocks] = useState<Stock[]>([]);
   const [interestStocks, setInterestStocks] = useState<InterestStock[]>([]);
   const [marketIndices, setMarketIndices] = useState<MarketIndex[]>([]);
-  
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isMarketLoading, setIsMarketLoading] = useState(true);
-  
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [expandedStockId, setExpandedStockId] = useState<string | number | null>(null);
-  const [expandedInterestId, setExpandedInterestId] = useState<string | number | null>(null);
-  const [loadingAi, setLoadingAi] = useState<Record<string | number, boolean>>({});
+  const [pushSubscription, setPushSubscription] = useState<any>(null);
 
   const [newStock, setNewStock] = useState<Partial<Stock>>({
     name: '', symbol: '', avgPrice: 0, quantity: 0, type: '스윙', target: 0, stopLoss: 0
   });
+
+  // 1. 서비스 워커 등록 및 푸시 구독 로직
+  useEffect(() => {
+    if ('serviceWorker' in navigator && 'PushManager' in window) {
+      navigator.serviceWorker.register('/sw.js')
+        .then(reg => {
+          console.log('[SW] Registered:', reg);
+          return reg.pushManager.getSubscription();
+        })
+        .then(sub => {
+          if (sub) {
+            console.log('[Push] Existing Sub:', sub);
+            setPushSubscription(sub);
+          }
+        })
+        .catch(err => console.error('[SW/Push] Error:', err));
+    }
+  }, []);
+
+  const requestNotificationPermission = async () => {
+    try {
+      const permission = await Notification.requestPermission();
+      if (permission === 'granted') {
+        const reg = await navigator.serviceWorker.ready;
+        const sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!)
+        });
+        console.log('[Push] New Sub:', JSON.stringify(sub));
+        setPushSubscription(sub);
+        alert('알림 권한이 승인되었습니다!');
+
+        // 테스트 발송 호출
+        await fetch('/api/push', {
+          method: 'POST',
+          body: JSON.stringify({
+            subscription: sub,
+            title: "AI Stock 알림 활성화",
+            body: "이제 실시간 목표가 알림을 브라우저로 받으실 수 있습니다.",
+            url: "/"
+          })
+        });
+      }
+    } catch (err) {
+      console.error('[Push] Subscribe failed:', err);
+      alert('알림 구독에 실패했습니다.');
+    }
+  };
 
   // Data Fetching
   const fetchMarketIndices = async (silent = false) => {
@@ -92,7 +132,7 @@ export default function PortfolioPage() {
       const res = await fetch('/api/market', { cache: 'no-store' });
       const data = await res.json();
       if (Array.isArray(data)) setMarketIndices(data);
-    } catch (error) { console.error("[Front] Market API Error:", error); }
+    } catch (error) { console.error(error); }
     finally { if (!silent) setIsMarketLoading(false); }
   };
 
@@ -101,7 +141,7 @@ export default function PortfolioPage() {
       const { data, error } = await supabase.from('holdings').select('*').order('created_at', { ascending: false });
       if (error) throw error;
       if (data) {
-        const mapped: Stock[] = data.map(item => ({
+        const mapped = data.map(item => ({
           id: item.id, symbol: item.symbol, name: item.stock_name,
           avgPrice: Number(item.avg_buy_price), currentPrice: null, quantity: Number(item.quantity),
           type: item.position_type as string, target: Number(item.target_price), stopLoss: Number(item.stop_loss),
@@ -118,7 +158,7 @@ export default function PortfolioPage() {
       const { data, error } = await supabase.from('alerts').select('*').order('created_at', { ascending: false });
       if (error) throw error;
       if (data) {
-        const mapped: InterestStock[] = data.map(item => ({
+        const mapped = data.map(item => ({
           id: item.id, name: item.stock_name, symbol: item.symbol, price: null, change: null, alertEnabled: item.alert_enabled,
         }));
         setInterestStocks(mapped);
@@ -132,31 +172,13 @@ export default function PortfolioPage() {
     if (targetStocks.length === 0 && targetInterests.length === 0) return;
     if (!silent) setIsRefreshing(true);
     try {
-      const symbols = Array.from(new Set([
-        ...targetStocks.map(s => s.symbol),
-        ...targetInterests.map(s => s.symbol)
-      ])).filter(Boolean);
-
-      const res = await fetch('/api/stock', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ symbols }),
-        cache: 'no-store'
-      });
+      const symbols = Array.from(new Set([...targetStocks.map(s => s.symbol), ...targetInterests.map(s => s.symbol)])).filter(Boolean);
+      const res = await fetch('/api/stock', { method: 'POST', body: JSON.stringify({ symbols }), cache: 'no-store' });
       const data = await res.json();
       
-      setStocks(prev => prev.map(s => {
-        const live = data[s.symbol];
-        if (live) return { ...s, currentPrice: live.price, changePercent: live.changePercent, isFallback: live.isFallback, status: live.status, updatedAt: live.updatedAt };
-        return s;
-      }));
-
-      setInterestStocks(prev => prev.map(s => {
-        const live = data[s.symbol];
-        if (live) return { ...s, price: live.price, change: live.changePercent, isFallback: live.isFallback, status: live.status, updatedAt: live.updatedAt };
-        return s;
-      }));
-    } catch (error) { console.error("[Front] Price Fetch Error:", error); }
+      setStocks(prev => prev.map(s => data[s.symbol] ? { ...s, currentPrice: data[s.symbol].price, changePercent: data[s.symbol].changePercent, updatedAt: data[s.symbol].updatedAt } : s));
+      setInterestStocks(prev => prev.map(s => data[s.symbol] ? { ...s, price: data[s.symbol].price, change: data[s.symbol].changePercent, updatedAt: data[s.symbol].updatedAt } : s));
+    } catch (error) { console.error(error); }
     finally { if (!silent) setIsRefreshing(false); }
   };
 
@@ -168,112 +190,69 @@ export default function PortfolioPage() {
       await fetchPrices(h, i);
       setIsInitialLoading(false);
     };
-
     init();
 
-    const pollInterval = setInterval(() => {
+    const interval = setInterval(() => {
       fetchMarketIndices(true);
-      setStocks(currentStocks => {
-        setInterestStocks(currentInterests => {
-          fetchPrices(currentStocks, currentInterests, true);
-          return currentInterests;
-        });
-        return currentStocks;
+      setStocks(curr => {
+        setInterestStocks(iCurr => { fetchPrices(curr, iCurr, true); return iCurr; });
+        return curr;
       });
     }, 10000);
-
-    return () => clearInterval(pollInterval);
+    return () => clearInterval(interval);
   }, []);
 
   const handleAddStock = async () => {
-    if (!newStock.name || !newStock.avgPrice || !newStock.symbol) { alert('필수 입력!'); return; }
+    if (!newStock.name || !newStock.avgPrice || !newStock.symbol) return;
     try {
       const { data, error } = await supabase.from('holdings').insert([{
         symbol: newStock.symbol.toUpperCase(), stock_name: newStock.name, avg_buy_price: Number(newStock.avgPrice),
         quantity: Number(newStock.quantity), position_type: newStock.type,
         target_price: Number(newStock.target), stop_loss: Number(newStock.stopLoss)
       }]).select();
-      if (error) throw error;
-      if (data) { 
-        const updated = await fetchHoldings();
-        fetchPrices(updated, interestStocks);
-        setIsAddModalOpen(false); 
-      }
+      if (!error) { fetchHoldings().then(h => fetchPrices(h, interestStocks)); setIsAddModalOpen(false); }
     } catch (err) { console.error(err); }
   };
 
   const removeInterest = async (id: string | number) => {
-    if (!confirm('관심 종목에서 삭제할까요?')) return;
-    try {
-      const { error } = await supabase.from('alerts').delete().eq('id', id);
-      if (error) throw error;
-      setInterestStocks(prev => prev.filter(s => s.id !== id));
-    } catch (err) { console.error(err); }
+    if (!confirm('삭제할까요?')) return;
+    try { await supabase.from('alerts').delete().eq('id', id); setInterestStocks(prev => prev.filter(s => s.id !== id)); } catch (err) {}
   };
-
-  const toggleInterestAlert = async (id: string | number, current: boolean) => {
-    try {
-      const { error } = await supabase.from('alerts').update({ alert_enabled: !current }).eq('id', id);
-      if (error) throw error;
-      setInterestStocks(prev => prev.map(s => s.id === id ? { ...s, alertEnabled: !current } : s));
-    } catch (err) { console.error(err); }
-  };
-
-  const analyzeStockOrInterest = async (item: Stock | InterestStock, isHolding: boolean) => {
-    const id = item.id;
-    const isExpanded = isHolding ? expandedStockId === id : expandedInterestId === id;
-    if (isExpanded) { if (isHolding) setExpandedStockId(null); else setExpandedInterestId(null); return; }
-    if (item.analysis) { if (isHolding) setExpandedStockId(id); else setExpandedInterestId(id); return; }
-
-    setLoadingAi(prev => ({ ...prev, [id]: true }));
-    try {
-      const price = isHolding ? (item as Stock).currentPrice : (item as InterestStock).price;
-      const res = await fetch('/api/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          name: item.name, currentPrice: price, type: isHolding ? 'holding' : 'interest',
-          rate: isHolding ? (((price! / (item as Stock).avgPrice) - 1) * 100).toFixed(2) : undefined
-        }),
-      });
-      const data = await res.json();
-      if (isHolding) { setStocks(prev => prev.map(s => s.id === id ? { ...s, analysis: data } : s)); setExpandedStockId(id); }
-      else { setInterestStocks(prev => prev.map(s => s.id === id ? { ...s, analysis: data } : s)); setExpandedInterestId(id); }
-    } catch (err) { console.error(err); }
-    finally { setLoadingAi(prev => ({ ...prev, [id]: false })); }
-  };
-
-  const totalBuyAmount = stocks.reduce((acc, s) => acc + s.avgPrice * s.quantity, 0);
-  const totalCurrentAmount = stocks.reduce((acc, s) => acc + (s.currentPrice || s.avgPrice) * s.quantity, 0);
-  const totalRate = totalBuyAmount > 0 ? ((totalCurrentAmount / totalBuyAmount - 1) * 100).toFixed(2) : '0.00';
 
   return (
     <div className="min-h-screen bg-gray-50/30 text-[#191f28] pb-44 animate-in fade-in duration-500 overflow-x-hidden overflow-y-visible">
       {/* Header */}
       <header className="w-full px-8 pt-14 pb-8 overflow-hidden box-border bg-white border-b border-gray-100">
         <div className="flex justify-between items-center mb-12 overflow-visible">
-          <h1 className="text-3xl font-black tracking-tight text-[#3182f6]">AI Stock</h1>
+          <div className="flex items-center gap-4">
+            <h1 className="text-3xl font-black tracking-tight text-[#3182f6]">AI Stock</h1>
+            {/* [지시사항] 알림 설정 버튼 */}
+            {!pushSubscription && (
+              <button 
+                onClick={requestNotificationPermission}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-500 rounded-full text-xs font-bold animate-pulse"
+              >
+                <BellRing size={16} /> 알림 연동
+              </button>
+            )}
+          </div>
           <div className="flex gap-6 overflow-visible">
-            <button onClick={() => { fetchMarketIndices(); fetchPrices(stocks, interestStocks); }} className="p-4 text-gray-400 bg-gray-50 rounded-full shadow-sm">
+            <button onClick={() => { fetchMarketIndices(); fetchPrices(stocks, interestStocks); }} className="p-4 text-gray-400 bg-gray-50 rounded-full shadow-sm hover:bg-gray-100">
               <RefreshCcw size={24} className={isRefreshing ? 'animate-spin' : ''} />
             </button>
-            <button onClick={() => setIsAddModalOpen(true)} className="p-4 text-[#3182f6] bg-blue-50 rounded-full shadow-sm">
+            <button onClick={() => setIsAddModalOpen(true)} className="p-4 text-[#3182f6] bg-blue-50 rounded-full shadow-sm hover:bg-blue-100">
               <Plus size={30} strokeWidth={3} />
             </button>
           </div>
         </div>
 
         <div className="flex gap-10 items-center overflow-x-auto no-scrollbar py-4 w-full">
-          {isMarketLoading ? <SkeletonText width="w-40" /> : marketIndices.map(market => (
+          {isMarketLoading ? <div className="w-40 h-4 bg-gray-100 animate-pulse rounded" /> : marketIndices.map(market => (
             <div key={market.symbol} className="flex flex-col gap-1 min-w-fit">
               <div className="flex items-center gap-4 whitespace-nowrap">
                 <span className="text-sm font-black text-gray-400">{market.name}</span>
-                <span className={`text-lg font-black ${market.changePercent >= 0 ? 'text-red-500' : 'text-blue-600'}`}>
-                  {market.price.toLocaleString(undefined, { maximumFractionDigits: 1 })}
-                </span>
-                <span className={`text-xs font-black px-10 py-3 rounded-full ${market.changePercent >= 0 ? 'text-red-500 bg-red-50' : 'text-blue-600 bg-blue-50'}`}>
-                  {market.changePercent >= 0 ? '▲' : '▼'}{Math.abs(market.changePercent).toFixed(1)}%
-                </span>
+                <span className={`text-lg font-black ${market.changePercent >= 0 ? 'text-red-500' : 'text-blue-600'}`}>{market.price.toLocaleString()}</span>
+                <span className={`text-xs font-black px-10 py-3 rounded-full ${market.changePercent >= 0 ? 'text-red-500 bg-red-50' : 'text-blue-600 bg-blue-50'}`}>{market.changePercent >= 0 ? '▲' : '▼'}{Math.abs(market.changePercent).toFixed(1)}%</span>
               </div>
               <p className="text-[10px] text-gray-400 font-bold ml-1">({market.updatedAt || '--:--:--'} 기준)</p>
             </div>
@@ -282,7 +261,7 @@ export default function PortfolioPage() {
       </header>
 
       {/* Asset Summary */}
-      <section className="px-8 py-12 overflow-visible bg-white">
+      <section className="px-8 py-12 bg-white">
         <p className="text-sm font-black text-gray-400 mb-3 tracking-wider uppercase">Portfolio Balance</p>
         <div className="flex flex-wrap items-center gap-6 overflow-visible">
           <h2 className="text-5xl font-black tracking-tight leading-none overflow-visible">{totalCurrentAmount.toLocaleString()}원</h2>
@@ -292,111 +271,29 @@ export default function PortfolioPage() {
         </div>
       </section>
 
-      {/* Holdings Section */}
-      <section className="px-8 py-12 overflow-visible mt-4">
-        <h3 className="text-2xl font-black mb-12">나의 투자 현황</h3>
-        
-        {isInitialLoading ? <SkeletonCircle /> : stocks.length === 0 ? (
-          <div className="flex flex-col items-center justify-center p-8 gap-8 border-2 border-dashed border-gray-200 rounded-2xl w-full box-border bg-white">
-            <p className="text-gray-500 text-center text-lg leading-relaxed">
-              보유하신 종목을 한 번만 등록해 보세요.<br/>
-              AI가 즉시 승률 높은 전략을 제안합니다.
-            </p>
-            <button 
-              onClick={() => setIsAddModalOpen(true)} 
-              className="px-8 py-3 bg-blue-500 text-white font-bold rounded-full w-fit whitespace-nowrap shadow-md hover:bg-blue-600 transition-colors"
-            >
-              지금 시작하기
-            </button>
-          </div>
-        ) : (
-          <div className="space-y-6">
-            {stocks.map(stock => {
-              const isProfit = (stock.currentPrice || stock.avgPrice) >= stock.avgPrice;
-              const rate = (( (stock.currentPrice || stock.avgPrice) / stock.avgPrice - 1) * 100).toFixed(1);
-              return (
-                <div 
-                  key={stock.id} 
-                  className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 flex justify-between items-center cursor-pointer hover:border-blue-200 transition-all"
-                  onClick={() => analyzeStockOrInterest(stock, true)}
-                >
-                  <div className="flex items-center gap-8 min-w-0 flex-1">
-                    <div className={`flex-shrink-0 w-16 h-16 rounded-2xl flex items-center justify-center font-black text-white ${isProfit ? 'bg-red-400' : 'bg-blue-400'}`}>
-                      {stock.name.charAt(0)}
-                    </div>
-                    <div className="min-w-0">
-                      <h4 className="text-xl font-bold text-gray-900 leading-tight mb-1 truncate uppercase">{stock.name}</h4>
-                      <p className="text-xs font-medium text-gray-400">
-                        {stock.quantity.toLocaleString()}주 · {stock.updatedAt ? `${stock.updatedAt} 기준` : '업데이트 중'}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="text-right ml-4">
-                    <p className="text-xl font-black text-gray-900 mb-1">{(stock.currentPrice?.toLocaleString() || '--')}원</p>
-                    <div className={`px-6 py-1 rounded-full text-xs font-black inline-block ${isProfit ? 'text-red-500 bg-red-50' : 'text-blue-600 bg-blue-50'}`}>
-                      {isProfit ? '+' : ''}{rate}%
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </section>
-
-      {/* Interests Section - [지시사항] 모던 클린 카드형 UX 적용 */}
-      <section className="px-8 py-12 overflow-visible bg-gray-50/50">
+      {/* Interests Section - 모던 클린 카드형 */}
+      <section className="px-8 py-12 bg-gray-50/50">
         <h3 className="text-2xl font-black mb-12">관심있는 종목</h3>
         <div className="space-y-4">
           {interestStocks.map(stock => {
             const isUp = (stock.change || 0) >= 0;
             return (
-              <div 
-                key={stock.id} 
-                className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 flex flex-row items-center justify-between transition-all hover:bg-gray-50 active:scale-[0.98]"
-              >
-                {/* [왼쪽 구역] 종목 정보 - 짤림 절대 불가 구조 */}
-                <div className="flex flex-col min-w-0 flex-1" onClick={() => analyzeStockOrInterest(stock, false)}>
-                  <h4 className="text-xl font-bold text-gray-900 mb-1 truncate uppercase">
-                    {stock.name}
-                  </h4>
+              <div key={stock.id} className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 flex flex-row items-center justify-between transition-all hover:bg-gray-50">
+                <div className="flex flex-col min-w-0 flex-1">
+                  <h4 className="text-xl font-bold text-gray-900 mb-1 truncate uppercase">{stock.name}</h4>
                   <div className="flex items-center gap-3">
-                    <span className="text-xs font-black text-blue-500 bg-blue-50 px-2 py-0.5 rounded uppercase tracking-tighter">
-                      {stock.symbol}
-                    </span>
-                    {stock.updatedAt && (
-                      <span className="text-[10px] font-bold text-gray-400">
-                        {stock.updatedAt} 기준
-                      </span>
-                    )}
+                    <span className="text-xs font-black text-blue-500 bg-blue-50 px-2 py-0.5 rounded uppercase">{stock.symbol}</span>
+                    {stock.updatedAt && <span className="text-[10px] font-bold text-gray-400">{stock.updatedAt} 기준</span>}
                   </div>
                 </div>
-
-                {/* [오른쪽 구역] 가격 및 액션 - 겹침 방지 */}
                 <div className="flex flex-row items-center gap-6 flex-shrink-0 ml-4">
-                  <div className="text-right" onClick={() => analyzeStockOrInterest(stock, false)}>
-                    <p className="text-xl font-black text-gray-900 leading-tight">
-                      {(stock.price?.toLocaleString() || '--')}원
-                    </p>
-                    <p className={`text-xs font-black mt-1 ${isUp ? 'text-red-500' : 'text-blue-600'}`}>
-                      {isUp ? '▲' : '▼'}{Math.abs(stock.change || 0).toFixed(2)}%
-                    </p>
+                  <div className="text-right">
+                    <p className="text-xl font-black text-gray-900 leading-tight">{(stock.price?.toLocaleString() || '--')}원</p>
+                    <p className={`text-xs font-black mt-1 ${isUp ? 'text-red-500' : 'text-blue-600'}`}>{isUp ? '▲' : '▼'}{Math.abs(stock.change || 0).toFixed(2)}%</p>
                   </div>
-                  
-                  {/* 액션 버튼 그룹 */}
                   <div className="flex items-center gap-3 border-l border-gray-100 pl-6 ml-2">
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); toggleInterestAlert(stock.id, stock.alertEnabled); }}
-                      className={`p-3 rounded-xl transition-all ${stock.alertEnabled ? 'text-blue-500 bg-blue-50' : 'text-gray-300 hover:text-gray-500 bg-gray-50'}`}
-                    >
-                      <Bell size={20} className={stock.alertEnabled ? 'animate-pulse' : ''} />
-                    </button>
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); removeInterest(stock.id); }}
-                      className="p-3 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
-                    >
-                      <Trash2 size={20} />
-                    </button>
+                    <button className={`p-3 rounded-xl transition-all ${stock.alertEnabled ? 'text-blue-500 bg-blue-50' : 'text-gray-300 bg-gray-50'}`}><Bell size={20} /></button>
+                    <button onClick={() => removeInterest(stock.id)} className="p-3 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"><Trash2 size={20} /></button>
                   </div>
                 </div>
               </div>
