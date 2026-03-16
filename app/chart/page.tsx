@@ -2,17 +2,17 @@
 
 import React, { useState, useEffect } from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
-import { ChevronLeft, Bot, Loader2, AlertCircle } from 'lucide-react';
+import { ChevronLeft, Bot, Loader2, AlertCircle, HelpCircle } from 'lucide-react';
 import Link from 'next/link';
 
 export const dynamic = 'force-dynamic';
 
 export default function ChartPage() {
-  // [강제 지침 1] 차트 렌더링 전 마운트 확인 가드
   const [isMounted, setIsMounted] = useState(false);
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [analysis, setAnalysis] = useState<string | null>(null);
   const [errorStatus, setErrorStatus] = useState<string | null>(null);
+  const [showTooltip, setShowTooltip] = useState(false);
 
   const data = [
     { time: '09:00', price: 54200 },
@@ -51,33 +51,38 @@ export default function ChartPage() {
     } finally { setIsAiLoading(false); }
   };
 
-  // [강제 지침 1] 마운트 전에는 로딩 UI만 표시하여 width 에러 방지
   if (!isMounted) {
     return (
       <div className="bg-slate-50 min-h-screen flex items-center justify-center">
         <div className="text-center">
           <Loader2 className="animate-spin text-blue-400 mx-auto mb-4" size={40} />
-          <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">System Mounting...</p>
+          <p className="text-sm font-bold text-slate-400 uppercase tracking-widest leading-none">Mounting Chart System...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="bg-slate-50 min-h-screen">
-      <header className="px-5 py-8 bg-white border-b border-slate-100 flex items-center gap-4 sticky top-0 z-40">
-         <Link href="/" className="p-2 bg-slate-50 rounded-xl text-slate-400">
+    <div className="bg-slate-50 min-h-screen pb-24">
+      <header className="px-5 py-6 bg-white border-b border-gray-100 flex items-center gap-4 sticky top-0 z-40">
+         <Link href="/" className="p-2 bg-slate-50 rounded-xl text-slate-400 hover:text-blue-500 transition-colors">
             <ChevronLeft size={24} />
          </Link>
-         <div>
+         <div className="flex-1">
             <h1 className="text-xl font-bold text-slate-900 tracking-tight">태웅 실시간 차트</h1>
-            <p className="text-[10px] font-bold text-slate-300 uppercase tracking-widest leading-none">Status: Precision Tracking</p>
+            <p className="text-[10px] font-bold text-slate-300 uppercase tracking-widest leading-none">Symbol: KOSDAQ 044490</p>
          </div>
       </header>
 
-      <div className="px-5 mt-6 space-y-8">
-         {/* [강제 지침 1] ResponsiveContainer 삭제 및 물리적 하드코딩(350x300) */}
-         <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex justify-center items-center overflow-hidden">
+      <div className="px-5 mt-6 space-y-6">
+         {/* 차트 영역 - 물리적 고정(350x300) 유지 */}
+         <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-center items-center overflow-hidden">
+            <div className="w-full flex justify-between items-center mb-4 px-2">
+               <span className="text-xs font-bold text-slate-400 flex items-center gap-1.5">
+                  <TrendingUp size={14} className="text-green-500" /> 실시간 변동량
+               </span>
+               <span className="text-[10px] text-slate-300">Updated: Just Now</span>
+            </div>
             <AreaChart 
               width={350} 
               height={300} 
@@ -98,40 +103,71 @@ export default function ChartPage() {
             </AreaChart>
          </div>
 
-         {/* [강제 지침 3] 검은색 배경 완전 철거 및 파스텔 UI + 원본 에러 노출 */}
-         <div className="bg-blue-50 text-slate-800 rounded-2xl p-6 shadow-sm border border-blue-100 break-words w-full">
-            <h3 className="text-lg font-bold flex items-center gap-2 mb-3">
-               <Bot size={22} className="text-blue-500" /> 🤖 전략가 AI 정밀 진단
-            </h3>
+         {/* [5차 핵심] 도움말 시스템 및 가독성 최적화 AI 리포트 */}
+         <div className="bg-blue-50 text-slate-800 rounded-2xl p-6 shadow-sm border border-blue-100 relative">
+            <div className="flex items-center justify-between mb-4">
+               <h3 className="text-lg font-bold flex items-center gap-2">
+                  <Bot size={22} className="text-blue-500" /> 🤖 전략가 AI 정밀 진단
+                  {/* 도움말 아이콘 및 툴팁 */}
+                  <div className="relative inline-block ml-1">
+                     <HelpCircle 
+                        size={16} 
+                        className="text-blue-200 cursor-pointer hover:text-blue-400 transition-colors"
+                        onClick={() => setShowTooltip(!showTooltip)}
+                     />
+                     {showTooltip && (
+                        <div className="absolute left-6 -top-2 w-48 bg-slate-800 text-white text-[11px] p-3 rounded-xl shadow-xl z-50 animate-in fade-in zoom-in duration-200">
+                           <p className="font-bold mb-1">💡 AI 정밀 진단이란?</p>
+                           AI가 현재 차트 패턴, 실시간 체결 강도, 외국인 및 기관의 매수세를 종합 분석하여 3줄 핵심 가이드를 제시합니다.
+                        </div>
+                     )}
+                  </div>
+               </h3>
+               {!isAiLoading && (
+                  <button onClick={fetchAnalysis} className="text-blue-400">
+                     <RefreshCcw size={16} className={isAiLoading ? 'animate-spin' : ''} />
+                  </button>
+               )}
+            </div>
             
-            {isAiLoading ? (
-               <div className="py-4 flex flex-col items-center gap-3">
-                  <Loader2 className="animate-spin text-blue-300" size={24} />
-                  <p className="text-[10px] font-bold text-blue-200 tracking-widest uppercase">Fetching Google Intelligence...</p>
-               </div>
-            ) : errorStatus ? (
-               <div className="p-4 bg-red-50 border border-red-100 rounded-xl flex items-start gap-3">
-                  <AlertCircle className="text-red-500 mt-1 flex-shrink-0" size={18} />
-                  <p className="text-sm font-bold text-red-600 leading-relaxed whitespace-pre-wrap">
-                     {errorStatus}
+            <div className="min-h-[140px] flex flex-col justify-center">
+               {isAiLoading ? (
+                  <div className="py-6 flex flex-col items-center gap-3">
+                     <Loader2 className="animate-spin text-blue-300" size={28} />
+                     <p className="text-[10px] font-bold text-blue-300 tracking-widest uppercase">Analyzing Deep Data...</p>
+                  </div>
+               ) : errorStatus ? (
+                  <div className="p-4 bg-red-50 border border-red-100 rounded-xl flex items-start gap-3">
+                     <AlertCircle className="text-red-500 mt-1 flex-shrink-0" size={18} />
+                     <p className="text-xs font-bold text-red-600 leading-relaxed whitespace-pre-wrap">
+                        {errorStatus}
+                     </p>
+                  </div>
+               ) : (
+                  /* [강제 지침 2] 가독성 최적화 클래스 적용 */
+                  <p className="text-base font-bold leading-relaxed text-slate-700 whitespace-pre-wrap">
+                     {analysis || "종목 데이터를 분석 중입니다. 잠시만 기다려 주세요."}
                   </p>
-               </div>
-            ) : (
-               <p className="text-base font-bold leading-relaxed text-slate-700">
-                  {analysis || "AI 분석 서버와 통신 중입니다..."}
-               </p>
-            )}
+               )}
+            </div>
          </div>
 
-         <div className="pb-10">
-            <button 
-              onClick={fetchAnalysis}
-              className="w-full bg-slate-900 text-white py-4 rounded-xl font-bold text-base active:scale-[0.98] transition-all"
+         <div className="pb-4">
+            <Link 
+              href="/" 
+              className="w-full flex items-center justify-center gap-2 bg-slate-900 text-white py-4 rounded-2xl font-bold text-base shadow-lg shadow-slate-200 active:scale-[0.98] transition-all"
             >
-               새로고침 및 재분석
-            </button>
+               목록으로 돌아가기
+            </Link>
          </div>
       </div>
     </div>
   );
+}
+
+// Icon helper for TrendingUp (used but not defined locally)
+function TrendingUp(props: any) {
+   return (
+     <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+   )
 }

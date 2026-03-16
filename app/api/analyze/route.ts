@@ -14,16 +14,25 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "분석에 필요한 종목 데이터(이름/티커)가 전송되지 않았습니다." }, { status: 200 });
     }
 
-    // 2. API 키 명시적 검사 (사용자 지침: Vercel 환경변수 누락 시 명확히 고지)
+    // 2. API 키 명시적 검사
     const apiKey = process.env.GOOGLE_GEMINI_API_KEY;
     if (!apiKey || apiKey === "your_gemini_api_key_here") {
       return NextResponse.json({ error: "API 키가 Vercel에 없습니다! 환경설정을 확인하세요." }, { status: 200 });
     }
 
-    const prompt = `주식 분석가로서 [${name} (${symbol})]를 분석하세요. 현재가 ${price}, 변동 ${changePercent}%. 핵심 3줄 대응 전략을 작성하세요.`;
+    // [강제 지침 적용] 마크다운 금지 및 3문단 요약 프롬프트 강화
+    const prompt = `
+      당신은 전문 주식 분석가입니다. [${name} (${symbol})]의 현재가 ${price}원, 변동률 ${changePercent}%를 바탕으로 분석하세요.
+      
+      [필수 제약 조건]
+      1. 절대 마크다운 특수기호(#, *, -, 등)를 사용하지 마세요. 오직 일반 텍스트만 사용하세요.
+      2. 반드시 읽기 쉽게 딱 3개의 짧은 문단으로만 요약하세요.
+      3. 문단 사이에는 줄바꿈(\\n)을 두 번 넣어 확실히 구분하세요.
+      4. 모바일 앱 화면이므로 문장을 짧고 간결하게 작성하세요.
+      5. 첫 문단은 기술적 흐름, 두 번째 문단은 수급 분석, 세 번째 문단은 최종 투자의견으로 구성하세요.
+    `;
 
-    // 3. [최적화 지침 반영] 공식 지원 안정 모델 gemini-2.5-flash로 엔드포인트 즉시 교체
-    // 사용자가 제공한 정확한 URL 구조를 그대로 반영합니다.
+    // 3. 최신 모델 엔드포인트 호출
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -31,10 +40,10 @@ export async function POST(req: Request) {
       cache: 'no-store'
     });
 
-    // 4. 통신 실패 시 원본 에러 포착 (프론트로 에러 텍스트 그대로 전달)
+    // 4. 통신 실패 시 원본 에러 포착
     if (!response.ok) {
       const errText = await response.text();
-      console.error("GOOGLE API RAW ERROR (Gemini 2.5):", errText);
+      console.error("GOOGLE API RAW ERROR:", errText);
       return NextResponse.json({ error: `구글 서버 에러: ${errText}` }, { status: 200 });
     }
 
@@ -45,7 +54,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "분석 내용을 생성하지 못했습니다. (Empty Response)" }, { status: 200 });
     }
 
-    return NextResponse.json({ analysis: resultText }, { status: 200 });
+    // 마크다운 흔적을 한 번 더 제거하는 가드 로직 (만약 AI가 실수할 경우 대비)
+    const cleanText = resultText.replace(/[#*`]/g, '').trim();
+
+    return NextResponse.json({ analysis: cleanText }, { status: 200 });
 
   } catch (error: any) {
     console.error("SYSTEM CRITICAL ERROR IN ANALYZE:", error);
