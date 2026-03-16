@@ -173,8 +173,11 @@ export default function ChartPage() {
             ))}
          </div>
 
-         {/* 차트 부모 div에 명시적 높이와 최소 높이 부여하여 Recharts 에러 해결 */}
-         <div className="bg-white rounded-[2.5rem] p-10 border border-gray-100 shadow-sm w-full h-[420px] min-h-[420px] relative overflow-hidden group">
+         {/* 사용자 지시: ResponsiveContainer 부모 div에 인라인 스타일 강제 적용 */}
+         <div 
+           className="bg-white rounded-[2.5rem] p-10 border border-gray-100 shadow-sm w-full relative overflow-hidden group"
+           style={{ width: '100%', height: '300px', minHeight: '300px' }}
+         >
             <ResponsiveContainer width="100%" height="100%">
                <AreaChart
                   data={chartData}

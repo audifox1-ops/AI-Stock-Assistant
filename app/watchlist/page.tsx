@@ -182,35 +182,30 @@ export default function WatchlistPage() {
           {interestStocks.map(stock => {
             const isUp = (stock.change || 0) >= 0;
             return (
-              /* 물리적 강제 복구: 모든 종목 카드는 rounded-2xl 스타일과 flex justify-between 구조를 가짐 */
+              /* 강제 리모델링: 사용자가 지시한 클래스 구조로 물리적 교체 */
               <div 
                 key={stock.id} 
-                className="bg-white p-6 rounded-2xl shadow-sm mb-4 flex justify-between items-center border border-gray-100 group hover:border-[#3182f6]/30 transition-all"
+                className="w-full flex justify-between items-center bg-white p-6 rounded-2xl shadow-sm mb-4 border border-gray-100 group hover:border-[#3182f6] transition-all"
               >
-                <div className="flex items-center gap-6 min-w-0 flex-1">
-                   <div className="w-14 h-14 bg-gray-50 rounded-2xl flex items-center justify-center text-gray-400 group-hover:bg-blue-50 group-hover:text-[#3182f6] transition-colors flex-shrink-0">
-                      <Star size={24} className={stock.alertEnabled ? 'fill-[#3182f6] text-[#3182f6]' : ''} />
-                   </div>
-                   <div className="min-w-0 flex-1">
-                      <h4 className="text-xl font-black text-[#191f28] truncate mb-0.5 group-hover:text-[#3182f6] transition-colors uppercase">
-                        {stock.name}
-                      </h4>
-                      <div className="flex items-center gap-2.5">
-                         <span className="text-[10px] font-black text-blue-500 bg-blue-50 px-2 py-0.5 rounded-lg uppercase tracking-wider">
-                           {stock.symbol}
-                         </span>
-                         {stock.updatedAt && (
-                           <span className="text-[9px] font-bold text-gray-300 uppercase tracking-tight">
-                             Synced {stock.updatedAt}
-                           </span>
-                         )}
-                      </div>
-                   </div>
+                <div className="flex items-center gap-4 min-w-0">
+                  <div className="w-12 h-12 bg-gray-50 rounded-xl flex items-center justify-center text-gray-400 flex-shrink-0 group-hover:bg-blue-50 transition-colors">
+                    <Star size={20} className={stock.alertEnabled ? 'text-[#3182f6] fill-[#3182f6]' : ''} />
+                  </div>
+                  <div className="min-w-0">
+                    <h4 className="text-lg font-black text-[#191f28] truncate uppercase group-hover:text-[#3182f6] transition-colors">
+                      {stock.name}
+                    </h4>
+                    <div className="flex items-center gap-2">
+                       <span className="text-[10px] font-black text-blue-500 bg-blue-50 px-2 py-0.5 rounded-lg uppercase tracking-wider">
+                         {stock.symbol}
+                       </span>
+                    </div>
+                  </div>
                 </div>
 
                 <div className="flex items-center gap-6 ml-4">
                   <div className="text-right">
-                    <p className="text-xl font-black text-[#191f28] tracking-tighter leading-tight">
+                    <p className="text-lg font-black text-[#191f28] tracking-tighter leading-tight">
                       {(stock.price?.toLocaleString() || '--')}원
                     </p>
                     <div className={`text-[11px] font-black flex items-center justify-end mt-1 ${isUp ? 'text-[#EF4444]' : 'text-[#3B82F6]'}`}>
@@ -219,17 +214,17 @@ export default function WatchlistPage() {
                     </div>
                   </div>
                   
-                  <div className="flex items-center gap-3 border-l border-gray-100 pl-6">
+                  <div className="flex items-center gap-2 border-l border-gray-100 pl-4">
                      <button 
                        onClick={() => toggleAlert(stock)}
-                       className={`p-2.5 rounded-xl transition-all ${stock.alertEnabled ? 'bg-emerald-50 text-emerald-500' : 'bg-gray-50 text-gray-300'}`}
+                       className={`p-2 rounded-xl transition-all ${stock.alertEnabled ? 'bg-emerald-50 text-emerald-500 shadow-sm' : 'bg-gray-50 text-gray-300'}`}
                        title="알림 토글"
                      >
                        <Bell size={18} className={stock.alertEnabled ? 'animate-bounce' : ''} />
                      </button>
                      <button 
                         onClick={() => removeInterest(stock.id)}
-                        className="p-2.5 bg-red-50 text-red-400 hover:bg-[#EF4444] hover:text-white rounded-xl transition-all"
+                        className="p-2 bg-red-50 text-red-400 hover:bg-[#EF4444] hover:text-white rounded-xl transition-all"
                         title="영구 삭제"
                      >
                         <Trash2 size={18} />

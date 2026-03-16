@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 
 /**
- * Gemini AI 주식 분석 API (Raw Fetch 방식)
- * GOOGLE_GEMINI_API_KEY 환경변수를 사용하여 Google AI Studio API를 직접 호출합니다.
- * SDK 의존성을 제거하여 패키지 충돌을 방지하고 상세한 에러 메시지를 반환합니다.
+ * Gemini AI 주식 분석 API (안정화 버전)
+ * 모든 에러를 catch하여 200 상태 코드로 반환함으로써 프론트엔드 크래시를 방지합니다.
+ * SDK 없이 Raw Fetch 방식을 사용하여 의존성 문제를 해결했습니다.
  */
 
 export async function POST(req: Request) {
@@ -14,8 +14,8 @@ export async function POST(req: Request) {
     // 1. 필수 데이터 유효성 검사
     if (!symbol || !name) {
       return NextResponse.json(
-        { error: "분석을 위한 종목 정보(이름, 티커)가 누락되었습니다." },
-        { status: 400 }
+        { error: "분석을 위한 종목 정보가 누락되었습니다." },
+        { status: 200 }
       );
     }
 
@@ -23,8 +23,8 @@ export async function POST(req: Request) {
     const apiKey = process.env.GOOGLE_GEMINI_API_KEY;
     if (!apiKey || apiKey === "your_gemini_api_key_here") {
       return NextResponse.json({
-        error: "Gemini API 키가 프로젝트에 설정되지 않았습니다. .env 환경변수를 확인해 주세요.",
-      }, { status: 500 });
+        error: "API 키가 설정되지 않았습니다. .env 환경변수를 확인해 주세요.",
+      }, { status: 200 });
     }
 
     // 3. 프롬프트 구성
@@ -47,7 +47,6 @@ export async function POST(req: Request) {
       1. 반드시 한국어로 작성할 것.
       2. '차트 분석', '수급 분석', '최종 의견'으로 구분하여 총 3줄로 핵심만 요약할 것.
       3. 전문적이고 신뢰감 있는 말투를 사용할 것.
-      4. 데이터가 부족한 경우 추측보다는 현재 시장 흐름에 따른 조언을 제공할 것.
     `;
 
     // 4. Gemini Raw Fetch API 호출
@@ -55,56 +54,33 @@ export async function POST(req: Request) {
     
     const response = await fetch(endpoint, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        contents: [
-          {
-            parts: [
-              {
-                text: prompt
-              }
-            ]
-          }
-        ],
-        generationConfig: {
-          temperature: 0.7,
-          topK: 40,
-          topP: 0.95,
-          maxOutputTokens: 1024,
-        }
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.7, maxOutputTokens: 800 }
       })
     });
 
     if (!response.ok) {
       const errorData = await response.json();
-      throw new Error(errorData.error?.message || `Gemini API 호출 실패: ${response.statusText}`);
+      throw new Error(errorData.error?.message || "Gemini API 통신 실패");
     }
 
     const data = await response.json();
     const analysisText = data.candidates?.[0]?.content?.parts?.[0]?.text;
 
     if (!analysisText) {
-      throw new Error("AI 응답 데이터에서 전략을 추출할 수 없습니다.");
+      throw new Error("분석 데이터를 생성할 수 없습니다.");
     }
 
-    return NextResponse.json({ analysis: analysisText });
+    return NextResponse.json({ analysis: analysisText }, { status: 200 });
 
   } catch (error: any) {
-    console.error("[AI API] Error during Gemini analysis:", error);
-    
-    // 에러 메시지 세분화
-    let errorMessage = error.message || "AI 분석 중 알 수 없는 오류가 발생했습니다.";
-    if (errorMessage.includes("API Key")) {
-      errorMessage = "유효하지 않은 API 키입니다. Google AI Studio에서 키를 재발급받으세요.";
-    } else if (errorMessage.includes("quota")) {
-      errorMessage = "API 호출 할당량이 초과되었습니다. 잠시 후 상위 모델로 시도해 주세요.";
-    }
-
+    console.error("Gemini API Error:", error);
+    // 사용자 지침에 따라 500이 아닌 200으로 응답하여 프론트엔드에서 에러 메시지 처리 유도
     return NextResponse.json(
-      { error: errorMessage },
-      { status: 500 }
+      { error: error.message || "분석 실패 (알 수 없는 서버 오류)" },
+      { status: 200 }
     );
   }
 }

@@ -67,7 +67,6 @@ export default function PortfolioPage() {
   const fetchMarketIndices = async (silent = false) => {
     if (!silent) setIsMarketLoading(true);
     try {
-      // 캐시 방지 강제 적용
       const res = await fetch('/api/market', { cache: 'no-store' });
       const data = await res.json();
       if (Array.isArray(data)) setMarketIndices(data);
@@ -108,9 +107,9 @@ export default function PortfolioPage() {
     if (symbols.length === 0) return;
     if (!silent) setIsRefreshing(true);
     try {
-      // 주가 페칭 시 캐시 방지 강제 적용
       const res = await fetch('/api/stock', { 
         method: 'POST', 
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ symbols }), 
         cache: 'no-store' 
       });
@@ -136,10 +135,14 @@ export default function PortfolioPage() {
           institutional: 1500000, 
           foreigner: -500000     
         }),
-        cache: 'no-store' // AI 분석도 최신 데이터 기반 강제
+        cache: 'no-store'
       });
       const data = await res.json();
-      setAiAnalysis(data.analysis);
+      if (data.analysis) {
+        setAiAnalysis(data.analysis);
+      } else {
+        setAiAnalysis(data.error || "분석 전략을 생성할 수 없습니다.");
+      }
     } catch (error) {
       setAiAnalysis("AI 기술 엔진에서 전략을 생성할 수 없습니다. 잠시 후 다시 시도해 주세요.");
     } finally {
@@ -185,7 +188,6 @@ export default function PortfolioPage() {
     }
     
     let sym = newStock.symbol.toUpperCase().trim();
-    // 티커 형식 정밀화 (.KS/.KQ 자동 할당)
     if (!sym.includes('.') && /^\d{6}$/.test(sym)) {
         sym += (sym.startsWith('0') || sym.startsWith('1') || sym.startsWith('2')) ? '.KS' : '.KQ';
     }
@@ -349,7 +351,7 @@ export default function PortfolioPage() {
           </div>
         </section>
 
-        {/* Portfolio Holdings Section - No rounded-full, px-8 wide cards */}
+        {/* Portfolio Holdings Section - 사용자 지 지침에 따른 리모델링 적용 */}
         <section className="space-y-6">
           <div className="flex justify-between items-center px-1">
              <h4 className="text-lg font-bold text-[#191f28] flex items-center gap-3">
@@ -358,7 +360,7 @@ export default function PortfolioPage() {
              </h4>
           </div>
           
-          <div className="space-y-5">
+          <div className="space-y-0">
             {stocks.map(stock => {
               const profitRate = stock.currentPrice ? ((stock.currentPrice / stock.avgPrice - 1) * 100).toFixed(2) : '0.00';
               const isProfit = parseFloat(profitRate) >= 0;
@@ -368,41 +370,33 @@ export default function PortfolioPage() {
                 <div 
                   key={stock.id} 
                   onClick={() => { setSelectedStockForAi(stock); runAiAnalysis(stock); }}
-                  className={`bg-white px-8 py-8 rounded-2xl border transition-all cursor-pointer relative overflow-hidden min-h-[140px] flex flex-col justify-center ${isSelected ? 'border-[#3182f6] bg-blue-50/10 ring-2 ring-blue-50' : 'border-gray-100 shadow-sm hover:border-[#3182f6]'}`}
+                  className={`w-full flex justify-between items-center bg-white p-6 rounded-2xl shadow-sm mb-4 border transition-all cursor-pointer ${isSelected ? 'border-[#3182f6] bg-blue-50/10 ring-1 ring-blue-50' : 'border-gray-100 hover:border-[#3182f6]'}`}
                 >
-                  <div className="flex justify-between items-start mb-6">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-3 mb-2">
-                        <h5 className="text-xl font-black text-[#191f28] truncate">{stock.name}</h5>
-                        <span className="text-[9px] font-black text-blue-500 bg-blue-50 px-2 py-1 rounded-lg uppercase tracking-wide">{stock.type}</span>
-                      </div>
-                      <span className="text-[11px] font-bold text-gray-300 uppercase tracking-widest">{stock.symbol} · {stock.quantity}주 보유</span>
+                  <div className="flex items-center gap-4 min-w-0">
+                    <div className="w-12 h-12 bg-gray-50 rounded-xl flex items-center justify-center text-gray-400 flex-shrink-0 group-hover:bg-blue-50 transition-colors">
+                      <Star size={20} className={isSelected ? 'text-[#3182f6] fill-[#3182f6]' : ''} />
                     </div>
-                    <div className="text-right">
-                      <p className="text-xl font-black text-[#191f28] mb-1">{(stock.currentPrice || stock.avgPrice).toLocaleString()}원</p>
-                      <div className={`text-sm font-black inline-flex items-center gap-1 ${isProfit ? 'text-[#EF4444]' : 'text-[#3B82F6]'}`}>
-                        {isProfit ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
-                        {isProfit ? '+' : ''}{profitRate}%
-                      </div>
+                    <div className="min-w-0">
+                      <h5 className="text-lg font-black text-[#191f28] truncate uppercase">{stock.name}</h5>
+                      <span className="text-[10px] font-black text-blue-500 bg-blue-50 px-2 py-0.5 rounded-lg uppercase tracking-widest">{stock.symbol}</span>
                     </div>
                   </div>
                   
-                  <div className="pt-6 border-t border-gray-50 flex justify-between items-center">
-                    <div className="flex gap-10">
-                       <div className="flex flex-col">
-                          <span className="text-[9px] font-black text-gray-300 uppercase tracking-widest mb-1.5">평단가</span>
-                          <span className="text-sm font-bold text-gray-500">{stock.avgPrice.toLocaleString()}원</span>
-                       </div>
-                       <div className="flex flex-col">
-                          <span className="text-[9px] font-black text-gray-300 uppercase tracking-widest mb-1.5">평가금액</span>
-                          <span className="text-sm font-bold text-gray-700">{( (stock.currentPrice || stock.avgPrice) * stock.quantity ).toLocaleString()}원</span>
+                  <div className="flex items-center gap-6">
+                    <div className="text-right">
+                       <p className="text-lg font-black text-[#191f28] tracking-tighter leading-tight">
+                         {(stock.currentPrice || stock.avgPrice).toLocaleString()}원
+                       </p>
+                       <div className={`text-[11px] font-black flex items-center justify-end mt-1 ${isProfit ? 'text-[#EF4444]' : 'text-[#3B82F6]'}`}>
+                         {isProfit ? <TrendingUp size={12} className="mr-1" /> : <TrendingDown size={12} className="mr-1" />}
+                         {isProfit ? '+' : ''}{profitRate}%
                        </div>
                     </div>
                     <button 
-                      onClick={(e) => { e.stopPropagation(); removeHolding(stock.id); }}
-                      className="p-3 hover:bg-red-50 text-gray-200 hover:text-[#EF4444] rounded-xl transition-all"
+                       onClick={(e) => { e.stopPropagation(); removeHolding(stock.id); }}
+                       className="p-2.5 bg-red-50 text-red-400 hover:bg-[#EF4444] hover:text-white rounded-xl transition-all ml-2"
                     >
-                      <Trash2 size={20} />
+                       <Trash2 size={18} />
                     </button>
                   </div>
                 </div>
@@ -418,18 +412,12 @@ export default function PortfolioPage() {
                      <p className="text-base font-bold text-gray-400">등록된 보유 주식이 없습니다.</p>
                      <p className="text-xs font-bold text-gray-300 uppercase tracking-widest">Add your holdings to start analyzing</p>
                   </div>
-                  <button 
-                    onClick={() => setIsAddHoldingModalOpen(true)}
-                    className="mt-2 px-6 py-2 bg-gray-50 text-gray-400 hover:text-[#3182f6] hover:bg-blue-50 font-black rounded-xl text-xs transition-all"
-                  >
-                    + 지금 추가하기
-                  </button>
                </div>
             )}
           </div>
         </section>
 
-        {/* Watchlist Section - No rounded-full, px-8 wide cards */}
+        {/* Watchlist Section - 사용자 지 지침에 따른 리모델링 적용 */}
         <section className="space-y-6 pb-20">
           <div className="flex justify-between items-center px-1">
             <h4 className="text-lg font-bold text-[#191f28] flex items-center gap-3">
@@ -447,30 +435,36 @@ export default function PortfolioPage() {
             </div>
           </div>
           
-          <div className="space-y-4">
+          <div className="space-y-0">
             {interestStocks.map(stock => {
               const isUp = (stock.change || 0) >= 0;
               return (
-                <div key={stock.id} className="bg-white px-8 py-8 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between group hover:border-[#3182f6] transition-all overflow-hidden relative">
-                  <div className="absolute top-0 left-0 w-1.5 h-full bg-blue-50 opacity-0 group-hover:opacity-100 transition-all" />
-                  <div className="min-w-0 flex-1">
-                    <h5 className="text-lg font-black text-[#191f28] truncate mb-1">{stock.name}</h5>
-                    <span className="text-[10px] font-black text-gray-300 uppercase tracking-widest">{stock.symbol} · Alert Active</span>
+                <div key={stock.id} className="w-full flex justify-between items-center bg-white p-6 rounded-2xl shadow-sm mb-4 border border-gray-100 group hover:border-[#3182f6] transition-all">
+                  <div className="flex items-center gap-4 min-w-0">
+                    <div className="w-12 h-12 bg-gray-50 rounded-xl flex items-center justify-center text-gray-400 flex-shrink-0 group-hover:bg-blue-50 transition-colors">
+                      <Star size={20} className={stock.alertEnabled ? 'text-[#3182f6] fill-[#3182f6]' : ''} />
+                    </div>
+                    <div className="min-w-0">
+                      <h5 className="text-lg font-black text-[#191f28] truncate uppercase">{stock.name}</h5>
+                      <span className="text-[10px] font-black text-blue-500 bg-blue-50 px-2 py-0.5 rounded-lg uppercase tracking-widest">{stock.symbol}</span>
+                    </div>
                   </div>
                   
-                  <div className="flex items-center gap-10">
+                  <div className="flex items-center gap-6">
                     <div className="text-right">
-                      <p className="text-lg font-black text-[#191f28] mb-1">{(stock.price?.toLocaleString() || '--')}원</p>
-                      <span className={`text-xs font-black ${isUp ? 'text-[#EF4444] bg-red-50' : 'text-[#3B82F6] bg-blue-50'} px-2 py-0.5 rounded-lg`}>
-                        {isUp ? '+' : ''}{stock.change?.toFixed(2)}%
-                      </span>
+                       <p className="text-lg font-black text-[#191f28] tracking-tighter leading-tight">
+                         {(stock.price?.toLocaleString() || '--')}원
+                       </p>
+                       <div className={`text-[11px] font-black flex items-center justify-end mt-1 ${isUp ? 'text-[#EF4444]' : 'text-[#3B82F6]'}`}>
+                         {isUp ? <TrendingUp size={12} className="mr-1" /> : <TrendingDown size={12} className="mr-1" />}
+                         {isUp ? '+' : ''}{stock.change?.toFixed(2)}%
+                       </div>
                     </div>
-                    
                     <button 
                        onClick={() => removeInterest(stock.id)}
-                       className="p-3 text-gray-200 hover:text-[#EF4444] hover:bg-red-50 rounded-xl transition-all opacity-0 group-hover:opacity-100"
+                       className="p-2.5 bg-red-50 text-red-400 hover:bg-[#EF4444] hover:text-white rounded-xl transition-all ml-2"
                     >
-                      <Trash2 size={20} />
+                       <Trash2 size={18} />
                     </button>
                   </div>
                 </div>
