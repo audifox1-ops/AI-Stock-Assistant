@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { Plus, X, RefreshCcw, Bell, Trash2, BellRing, User } from 'lucide-react';
+import { Plus, X, RefreshCcw, Bell, Trash2, BellRing, ArrowRight } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useSession } from "next-auth/react";
 
@@ -47,7 +47,6 @@ interface MarketIndex {
   updatedAt?: string;
 }
 
-// --- Utility: Base64 to Uint8Array for VAPID ---
 function urlBase64ToUint8Array(base64String: string) {
   const padding = '='.repeat((4 - base64String.length % 4) % 4);
   const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
@@ -64,7 +63,6 @@ export default function PortfolioPage() {
   const [stocks, setStocks] = useState<Stock[]>([]);
   const [interestStocks, setInterestStocks] = useState<InterestStock[]>([]);
   const [marketIndices, setMarketIndices] = useState<MarketIndex[]>([]);
-  const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isMarketLoading, setIsMarketLoading] = useState(true);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -74,17 +72,12 @@ export default function PortfolioPage() {
     name: '', symbol: '', avgPrice: 0, quantity: 0, type: '스윙', target: 0, stopLoss: 0
   });
 
-  // 1. 서비스 워커 등록 및 푸시 구독 로직
   useEffect(() => {
     if ('serviceWorker' in navigator && 'PushManager' in window) {
       navigator.serviceWorker.register('/sw.js')
-        .then(reg => {
-          return reg.pushManager.getSubscription();
-        })
-        .then(sub => {
-          if (sub) setPushSubscription(sub);
-        })
-        .catch(err => console.error(err));
+        .then(reg => reg.pushManager.getSubscription())
+        .then(sub => { if (sub) setPushSubscription(sub); })
+        .catch(console.error);
     }
   }, []);
 
@@ -98,25 +91,11 @@ export default function PortfolioPage() {
           applicationServerKey: urlBase64ToUint8Array(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!)
         });
         setPushSubscription(sub);
-        alert('알림 권한 신청 완료');
-
-        await fetch('/api/push', {
-          method: 'POST',
-          body: JSON.stringify({
-            subscription: sub,
-            title: "AI Stock 알림 활성화",
-            body: "이제 실시간 목표가 알림을 브라우저로 받으실 수 있습니다.",
-            url: "/"
-          })
-        });
+        fetch('/api/push', { method: 'POST', body: JSON.stringify({ subscription: sub, title: "알림 연동 완료", body: "실시간 시세를 알려드릴게요.", url: "/" }) });
       }
-    } catch (err) {
-      console.error(err);
-      alert('알림 구독 실패');
-    }
+    } catch (err) { alert('알림 설정을 확인해주세요.'); }
   };
 
-  // Data Fetching
   const fetchMarketIndices = async (silent = false) => {
     if (!silent) setIsMarketLoading(true);
     try {
@@ -130,84 +109,58 @@ export default function PortfolioPage() {
   const fetchHoldings = async () => {
     try {
       const { data, error } = await supabase.from('holdings').select('*').order('created_at', { ascending: false });
-      if (error) throw error;
-      if (data) {
-        const mapped = data.map(item => ({
+      if (!error && data) {
+        setStocks(data.map(item => ({
           id: item.id, symbol: item.symbol, name: item.stock_name,
           avgPrice: Number(item.avg_buy_price), currentPrice: null, quantity: Number(item.quantity),
-          type: item.position_type as string, target: Number(item.target_price), stopLoss: Number(item.stop_loss),
-        }));
-        setStocks(mapped);
-        return mapped;
+          type: item.position_type as string, target: Number(item.target_price), stopLoss: Number(item.stop_loss)
+        })));
       }
-    } catch (err) { console.error(err); }
-    return [];
+    } catch (err) {}
   };
 
   const fetchInterests = async () => {
     try {
       const { data, error } = await supabase.from('alerts').select('*').order('created_at', { ascending: false });
-      if (error) throw error;
-      if (data) {
-        const mapped = data.map(item => ({
-          id: item.id, name: item.stock_name, symbol: item.symbol, price: null, change: null, alertEnabled: item.alert_enabled,
-        }));
-        setInterestStocks(mapped);
-        return mapped;
+      if (!error && data) {
+        setInterestStocks(data.map(item => ({
+          id: item.id, name: item.stock_name, symbol: item.symbol, price: null, change: null, alertEnabled: item.alert_enabled
+        })));
       }
-    } catch (err) { console.error(err); }
-    return [];
+    } catch (err) {}
   };
 
-  const fetchPrices = async (targetStocks: Stock[], targetInterests: InterestStock[], silent = false) => {
-    if (targetStocks.length === 0 && targetInterests.length === 0) return;
+  const fetchPrices = async (silent = false) => {
     if (!silent) setIsRefreshing(true);
     try {
-      const symbols = Array.from(new Set([...targetStocks.map(s => s.symbol), ...targetInterests.map(s => s.symbol)])).filter(Boolean);
+      const symbols = Array.from(new Set([...stocks.map(s => s.symbol), ...interestStocks.map(s => s.symbol)])).filter(Boolean);
+      if (symbols.length === 0) return;
       const res = await fetch('/api/stock', { method: 'POST', body: JSON.stringify({ symbols }), cache: 'no-store' });
       const data = await res.json();
-      
       setStocks(prev => prev.map(s => data[s.symbol] ? { ...s, currentPrice: data[s.symbol].price, changePercent: data[s.symbol].changePercent, updatedAt: data[s.symbol].updatedAt } : s));
       setInterestStocks(prev => prev.map(s => data[s.symbol] ? { ...s, price: data[s.symbol].price, change: data[s.symbol].changePercent, updatedAt: data[s.symbol].updatedAt } : s));
-    } catch (error) { console.error(error); }
-    finally { if (!silent) setIsRefreshing(false); }
+    } catch (error) {}
+    finally { setIsRefreshing(false); }
   };
 
   useEffect(() => {
-    const init = async () => {
-      setIsInitialLoading(true);
-      fetchMarketIndices();
-      const [h, i] = await Promise.all([fetchHoldings(), fetchInterests()]);
-      await fetchPrices(h, i);
-      setIsInitialLoading(false);
-    };
-    init();
-
+    fetchMarketIndices();
+    fetchHoldings();
+    fetchInterests();
     const interval = setInterval(() => {
       fetchMarketIndices(true);
-      setStocks(curr => {
-        setInterestStocks(iCurr => { fetchPrices(curr, iCurr, true); return iCurr; });
-        return curr;
-      });
+      fetchPrices(true);
     }, 10000);
     return () => clearInterval(interval);
   }, []);
 
-  const handleAddStock = async () => {
-    if (!newStock.name || !newStock.avgPrice || !newStock.symbol) return;
-    try {
-      const { data, error } = await supabase.from('holdings').insert([{
-        symbol: newStock.symbol.toUpperCase(), stock_name: newStock.name, avg_buy_price: Number(newStock.avgPrice),
-        quantity: Number(newStock.quantity), position_type: newStock.type,
-        target_price: Number(newStock.target), stop_loss: Number(newStock.stopLoss)
-      }]).select();
-      if (!error) { fetchHoldings().then(h => fetchPrices(h, interestStocks)); setIsAddModalOpen(false); }
-    } catch (err) { console.error(err); }
-  };
+  useEffect(() => {
+    if (stocks.length > 0 || interestStocks.length > 0) fetchPrices(true);
+  }, [stocks.length, interestStocks.length]);
 
   const removeInterest = async (id: string | number) => {
-    if (!confirm('삭제할까요?')) return;
-    try { await supabase.from('alerts').delete().eq('id', id); setInterestStocks(prev => prev.filter(s => s.id !== id)); } catch (err) {}
+    if (!confirm('삭제하시겠습니까?')) return;
+    try { await supabase.from('alerts').delete().eq('id', id); fetchInterests(); } catch (err) {}
   };
 
   const totalBuyAmount = stocks.reduce((acc, s) => acc + s.avgPrice * s.quantity, 0);
@@ -215,150 +168,174 @@ export default function PortfolioPage() {
   const totalRate = totalBuyAmount > 0 ? ((totalCurrentAmount / totalBuyAmount - 1) * 100).toFixed(2) : '0.00';
 
   return (
-    <div className="min-h-screen bg-gray-50/30 text-[#191f28] pb-44 animate-in fade-in duration-500 overflow-x-hidden overflow-y-visible">
+    <div className="min-h-screen">
       
-      {/* Header - 인증 로직 정제 및 대시보드 집중 */}
-      <header className="w-full px-4 md:px-8 pt-10 md:pt-14 pb-6 md:pb-8 bg-white border-b border-gray-100">
-        
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 md:gap-0 mb-10 md:mb-12">
-          
-          <div className="flex items-center justify-between w-full md:w-auto">
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl md:text-3xl font-black tracking-tight text-[#3182f6]">AI Stock</h1>
-              {!pushSubscription && (
-                <button 
-                  onClick={requestNotificationPermission}
-                  className="flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-2 bg-blue-50 text-blue-500 rounded-full text-[10px] md:text-xs font-bold animate-pulse touch-manipulation"
-                >
-                  <BellRing size={14} /> 알림 연동
-                </button>
-              )}
-            </div>
-            
-            {/* 상단 액션 버튼 (모바일용) */}
-            <div className="flex md:hidden gap-3">
-              <button onClick={() => { fetchMarketIndices(); fetchPrices(stocks, interestStocks); }} className="p-3 text-gray-400 bg-gray-50 rounded-full shadow-sm touch-manipulation">
-                <RefreshCcw size={20} className={isRefreshing ? 'animate-spin' : ''} />
-              </button>
-              <button onClick={() => setIsAddModalOpen(true)} className="p-3 text-[#3182f6] bg-blue-50 rounded-full shadow-sm touch-manipulation">
-                <Plus size={24} strokeWidth={3} />
-              </button>
-            </div>
+      {/* Tosh Header */}
+      <header className="px-6 pt-10 pb-4 bg-white flex justify-between items-center">
+        <div className="flex items-center gap-2">
+          <div className="w-9 h-9 bg-blue-50 rounded-xl flex items-center justify-center">
+             <span className="text-xl font-black text-blue-600">A</span>
           </div>
-          
-          {/* User Profile (Only Display) */}
-          <div className="flex items-center gap-4 w-full md:w-auto justify-between md:justify-end">
-            <div className="flex items-center gap-3 bg-white px-4 md:px-5 py-2.5 md:py-3 rounded-full border border-gray-100 shadow-sm flex-1 md:flex-none">
-              {session?.user?.image ? (
-                <img src={session.user.image} alt="profile" className="w-7 h-7 md:w-8 md:h-8 rounded-full border-2 border-white shadow-sm" />
-              ) : (
-                <div className="w-7 h-7 md:w-8 md:h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-500"><User size={16} /></div>
-              )}
-              <span className="text-xs md:text-sm font-black text-gray-700 truncate max-w-[120px]">{session?.user?.name || '사용자'}님</span>
-            </div>
-            
-            <div className="hidden md:flex gap-4">
-              <button onClick={() => { fetchMarketIndices(); fetchPrices(stocks, interestStocks); }} className="p-4 text-gray-400 bg-gray-50 rounded-full shadow-sm hover:bg-gray-100">
-                <RefreshCcw size={24} className={isRefreshing ? 'animate-spin' : ''} />
-              </button>
-              <button onClick={() => setIsAddModalOpen(true)} className="p-4 text-[#3182f6] bg-blue-50 rounded-full shadow-sm hover:bg-blue-100">
-                <Plus size={30} strokeWidth={3} />
-              </button>
-            </div>
-          </div>
+          <h1 className="text-xl font-extrabold tracking-tight text-gray-900">AI Stock</h1>
         </div>
-
-        {/* 지수 정보 */}
-        <div className="flex gap-8 md:gap-10 items-center overflow-x-auto no-scrollbar py-2 w-full">
-          {isMarketLoading ? <div className="w-40 h-4 bg-gray-100 animate-pulse rounded" /> : marketIndices.map(market => (
-            <div key={market.symbol} className="flex flex-col gap-1 min-w-fit">
-              <div className="flex items-center gap-3 md:gap-4 whitespace-nowrap">
-                <span className="text-xs md:text-sm font-black text-gray-400">{market.name}</span>
-                <span className={`text-xl md:text-2xl font-black ${market.changePercent >= 0 ? 'text-red-500' : 'text-blue-600'}`}>{market.price.toLocaleString()}</span>
-                <span className={`text-[10px] md:text-xs font-black px-4 md:px-10 py-1.5 md:py-3 rounded-full ${market.changePercent >= 0 ? 'text-red-500 bg-red-50' : 'text-blue-600 bg-blue-50'}`}>
-                  {market.changePercent >= 0 ? '\u25B2' : '\u25BC'}{Math.abs(market.changePercent).toFixed(1)}%
-                </span>
-              </div>
-              <p className="text-[10px] text-gray-400 font-bold ml-1">({market.updatedAt || '--:--:--'} {'기준'})</p>
+        <div className="flex items-center gap-4">
+          <button className="p-2.5 bg-gray-50 rounded-full text-gray-400">
+            <Bell size={22} />
+          </button>
+          {session?.user?.image ? (
+            <img src={session.user.image} alt="U" className="w-10 h-10 rounded-full border-2 border-white shadow-sm" />
+          ) : (
+            <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center text-gray-400">
+              <Plus size={20} />
             </div>
-          ))}
+          )}
         </div>
       </header>
 
-      {/* Asset Summary */}
-      <section className="px-4 md:px-8 py-10 md:py-12 bg-white">
-        <p className="text-xs md:text-sm font-black text-gray-400 mb-2 md:mb-3 tracking-wider uppercase">Portfolio Balance</p>
-        <div className="flex flex-col md:flex-row items-start md:items-center gap-4 md:gap-6">
-          <h2 className="text-4xl md:text-5xl font-black tracking-tight leading-none">{totalCurrentAmount.toLocaleString()}{'원'}</h2>
-          <div className={`px-6 md:px-10 py-2 md:py-3 rounded-full text-xs md:text-sm font-black min-w-max shadow-sm border ${parseFloat(totalRate) >= 0 ? 'text-red-600 bg-red-50 border-red-100' : 'text-blue-600 bg-blue-50 border-blue-100'}`}>
-            {parseFloat(totalRate) >= 0 ? '+' : ''}{totalRate}%
-          </div>
-        </div>
-      </section>
-
-      {/* Interests Section */}
-      <section className="px-4 md:px-8 py-10 md:py-12 bg-gray-50/50">
-        <h3 className="text-xl md:text-2xl font-black mb-8 md:mb-12 ml-1">관심있는 종목</h3>
-        <div className="space-y-4">
-          {interestStocks.map(stock => {
-            const isUp = (stock.change || 0) >= 0;
-            return (
-              <div key={stock.id} className="bg-white rounded-2xl p-4 md:p-6 shadow-sm border border-gray-100 flex flex-row items-center justify-between transition-all hover:bg-gray-50">
-                <div className="flex flex-col min-w-0 flex-1">
-                  <h4 className="text-lg md:text-xl font-bold text-gray-900 mb-1 truncate uppercase">{stock.name}</h4>
-                  <div className="flex items-center gap-2 md:gap-3">
-                    <span className="text-[10px] md:text-xs font-black text-blue-500 bg-blue-50 px-2 py-0.5 rounded uppercase">{stock.symbol}</span>
-                    {stock.updatedAt && <span className="text-[10px] font-bold text-gray-400 truncate">{stock.updatedAt} {'기준'}</span>}
-                  </div>
-                </div>
-                <div className="flex flex-row items-center gap-3 md:gap-6 flex-shrink-0 ml-3 md:ml-4">
-                  <div className="text-right">
-                    <p className="text-lg md:text-xl font-black text-gray-900 leading-tight">{(stock.price?.toLocaleString() || '--')}{'원'}</p>
-                    <p className={`text-[10px] md:text-xs font-black mt-0.5 md:mt-1 ${isUp ? 'text-red-500' : 'text-blue-600'}`}>{isUp ? '\u25B2' : '\u25BC'}{Math.abs(stock.change || 0).toFixed(2)}%</p>
-                  </div>
-                  <div className="flex items-center gap-1.5 md:gap-3 border-l border-gray-100 pl-3 md:pl-6 ml-1 md:ml-2">
-                    <button className="p-2.5 md:p-3 text-gray-300 bg-gray-50 rounded-xl touch-manipulation"><Bell size={18} className="md:w-5 md:h-5" /></button>
-                    <button onClick={() => removeInterest(stock.id)} className="p-2.5 md:p-3 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all touch-manipulation"><Trash2 size={18} className="md:w-5 md:h-5" /></button>
-                  </div>
+      {/* Main Container */}
+      <div className="max-w-xl mx-auto space-y-8 px-6 pb-20">
+        
+        {/* Market Index Section - Big & Bold */}
+        <section className="pt-6 space-y-6">
+          {isMarketLoading ? (
+            <div className="h-24 bg-white rounded-3xl animate-pulse" />
+          ) : marketIndices.slice(0, 1).map(market => (
+            <div key={market.symbol} className="bg-white p-8 rounded-[2.5rem] shadow-[0_4px_30px_rgba(0,0,0,0.03)] border border-gray-50/50">
+              <div className="flex justify-between items-start mb-6">
+                <p className="text-sm font-black text-gray-300 uppercase tracking-widest">{market.name}</p>
+                <div className="flex items-center gap-1.5 px-3 py-1 bg-red-50 rounded-full">
+                   <p className="text-xs font-black text-[#EF4444]">+ {market.changePercent.toFixed(1)}%</p>
                 </div>
               </div>
-            );
-          })}
-        </div>
-      </section>
+              <h2 className={`text-5xl font-extrabold tracking-tighter ${market.changePercent >= 0 ? 'text-[#EF4444]' : 'text-[#3B82F6]'}`}>
+                {market.price.toLocaleString()}
+              </h2>
+              <div className="flex justify-between items-center mt-8">
+                 <p className="text-[10px] font-black text-gray-300 uppercase">Real-time Trading Vol.</p>
+                 <RefreshCcw size={14} className={`text-gray-200 ${isRefreshing ? 'animate-spin' : ''}`} />
+              </div>
+            </div>
+          ))}
+        </section>
 
-      <div className="h-24 md:h-20" />
+        {/* Portfolio Card */}
+        <section className="bg-white p-8 rounded-[2.5rem] shadow-[0_8px_40px_rgba(0,0,0,0.04)] border border-gray-50">
+          <p className="text-xs font-black text-gray-300 mb-2 uppercase tracking-widest">Total My Assets</p>
+          <div className="flex items-baseline gap-2 mb-8">
+            <h3 className="text-3xl font-black text-gray-900">{totalCurrentAmount.toLocaleString()}</h3>
+            <span className="text-xl font-black text-gray-500">{'원'}</span>
+          </div>
+          
+          <button 
+             onClick={requestNotificationPermission}
+             className="w-full py-4.5 bg-[#3182f6] text-white rounded-2xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-blue-200 active:scale-[0.98] transition-all"
+          >
+            <BellRing size={18} />
+            <span>관심 종목 추가로 알림 받기</span>
+            <ArrowRight size={16} />
+          </button>
+        </section>
 
-      {/* Add Modal */}
+        {/* Watchlist Section */}
+        <section className="space-y-6">
+          <div className="flex justify-between items-center px-2">
+            <h4 className="text-xl font-extrabold text-gray-900">내 관심 종목</h4>
+            <button onClick={() => setIsAddModalOpen(true)} className="text-sm font-black text-blue-500">추가하기</button>
+          </div>
+
+          <div className="space-y-4">
+            {interestStocks.length === 0 ? (
+              <div className="py-20 bg-white rounded-[2rem] border border-dashed border-gray-100 text-center">
+                <p className="text-gray-300 font-bold">궁금한 종목을 추가해보세요</p>
+              </div>
+            ) : interestStocks.map(stock => {
+              const isUp = (stock.change || 0) >= 0;
+              return (
+                <div key={stock.id} className="bg-white p-6 rounded-2xl border border-gray-50 shadow-sm flex items-center justify-between gap-6 group">
+                  <div className="flex flex-col min-w-0 flex-1">
+                    <h5 className="text-lg font-extrabold text-gray-900 truncate uppercase">{stock.name}</h5>
+                    <span className="text-[10px] font-black text-gray-300 uppercase tracking-tighter">{stock.symbol}</span>
+                  </div>
+                  
+                  <div className="flex flex-col items-end flex-shrink-0">
+                    <p className="text-lg font-black text-gray-900 leading-none mb-1">
+                      {(stock.price?.toLocaleString() || '--')}{'원'}
+                    </p>
+                    <div className={`flex items-center gap-1 font-black text-xs ${isUp ? 'text-[#EF4444]' : 'text-[#3B82F6]'}`}>
+                       <span>{isUp ? '+' : ''}{stock.change?.toFixed(2)}%</span>
+                       {isUp ? <ArrowRight className="-rotate-45" size={12} /> : <ArrowRight className="rotate-45" size={12} />}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <div className="p-3 bg-gray-50 rounded-xl text-gray-300">
+                      <Bell size={18} />
+                    </div>
+                    <button 
+                      onClick={() => removeInterest(stock.id)}
+                      className="p-3 bg-gray-50 rounded-xl text-gray-100 group-hover:text-red-400 transition-colors"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      </div>
+
+      {/* Modern Add Modal */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 z-[100] bg-white p-6 md:p-10 pt-20 md:pt-28 flex flex-col animate-in slide-in-from-bottom duration-500">
-          <div className="flex justify-between items-start mb-14 md:mb-20">
-            <h2 className="text-3xl md:text-5xl font-black leading-[1.1]">자산 등록</h2>
-            <button onClick={() => setIsAddModalOpen(false)} className="p-4 md:p-5 bg-gray-100 rounded-full text-gray-400 touch-manipulation"><X size={24} className="md:w-8 md:h-8" /></button>
+        <div className="fixed inset-0 z-[100] bg-white p-8 pt-24 flex flex-col animate-in slide-in-from-bottom duration-500">
+          <div className="flex justify-between items-center mb-16">
+            <h2 className="text-4xl font-extrabold tracking-tight">종목 추가</h2>
+            <button onClick={() => setIsAddModalOpen(false)} className="p-4 bg-gray-50 rounded-full text-gray-400">
+              <X size={28} />
+            </button>
           </div>
-          <div className="space-y-10 md:space-y-14 flex-1 overflow-y-auto no-scrollbar pb-10">
-            <div className="space-y-3 md:space-y-4">
-              <label className="text-[10px] md:text-xs font-black text-gray-400 uppercase tracking-widest ml-1 md:ml-2">종목 코드 (6자리)</label>
-              <input type="text" className="w-full border-b-[3px] md:border-b-[5px] border-gray-100 py-4 md:py-6 text-2xl md:text-3xl font-black focus:border-[#3182f6] outline-none placeholder:text-gray-200 bg-transparent" placeholder="005930" value={newStock.symbol} onChange={e => setNewStock({...newStock, symbol: e.target.value})} />
-            </div>
-            <div className="space-y-3 md:space-y-4">
-              <label className="text-[10px] md:text-xs font-black text-gray-400 uppercase tracking-widest ml-1 md:ml-2">관리용 명칭</label>
-              <input type="text" className="w-full border-b-[3px] md:border-b-[5px] border-gray-100 py-4 md:py-6 text-2xl md:text-3xl font-black focus:border-[#3182f6] outline-none placeholder:text-gray-200 bg-transparent" placeholder="삼성전자" value={newStock.name} onChange={e => setNewStock({...newStock, name: e.target.value})} />
-            </div>
-            <div className="grid grid-cols-2 gap-8 md:gap-12">
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-gray-400">평단가</label>
-                <input type="number" className="w-full border-b-[3px] md:border-b-[5px] border-gray-100 py-3 md:py-4 text-xl md:text-2xl font-black focus:border-[#3182f6] outline-none bg-transparent" placeholder="0" value={newStock.avgPrice || ''} onChange={e => setNewStock({...newStock, avgPrice: Number(e.target.value)})} />
-              </div>
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-gray-400">수량</label>
-                <input type="number" className="w-full border-b-[3px] md:border-b-[5px] border-gray-100 py-3 md:py-4 text-xl md:text-2xl font-black focus:border-[#3182f6] outline-none bg-transparent" placeholder="0" value={newStock.quantity || ''} onChange={e => setNewStock({...newStock, quantity: Number(e.target.value)})} />
-              </div>
-            </div>
+          
+          <div className="space-y-12 flex-1">
+             <div className="space-y-4">
+                <label className="text-xs font-black text-gray-300 uppercase tracking-widest px-2">Stock Code</label>
+                <input 
+                  type="text" 
+                  autoFocus
+                  className="w-full text-4xl font-black bg-transparent border-b-4 border-gray-100 focus:border-[#3182f6] outline-none py-4 placeholder:text-gray-100"
+                  placeholder="005930"
+                  value={newStock.symbol}
+                  onChange={e => setNewStock({...newStock, symbol: e.target.value})}
+                />
+             </div>
+             <div className="space-y-4">
+                <label className="text-xs font-black text-gray-300 uppercase tracking-widest px-2">Alias Name</label>
+                <input 
+                  type="text" 
+                  className="w-full text-2xl font-black bg-transparent border-b-4 border-gray-100 focus:border-[#3182f6] outline-none py-4 placeholder:text-gray-100"
+                  placeholder="삼성전자"
+                  value={newStock.name}
+                  onChange={e => setNewStock({...newStock, name: e.target.value})}
+                />
+             </div>
           </div>
-          <button onClick={handleAddStock} className="w-full py-6 md:py-8 bg-[#3182f6] text-white rounded-[2rem] md:rounded-[3rem] font-black text-2xl md:text-3xl shadow-2xl active:scale-95 transition-all mb-10 md:mb-14 touch-manipulation">연결하기</button>
+
+          <button 
+            onClick={async () => {
+                if (!newStock.symbol || !newStock.name) return;
+                let sym = newStock.symbol.toUpperCase().trim();
+                if (!sym.includes('.') && /^\d{6}$/.test(sym)) sym += '.KS';
+                await supabase.from('alerts').insert([{ symbol: sym, stock_name: newStock.name, alert_enabled: true }]);
+                fetchInterests();
+                setIsAddModalOpen(false);
+                setNewStock({ name: '', symbol: '' });
+            }}
+            className="w-full py-6 bg-[#3182f6] text-white rounded-[2rem] font-black text-2xl shadow-xl active:scale-95 transition-all mb-10"
+          >
+            즐겨찾기 추가
+          </button>
         </div>
       )}
+
     </div>
   );
 }

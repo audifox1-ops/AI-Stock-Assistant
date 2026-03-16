@@ -9,7 +9,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
   ],
   pages: {
-    signIn: '/login', // 커스텀 로그인 페이지 설정
+    signIn: '/login',
   },
   callbacks: {
     async session({ session, token }) {
@@ -23,9 +23,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       const isOnLoginPage = nextUrl.pathname.startsWith('/login');
 
       if (isLoggedIn && isOnLoginPage) {
-        return Response.redirect(new URL('/', nextUrl)); // 로그인 상태에서 로그인 페이지 접근 시 홈으로
+        return Response.redirect(new URL('/', nextUrl));
       }
-      return isLoggedIn; // 기본적으로 로그인 상태여야 접근 허용
+      return isLoggedIn;
     },
   },
   secret: process.env.AUTH_SECRET,
