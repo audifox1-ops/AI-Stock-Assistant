@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
-import { ChevronLeft, Bot, Loader2, AlertCircle, HelpCircle } from 'lucide-react';
+import { ChevronLeft, Bot, Loader2, AlertCircle, HelpCircle, RefreshCcw } from 'lucide-react';
 import Link from 'next/link';
 
 export const dynamic = 'force-dynamic';
@@ -144,7 +144,7 @@ export default function ChartPage() {
                      </p>
                   </div>
                ) : (
-                  /* [강제 지침 2] 가독성 최적화 클래스 적용 */
+                  /* 가독성 최적화 클래스 적용 */
                   <p className="text-base font-bold leading-relaxed text-slate-700 whitespace-pre-wrap">
                      {analysis || "종목 데이터를 분석 중입니다. 잠시만 기다려 주세요."}
                   </p>
