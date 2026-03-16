@@ -1,9 +1,9 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { Plus, X, RefreshCcw, Bell, Trash2, BellRing, LogIn, LogOut, User } from 'lucide-react';
+import { Plus, X, RefreshCcw, Bell, Trash2, BellRing, User } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { useSession, signIn, signOut } from "next-auth/react";
+import { useSession } from "next-auth/react";
 
 // --- Interfaces ---
 interface AiAnalysisResult {
@@ -217,10 +217,9 @@ export default function PortfolioPage() {
   return (
     <div className="min-h-screen bg-gray-50/30 text-[#191f28] pb-44 animate-in fade-in duration-500 overflow-x-hidden overflow-y-visible">
       
-      {/* Header - 모바일에서 px-4로 공간 확보 */}
+      {/* Header - 인증 로직 정제 및 대시보드 집중 */}
       <header className="w-full px-4 md:px-8 pt-10 md:pt-14 pb-6 md:pb-8 bg-white border-b border-gray-100">
         
-        {/* 상단바 모바일 최적화: 세로 스태킹 */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 md:gap-0 mb-10 md:mb-12">
           
           <div className="flex items-center justify-between w-full md:w-auto">
@@ -236,7 +235,7 @@ export default function PortfolioPage() {
               )}
             </div>
             
-            {/* 모래알 크기의 보너스 버튼들 (모바일 우측 상단 고정) */}
+            {/* 상단 액션 버튼 (모바일용) */}
             <div className="flex md:hidden gap-3">
               <button onClick={() => { fetchMarketIndices(); fetchPrices(stocks, interestStocks); }} className="p-3 text-gray-400 bg-gray-50 rounded-full shadow-sm touch-manipulation">
                 <RefreshCcw size={20} className={isRefreshing ? 'animate-spin' : ''} />
@@ -247,28 +246,17 @@ export default function PortfolioPage() {
             </div>
           </div>
           
-          {/* Auth UI */}
+          {/* User Profile (Only Display) */}
           <div className="flex items-center gap-4 w-full md:w-auto justify-between md:justify-end">
-            {session ? (
-              <div className="flex items-center gap-3 bg-gray-50 px-4 md:px-5 py-2.5 md:py-3 rounded-full border border-gray-100 shadow-sm flex-1 md:flex-none">
-                {session.user?.image ? (
-                  <img src={session.user.image} alt="profile" className="w-7 h-7 md:w-8 md:h-8 rounded-full border-2 border-white shadow-sm" />
-                ) : (
-                  <div className="w-7 h-7 md:w-8 md:h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-500"><User size={16} /></div>
-                )}
-                <span className="text-xs md:text-sm font-black text-gray-700 truncate max-w-[80px] sm:max-w-none">{session.user?.name}님</span>
-                <button onClick={() => signOut()} className="p-1.5 md:p-2 text-gray-400 hover:text-red-500 transition-colors touch-manipulation"><LogOut size={18} /></button>
-              </div>
-            ) : (
-              <button 
-                onClick={() => signIn('google')}
-                className="flex items-center gap-3 px-5 py-3 md:px-6 md:py-4 bg-[#3182f6] text-white rounded-full font-black text-xs md:text-sm shadow-xl hover:bg-[#2067d9] transition-all active:scale-95 flex-1 md:flex-none justify-center touch-manipulation"
-              >
-                <LogIn size={18} /> 구글로 시작하기
-              </button>
-            )}
+            <div className="flex items-center gap-3 bg-white px-4 md:px-5 py-2.5 md:py-3 rounded-full border border-gray-100 shadow-sm flex-1 md:flex-none">
+              {session?.user?.image ? (
+                <img src={session.user.image} alt="profile" className="w-7 h-7 md:w-8 md:h-8 rounded-full border-2 border-white shadow-sm" />
+              ) : (
+                <div className="w-7 h-7 md:w-8 md:h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-500"><User size={16} /></div>
+              )}
+              <span className="text-xs md:text-sm font-black text-gray-700 truncate max-w-[120px]">{session?.user?.name || '사용자'}님</span>
+            </div>
             
-            {/* 데스크톱 상단 버튼 */}
             <div className="hidden md:flex gap-4">
               <button onClick={() => { fetchMarketIndices(); fetchPrices(stocks, interestStocks); }} className="p-4 text-gray-400 bg-gray-50 rounded-full shadow-sm hover:bg-gray-100">
                 <RefreshCcw size={24} className={isRefreshing ? 'animate-spin' : ''} />
@@ -308,7 +296,7 @@ export default function PortfolioPage() {
         </div>
       </section>
 
-      {/* Interests Section - 깔끔한 레이아웃 복구 */}
+      {/* Interests Section */}
       <section className="px-4 md:px-8 py-10 md:py-12 bg-gray-50/50">
         <h3 className="text-xl md:text-2xl font-black mb-8 md:mb-12 ml-1">관심있는 종목</h3>
         <div className="space-y-4">
@@ -339,7 +327,6 @@ export default function PortfolioPage() {
         </div>
       </section>
 
-      {/* 하단 패딩 확보 - 네비게이션 공간 */}
       <div className="h-24 md:h-20" />
 
       {/* Add Modal */}
