@@ -4,10 +4,10 @@ import React, { useState, useEffect } from 'react';
 import { 
   RefreshCcw, Search, ChevronLeft, Star, Trash2, Plus, Loader2, AlertCircle, Bot
 } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
 
-export const dynamic = 'force-dynamic';
+// [9차 핵심] localStorage 키 정의
+const STORAGE_KEY = 'myWatchlist';
 
 interface InterestStock {
   id: string | number;
@@ -30,53 +30,29 @@ const stockMap: Record<string, string> = {
 
 export default function WatchlistPage() {
   const [interestStocks, setInterestStocks] = useState<InterestStock[]>([]);
-  const [isRefreshing, setIsRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // [8차 수정] alerts -> interest_stocks 테이블명 변경 및 필드명(stock_code) 대응
-  const fetchInterests = async () => {
-    try {
-      const { data } = await supabase.from('interest_stocks').select('*').order('created_at', { ascending: false });
-      if (data) {
-        setInterestStocks(data.map(item => ({
-          id: item.id, 
-          name: item.stock_name || item.stock_code, // stock_name 컬럼이 없을 경우 대비
-          symbol: item.stock_code, 
-          price: null, 
-          change: null
-        })));
+  // [9차 핵심] DB 호출 대신 localStorage에서 데이터 불러오기
+  useEffect(() => {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      try {
+        setInterestStocks(JSON.parse(saved));
+      } catch (e) {
+        console.error("데이터 로드 실패:", e);
       }
-    } catch (e) {}
-  };
-
-  const fetchPrices = async (silent = false) => {
-    const symbols = interestStocks.map(s => s.symbol).filter(Boolean);
-    if (symbols.length === 0) {
-      if (!silent) setIsRefreshing(false);
-      return;
     }
-    if (!silent) setIsRefreshing(true);
-    try {
-      const res = await fetch('/api/stock', { 
-        method: 'POST', 
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ symbols }),
-        cache: 'no-store'
-      });
-      const data = await res.json();
-      setInterestStocks(prev => prev.map(s => data[s.symbol] ? { 
-        ...s, price: data[s.symbol].price, change: data[s.symbol].changePercent
-      } : s));
-    } catch (e) {}
-    finally { setIsRefreshing(false); }
-  };
+  }, []);
 
-  // [8차 수정] 관심 종목 저장 시 interest_stocks 테이블 사용 및 필드명 정렬
-  const handleAddStock = async () => {
+  // [9차 핵심] API 통신 코드를 전면 삭제하라는 지침에 따라 fetchPrices 제거
+
+  // [9차 핵심] 종목 추가 로직 - localStorage 기반으로 수정
+  const handleAddStock = () => {
     const trimmedQuery = searchQuery.trim();
     if (!trimmedQuery) return;
 
+    // 이름으로 티커 찾기
     const symbol = stockMap[trimmedQuery];
     
     if (!symbol) {
@@ -85,48 +61,49 @@ export default function WatchlistPage() {
     }
 
     setIsSubmitting(true);
-    try {
-      if (interestStocks.some(s => s.symbol === symbol)) {
-        alert("이미 관심 종목에 등록된 종목입니다.");
-        setSearchQuery('');
-        return;
-      }
-
-      // [8차 핵심] interest_stocks 스키마 준수 (stock_code)
-      const { error } = await supabase.from('interest_stocks').insert([{
-        stock_code: symbol,
-        alert_enabled: true
-      }]);
-
-      if (error) throw error;
-      
-      await fetchInterests();
+    
+    // 중복 체크
+    if (interestStocks.some(s => s.symbol === symbol)) {
+      alert("이미 관심 종목에 등록된 종목입니다.");
       setSearchQuery('');
-    } catch (err: any) {
-      alert("추가 실패: " + err.message);
-    } finally {
       setIsSubmitting(false);
+      return;
     }
+
+    // 새 종목 객체 생성
+    const newStock: InterestStock = {
+      id: Date.now(), // 로컬 ID 생성
+      name: trimmedQuery,
+      symbol: symbol,
+      price: null,
+      change: null
+    };
+
+    // 상태 업데이트 및 localStorage 저장
+    const updatedList = [newStock, ...interestStocks];
+    setInterestStocks(updatedList);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedList));
+    
+    setSearchQuery('');
+    
+    // 추가 성공 후 즉각 렌더링을 위해 인위적인 딜레이(UI 피드백) 후 종료
+    setTimeout(() => {
+      setIsSubmitting(false);
+    }, 300);
   };
 
-  const removeInterest = async (id: string | number) => {
+  // [9차 핵심] 종목 삭제 로직 - localStorage 반영
+  const removeInterest = (id: string | number) => {
     if (!confirm('관심 종목에서 삭제하시겠습니까?')) return;
-    try {
-      await supabase.from('interest_stocks').delete().eq('id', id);
-      fetchInterests();
-    } catch (err) {}
+    
+    const updatedList = interestStocks.filter(s => s.id !== id);
+    setInterestStocks(updatedList);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedList));
   };
-
-  useEffect(() => {
-    fetchInterests();
-    const interval = setInterval(() => fetchPrices(true), 20000);
-    return () => clearInterval(interval);
-  }, []);
-
-  useEffect(() => { if(interestStocks.length > 0) fetchPrices(true); }, [interestStocks.length]);
 
   return (
     <div className="w-full bg-slate-50 min-h-screen">
+      {/* 헤더 */}
       <header className="px-5 py-6 bg-white border-b border-slate-100 flex items-center justify-between sticky top-0 z-40">
         <div className="flex items-center gap-3">
            <Link href="/" className="p-2 bg-slate-50 rounded-xl text-slate-400 hover:text-blue-500 transition-colors">
@@ -134,12 +111,13 @@ export default function WatchlistPage() {
            </Link>
            <h1 className="text-xl font-bold tracking-tight text-slate-900">관심 종목</h1>
         </div>
-        <button onClick={() => { fetchInterests(); fetchPrices(); }} className="p-2 bg-slate-50 rounded-xl text-slate-400">
-           <RefreshCcw size={18} className={isRefreshing ? 'animate-spin text-blue-500' : ''} />
-        </button>
+        <div className="p-2 bg-slate-50 rounded-xl text-slate-200">
+           <RefreshCcw size={18} title="오프라인 모드" />
+        </div>
       </header>
 
       <div className="px-5 mt-6 space-y-6">
+         {/* 검색 및 추가 입력창 */}
          <div className="flex gap-2">
             <div className="bg-white rounded-2xl px-5 h-14 flex items-center gap-3 border border-gray-300 shadow-sm focus-within:ring-2 focus-within:ring-blue-500 flex-1 transition-all">
                <Search className="text-slate-300" size={20} />
@@ -161,9 +139,10 @@ export default function WatchlistPage() {
             </button>
          </div>
 
+         {/* 관심 종목 리스트 - localStorage 직접 렌더링 */}
          <div className="space-y-4 pb-24">
             <div className="flex justify-between items-center px-1">
-               <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest leading-none">My Watchlist</h3>
+               <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest leading-none">Local Watchlist</h3>
                <span className="text-[10px] font-bold text-slate-300">Total {interestStocks.length}</span>
             </div>
             
@@ -183,10 +162,10 @@ export default function WatchlistPage() {
                    <div className="flex items-center gap-5">
                       <div className="text-right flex flex-col items-end gap-1.5">
                          <p className="text-xl font-bold text-slate-900 tabular-nums leading-none tracking-tight">
-                            {(s.price?.toLocaleString() || '--')}
+                            {s.price ? s.price.toLocaleString() : '--'}
                          </p>
                          <span className={`text-[10px] font-black px-2 py-0.5 rounded-md ${isUp ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-600'}`}>
-                            {isUp ? '+' : ''}{s.change?.toFixed(2)}%
+                            {s.change !== null ? (isUp ? '+' : '') + s.change?.toFixed(2) + '%' : '연결 안됨'}
                          </span>
                       </div>
                       <button 
@@ -203,9 +182,16 @@ export default function WatchlistPage() {
             {interestStocks.length === 0 && (
                <div className="py-20 text-center border-2 border-dashed border-slate-200 rounded-3xl">
                   <Bot size={48} className="mx-auto mb-4 text-slate-100" />
-                  <p className="text-sm font-bold text-slate-300">관심 종목을 검색하고 추가해보세요!</p>
+                  <p className="text-sm font-bold text-slate-300">기기에 저장된 종목이 없습니다.<br/>검색하여 추가해보세요!</p>
                </div>
             )}
+         </div>
+
+         <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 flex items-start gap-3">
+            <AlertCircle size={18} className="text-blue-500 flex-shrink-0 mt-0.5" />
+            <p className="text-[11px] font-bold text-blue-600/70 leading-relaxed">
+               현재 시스템은 오프라인 모드로 작동 중입니다. 데이터는 브라우저(`localStorage`)에만 저장되며, 앱 삭제 또는 데이터 삭제 시 초기화됩니다. 시세 정보를 보려면 추후 DB 연결이 필요합니다.
+            </p>
          </div>
       </div>
     </div>
