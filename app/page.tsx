@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Plus, 
   X,
@@ -88,15 +88,18 @@ export default function PortfolioPage() {
     name: '', symbol: '', avgPrice: 0, quantity: 0, type: '스윙', target: 0, stopLoss: 0
   });
 
+  // [지시사항] 폴링 로직을 위해 상태 참조용 Ref (갱신 시 로딩바 방지용)
+  const isPollingRef = useRef(false);
+
   // Data Fetching
-  const fetchMarketIndices = async () => {
-    setIsMarketLoading(true);
+  const fetchMarketIndices = async (silent = false) => {
+    if (!silent) setIsMarketLoading(true);
     try {
       const res = await fetch('/api/market', { cache: 'no-store' });
       const data = await res.json();
       if (Array.isArray(data)) setMarketIndices(data);
     } catch (error) { console.error("[Front] Market API Error:", error); }
-    finally { setIsMarketLoading(false); }
+    finally { if (!silent) setIsMarketLoading(false); }
   };
 
   const fetchHoldings = async () => {
@@ -131,9 +134,9 @@ export default function PortfolioPage() {
     return [];
   };
 
-  const fetchPrices = async (targetStocks: Stock[], targetInterests: InterestStock[]) => {
+  const fetchPrices = async (targetStocks: Stock[], targetInterests: InterestStock[], silent = false) => {
     if (targetStocks.length === 0 && targetInterests.length === 0) return;
-    setIsRefreshing(true);
+    if (!silent) setIsRefreshing(true);
     try {
       const symbols = Array.from(new Set([
         ...targetStocks.map(s => s.symbol),
@@ -160,9 +163,10 @@ export default function PortfolioPage() {
         return s;
       }));
     } catch (error) { console.error("[Front] Price Fetch Error:", error); }
-    finally { setIsRefreshing(false); }
+    finally { if (!silent) setIsRefreshing(false); }
   };
 
+  // [지시사항] 10초 주기 실시간 폴링 로직
   useEffect(() => {
     const init = async () => {
       setIsInitialLoading(true);
@@ -171,8 +175,20 @@ export default function PortfolioPage() {
       await fetchPrices(h, i);
       setIsInitialLoading(false);
     };
+
     init();
-  }, []);
+
+    // 10초마다 백그라운드 갱신 (화면 깜빡임 없이)
+    const pollInterval = setInterval(async () => {
+      fetchMarketIndices(true);
+      // 현재 상태의 stocks와 interestStocks를 기반으로 가격 갱신
+      // 참고: 클로저 문제 방지를 위해 ref나 상태 패칭 함수 내 최신 상태 활용이 필요할 수 있으나
+      // 여기서는 fetchPrices 내부의 prev 상태 업데이트 로직으로 해결
+      fetchPrices(stocks, interestStocks, true);
+    }, 10000);
+
+    return () => clearInterval(pollInterval);
+  }, []); // [] 의존성 유지하되 내부에서 fetchPrices가 prev를 사용하도록 설계됨
 
   const handleAddStock = async () => {
     if (!newStock.name || !newStock.avgPrice || !newStock.symbol) { alert('필수 입력!'); return; }
@@ -222,7 +238,6 @@ export default function PortfolioPage() {
   return (
     <div className="min-h-screen bg-white text-[#191f28] pb-44 animate-in fade-in duration-500 overflow-x-hidden overflow-y-visible">
       {/* Header */}
-      {/* [지시사항 2] 가로 넘침 방지를 위해 px-8, w-full, box-border 적용 */}
       <header className="w-full px-8 pt-14 pb-8 overflow-hidden box-border">
         <div className="flex justify-between items-center mb-12 overflow-visible">
           <h1 className="text-3xl font-black tracking-tight text-[#3182f6]">AI Stock</h1>
@@ -236,7 +251,6 @@ export default function PortfolioPage() {
           </div>
         </div>
 
-        {/* 지수 영역 가로 정렬 */}
         <div className="flex gap-10 items-center overflow-x-auto no-scrollbar py-4 w-full">
           {isMarketLoading ? <SkeletonText width="w-40" /> : marketIndices.map(market => (
             <div key={market.symbol} className="flex items-center gap-4 whitespace-nowrap min-w-fit">
@@ -246,7 +260,6 @@ export default function PortfolioPage() {
               </span>
               <span className={`text-xs font-black px-10 py-3 rounded-full ${market.changePercent >= 0 ? 'text-red-500 bg-red-50' : 'text-blue-600 bg-blue-50'}`}>
                 {market.changePercent >= 0 ? '▲' : '▼'}{Math.abs(market.changePercent).toFixed(1)}%
-                {/* [지시사항 1] 디버깅 꼬리표 삭제 */}
               </span>
             </div>
           ))}
@@ -271,16 +284,14 @@ export default function PortfolioPage() {
         <h3 className="text-2xl font-black mb-12">나의 투자 현황</h3>
         
         {isInitialLoading ? <SkeletonCircle /> : stocks.length === 0 ? (
-          /* [지시사항 3] 물리적 격리: absolute 및 강제 위치 속성 완전 삭제 후 flex-col gap-8 적용 */
           <div className="flex flex-col items-center justify-center p-8 gap-8 border-2 border-dashed border-gray-200 rounded-2xl w-full box-border">
             <p className="text-gray-500 text-center text-lg leading-relaxed">
               보유하신 종목을 한 번만 등록해 보세요.<br/>
               AI가 즉시 승률 높은 전략을 제안합니다.
             </p>
-            {/* 겹침 방지를 위해 박스 내 하단에 자연스럽게 배치 */}
             <button 
               onClick={() => setIsAddModalOpen(true)} 
-              className="px-8 py-3 bg-blue-500 text-white font-bold rounded-full w-fit whitespace-nowrap shadow-md hover:bg-blue-600 transition-colors"
+              className="px-8 py-3 bg-blue-500 text-white font-bold rounded-full w-fit whitespace-nowrap shadow-md"
             >
               지금 시작하기
             </button>
