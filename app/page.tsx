@@ -236,7 +236,7 @@ export default function PortfolioPage() {
               )}
             </div>
             
-            {/* 모바일에서만 보이는 상단 우측 버튼들 (간격 확보) */}
+            {/* 모래알 크기의 보너스 버튼들 (모바일 우측 상단 고정) */}
             <div className="flex md:hidden gap-3">
               <button onClick={() => { fetchMarketIndices(); fetchPrices(stocks, interestStocks); }} className="p-3 text-gray-400 bg-gray-50 rounded-full shadow-sm touch-manipulation">
                 <RefreshCcw size={20} className={isRefreshing ? 'animate-spin' : ''} />
@@ -247,7 +247,7 @@ export default function PortfolioPage() {
             </div>
           </div>
           
-          {/* Auth UI - 모바일에서 가로로 길게 */}
+          {/* Auth UI */}
           <div className="flex items-center gap-4 w-full md:w-auto justify-between md:justify-end">
             {session ? (
               <div className="flex items-center gap-3 bg-gray-50 px-4 md:px-5 py-2.5 md:py-3 rounded-full border border-gray-100 shadow-sm flex-1 md:flex-none">
@@ -268,19 +268,19 @@ export default function PortfolioPage() {
               </button>
             )}
             
-            {/* 데스크톱에서만 보이는 버튼들 */}
+            {/* 데스크톱 상단 버튼 */}
             <div className="hidden md:flex gap-4">
-              <button onClick={() => { fetchMarketIndices(); fetchPrices(stocks, interestStocks); }} className="p-4 text-gray-400 bg-gray-50 rounded-full shadow-sm hover:bg-gray-100 touch-manipulation">
+              <button onClick={() => { fetchMarketIndices(); fetchPrices(stocks, interestStocks); }} className="p-4 text-gray-400 bg-gray-50 rounded-full shadow-sm hover:bg-gray-100">
                 <RefreshCcw size={24} className={isRefreshing ? 'animate-spin' : ''} />
               </button>
-              <button onClick={() => setIsAddModalOpen(true)} className="p-4 text-[#3182f6] bg-blue-50 rounded-full shadow-sm hover:bg-blue-100 touch-manipulation">
+              <button onClick={() => setIsAddModalOpen(true)} className="p-4 text-[#3182f6] bg-blue-50 rounded-full shadow-sm hover:bg-blue-100">
                 <Plus size={30} strokeWidth={3} />
               </button>
             </div>
           </div>
         </div>
 
-        {/* 지수 정보 - 좌우 스크롤 및 폰트 확대 */}
+        {/* 지수 정보 */}
         <div className="flex gap-8 md:gap-10 items-center overflow-x-auto no-scrollbar py-2 w-full">
           {isMarketLoading ? <div className="w-40 h-4 bg-gray-100 animate-pulse rounded" /> : marketIndices.map(market => (
             <div key={market.symbol} className="flex flex-col gap-1 min-w-fit">
@@ -297,7 +297,7 @@ export default function PortfolioPage() {
         </div>
       </header>
 
-      {/* Asset Summary - 모바일에서 p-4로 여백 다이어트 */}
+      {/* Asset Summary */}
       <section className="px-4 md:px-8 py-10 md:py-12 bg-white">
         <p className="text-xs md:text-sm font-black text-gray-400 mb-2 md:mb-3 tracking-wider uppercase">Portfolio Balance</p>
         <div className="flex flex-col md:flex-row items-start md:items-center gap-4 md:gap-6">
@@ -308,7 +308,7 @@ export default function PortfolioPage() {
         </div>
       </section>
 
-      {/* Interests Section - 모바일 카드 최적화 */}
+      {/* Interests Section - 깔끔한 레이아웃 복구 */}
       <section className="px-4 md:px-8 py-10 md:py-12 bg-gray-50/50">
         <h3 className="text-xl md:text-2xl font-black mb-8 md:mb-12 ml-1">관심있는 종목</h3>
         <div className="space-y-4">
@@ -339,9 +339,12 @@ export default function PortfolioPage() {
         </div>
       </section>
 
-      {/* Add Modal - 모바일 슬라이드 업 최적화 */}
+      {/* 하단 패딩 확보 - 네비게이션 공간 */}
+      <div className="h-24 md:h-20" />
+
+      {/* Add Modal */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 z-[100] bg-white p-6 md:p-10 pt-20 md:pt-28 flex flex-col animate-in slide-in-from-bottom duration-500 overflow-visible">
+        <div className="fixed inset-0 z-[100] bg-white p-6 md:p-10 pt-20 md:pt-28 flex flex-col animate-in slide-in-from-bottom duration-500">
           <div className="flex justify-between items-start mb-14 md:mb-20">
             <h2 className="text-3xl md:text-5xl font-black leading-[1.1]">자산 등록</h2>
             <button onClick={() => setIsAddModalOpen(false)} className="p-4 md:p-5 bg-gray-100 rounded-full text-gray-400 touch-manipulation"><X size={24} className="md:w-8 md:h-8" /></button>
