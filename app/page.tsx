@@ -1,8 +1,9 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { Plus, X, RefreshCcw, Bell, Trash2, BellRing } from 'lucide-react';
+import { Plus, X, RefreshCcw, Bell, Trash2, BellRing, LogIn, LogOut, User } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { useSession, signIn, signOut } from "next-auth/react";
 
 // --- Interfaces ---
 interface AiAnalysisResult {
@@ -59,6 +60,7 @@ function urlBase64ToUint8Array(base64String: string) {
 }
 
 export default function PortfolioPage() {
+  const { data: session } = useSession();
   const [stocks, setStocks] = useState<Stock[]>([]);
   const [interestStocks, setInterestStocks] = useState<InterestStock[]>([]);
   const [marketIndices, setMarketIndices] = useState<MarketIndex[]>([]);
@@ -214,6 +216,7 @@ export default function PortfolioPage() {
 
   return (
     <div className="min-h-screen bg-gray-50/30 text-[#191f28] pb-44 animate-in fade-in duration-500 overflow-x-hidden overflow-y-visible">
+      {/* Header */}
       <header className="w-full px-8 pt-14 pb-8 bg-white border-b border-gray-100">
         <div className="flex justify-between items-center mb-12">
           <div className="flex items-center gap-4">
@@ -227,7 +230,27 @@ export default function PortfolioPage() {
               </button>
             )}
           </div>
-          <div className="flex gap-6">
+          
+          {/* Auth UI */}
+          <div className="flex items-center gap-6">
+            {session ? (
+              <div className="flex items-center gap-4 bg-gray-50 px-5 py-3 rounded-full border border-gray-100 shadow-sm">
+                {session.user?.image ? (
+                  <img src={session.user.image} alt="profile" className="w-8 h-8 rounded-full border-2 border-white shadow-sm" />
+                ) : (
+                  <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-500"><User size={18} /></div>
+                )}
+                <span className="text-sm font-black text-gray-700 hidden sm:block">{session.user?.name}님</span>
+                <button onClick={() => signOut()} className="p-2 text-gray-400 hover:text-red-500 transition-colors"><LogOut size={20} /></button>
+              </div>
+            ) : (
+              <button 
+                onClick={() => signIn('google')}
+                className="flex items-center gap-3 px-6 py-4 bg-[#3182f6] text-white rounded-full font-black text-sm shadow-xl hover:bg-[#2067d9] transition-all active:scale-95"
+              >
+                <LogIn size={20} /> 구글로 시작하기
+              </button>
+            )}
             <button onClick={() => { fetchMarketIndices(); fetchPrices(stocks, interestStocks); }} className="p-4 text-gray-400 bg-gray-50 rounded-full shadow-sm hover:bg-gray-100">
               <RefreshCcw size={24} className={isRefreshing ? 'animate-spin' : ''} />
             </button>
@@ -251,6 +274,7 @@ export default function PortfolioPage() {
         </div>
       </header>
 
+      {/* Asset Summary */}
       <section className="px-8 py-12 bg-white">
         <p className="text-sm font-black text-gray-400 mb-3 tracking-wider uppercase">Portfolio Balance</p>
         <div className="flex flex-wrap items-center gap-6">
@@ -261,6 +285,7 @@ export default function PortfolioPage() {
         </div>
       </section>
 
+      {/* Interests Section - 모던 클린 카드형 */}
       <section className="px-8 py-12 bg-gray-50/50">
         <h3 className="text-2xl font-black mb-12">관심있는 종목</h3>
         <div className="space-y-4">
@@ -291,6 +316,7 @@ export default function PortfolioPage() {
         </div>
       </section>
 
+      {/* Add Modal */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-[100] bg-white p-10 pt-28 flex flex-col animate-in slide-in-from-bottom duration-500 overflow-visible">
           <div className="flex justify-between items-start mb-20">
