@@ -21,9 +21,11 @@ export default function RootLayout({
       <body className={`${inter.className} bg-slate-50 text-slate-900 antialiased`}>
         <AuthProvider>
           <div className="min-h-screen flex flex-col">
-            <main className="flex-1 w-full max-w-[1200px] mx-auto">
+            {/* Toss 스타일 최적화: 메인 영역에 하단 탭 여백(pb-24) 확보 */}
+            <main className="flex-1 w-full max-w-[1200px] mx-auto pb-24">
               {children}
             </main>
+            {/* 고정 네비게이션 */}
             <Navigation />
           </div>
         </AuthProvider>
