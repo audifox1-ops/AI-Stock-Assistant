@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { Plus, X, RefreshCcw, Bell, AlertCircle } from 'lucide-react';
+import { Plus, X, RefreshCcw, Bell, Trash2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 // --- Interfaces ---
@@ -171,7 +171,6 @@ export default function PortfolioPage() {
 
     init();
 
-    // 10초마다 자동 갱신 (무음)
     const pollInterval = setInterval(() => {
       fetchMarketIndices(true);
       setStocks(currentStocks => {
@@ -200,6 +199,23 @@ export default function PortfolioPage() {
         fetchPrices(updated, interestStocks);
         setIsAddModalOpen(false); 
       }
+    } catch (err) { console.error(err); }
+  };
+
+  const removeInterest = async (id: string | number) => {
+    if (!confirm('관심 종목에서 삭제할까요?')) return;
+    try {
+      const { error } = await supabase.from('alerts').delete().eq('id', id);
+      if (error) throw error;
+      setInterestStocks(prev => prev.filter(s => s.id !== id));
+    } catch (err) { console.error(err); }
+  };
+
+  const toggleInterestAlert = async (id: string | number, current: boolean) => {
+    try {
+      const { error } = await supabase.from('alerts').update({ alert_enabled: !current }).eq('id', id);
+      if (error) throw error;
+      setInterestStocks(prev => prev.map(s => s.id === id ? { ...s, alertEnabled: !current } : s));
     } catch (err) { console.error(err); }
   };
 
@@ -232,9 +248,9 @@ export default function PortfolioPage() {
   const totalRate = totalBuyAmount > 0 ? ((totalCurrentAmount / totalBuyAmount - 1) * 100).toFixed(2) : '0.00';
 
   return (
-    <div className="min-h-screen bg-white text-[#191f28] pb-44 animate-in fade-in duration-500 overflow-x-hidden overflow-y-visible">
+    <div className="min-h-screen bg-gray-50/30 text-[#191f28] pb-44 animate-in fade-in duration-500 overflow-x-hidden overflow-y-visible">
       {/* Header */}
-      <header className="w-full px-8 pt-14 pb-8 overflow-hidden box-border">
+      <header className="w-full px-8 pt-14 pb-8 overflow-hidden box-border bg-white border-b border-gray-100">
         <div className="flex justify-between items-center mb-12 overflow-visible">
           <h1 className="text-3xl font-black tracking-tight text-[#3182f6]">AI Stock</h1>
           <div className="flex gap-6 overflow-visible">
@@ -266,7 +282,7 @@ export default function PortfolioPage() {
       </header>
 
       {/* Asset Summary */}
-      <section className="px-8 py-12 overflow-visible">
+      <section className="px-8 py-12 overflow-visible bg-white">
         <p className="text-sm font-black text-gray-400 mb-3 tracking-wider uppercase">Portfolio Balance</p>
         <div className="flex flex-wrap items-center gap-6 overflow-visible">
           <h2 className="text-5xl font-black tracking-tight leading-none overflow-visible">{totalCurrentAmount.toLocaleString()}원</h2>
@@ -276,14 +292,12 @@ export default function PortfolioPage() {
         </div>
       </section>
 
-      <div className="h-4 bg-gray-50/60"></div>
-
       {/* Holdings Section */}
-      <section className="px-8 py-12 overflow-visible">
+      <section className="px-8 py-12 overflow-visible mt-4">
         <h3 className="text-2xl font-black mb-12">나의 투자 현황</h3>
         
         {isInitialLoading ? <SkeletonCircle /> : stocks.length === 0 ? (
-          <div className="flex flex-col items-center justify-center p-8 gap-8 border-2 border-dashed border-gray-200 rounded-2xl w-full box-border">
+          <div className="flex flex-col items-center justify-center p-8 gap-8 border-2 border-dashed border-gray-200 rounded-2xl w-full box-border bg-white">
             <p className="text-gray-500 text-center text-lg leading-relaxed">
               보유하신 종목을 한 번만 등록해 보세요.<br/>
               AI가 즉시 승률 높은 전략을 제안합니다.
@@ -296,23 +310,31 @@ export default function PortfolioPage() {
             </button>
           </div>
         ) : (
-          <div className="space-y-14">
+          <div className="space-y-6">
             {stocks.map(stock => {
               const isProfit = (stock.currentPrice || stock.avgPrice) >= stock.avgPrice;
               const rate = (( (stock.currentPrice || stock.avgPrice) / stock.avgPrice - 1) * 100).toFixed(1);
               return (
-                <div key={stock.id} className="overflow-visible">
-                  <div className="flex justify-between items-center p-5 -m-5 transition-all cursor-pointer overflow-visible" onClick={() => analyzeStockOrInterest(stock, true)}>
-                    <div className="flex flex-row items-center gap-12 min-w-0 overflow-visible">
-                      <div className={`flex-shrink-0 w-16 h-16 rounded-2xl flex items-center justify-center font-black text-white ${isProfit ? 'bg-red-400' : 'bg-blue-400'}`}>{stock.name.charAt(0)}</div>
-                      <div className="min-w-0 flex-1">
-                        <h4 className="text-2xl font-black text-[#191f28] leading-tight mb-2 whitespace-nowrap overflow-visible uppercase">{stock.name}</h4>
-                        <p className="text-xs font-bold text-gray-400">실시간 {stock.updatedAt ? `(${stock.updatedAt})` : ''} · {stock.quantity.toLocaleString()}주</p>
-                      </div>
+                <div 
+                  key={stock.id} 
+                  className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 flex justify-between items-center cursor-pointer hover:border-blue-200 transition-all"
+                  onClick={() => analyzeStockOrInterest(stock, true)}
+                >
+                  <div className="flex items-center gap-8 min-w-0 flex-1">
+                    <div className={`flex-shrink-0 w-16 h-16 rounded-2xl flex items-center justify-center font-black text-white ${isProfit ? 'bg-red-400' : 'bg-blue-400'}`}>
+                      {stock.name.charAt(0)}
                     </div>
-                    <div className="text-right min-w-max">
-                      <p className="text-2xl font-black text-[#1b1c1e] mb-2">{(stock.currentPrice?.toLocaleString() || '--')}원</p>
-                      <div className={`px-10 py-3 rounded-full text-xs font-black ${isProfit ? 'text-red-500 bg-red-50' : 'text-blue-600 bg-blue-50'}`}>{isProfit ? '+' : ''}{rate}%</div>
+                    <div className="min-w-0">
+                      <h4 className="text-xl font-bold text-gray-900 leading-tight mb-1 truncate uppercase">{stock.name}</h4>
+                      <p className="text-xs font-medium text-gray-400">
+                        {stock.quantity.toLocaleString()}주 · {stock.updatedAt ? `${stock.updatedAt} 기준` : '업데이트 중'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-right ml-4">
+                    <p className="text-xl font-black text-gray-900 mb-1">{(stock.currentPrice?.toLocaleString() || '--')}원</p>
+                    <div className={`px-6 py-1 rounded-full text-xs font-black inline-block ${isProfit ? 'text-red-500 bg-red-50' : 'text-blue-600 bg-blue-50'}`}>
+                      {isProfit ? '+' : ''}{rate}%
                     </div>
                   </div>
                 </div>
@@ -322,39 +344,59 @@ export default function PortfolioPage() {
         )}
       </section>
 
-      {/* Interests Section */}
-      <section className="px-8 py-12 overflow-visible border-t-8 border-gray-50 mt-8">
+      {/* Interests Section - [지시사항] 모던 클린 카드형 UX 적용 */}
+      <section className="px-8 py-12 overflow-visible bg-gray-50/50">
         <h3 className="text-2xl font-black mb-12">관심있는 종목</h3>
-        <div className="space-y-12">
+        <div className="space-y-4">
           {interestStocks.map(stock => {
             const isUp = (stock.change || 0) >= 0;
             return (
-              /* [지시사항] 텍스트가 짤리지 않도록 거대한 좌우 패딩(pl-12 px-10) 적용 및 음수 마진 제거 */
               <div 
                 key={stock.id} 
-                className="flex items-center justify-between py-10 pl-12 pr-10 rounded-[3rem] transition-all cursor-pointer overflow-visible hover:bg-gray-50 bg-gray-50/40"
-                onClick={() => analyzeStockOrInterest(stock, false)}
+                className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 flex flex-row items-center justify-between transition-all hover:bg-gray-50 active:scale-[0.98]"
               >
-                <div className="flex items-center gap-x-12 min-w-0 flex-1 overflow-visible">
-                  <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center text-gray-300 flex-shrink-0 shadow-sm border border-gray-100">
-                    <Bell size={28} />
-                  </div>
-                  {/* 종목명 컨테이너 - 음수 마진(-ml) 없이 유동적 확보 */}
-                  <div className="min-w-fit flex-1 overflow-visible">
-                    <h4 className="text-2xl font-black text-[#191f28] uppercase whitespace-normal break-keep leading-tight mb-1">
-                      {stock.name}
-                    </h4>
-                    <p className="text-xs font-black text-gray-400 tracking-widest">
-                      {stock.symbol} {stock.updatedAt && `(${stock.updatedAt})`}
-                    </p>
+                {/* [왼쪽 구역] 종목 정보 - 짤림 절대 불가 구조 */}
+                <div className="flex flex-col min-w-0 flex-1" onClick={() => analyzeStockOrInterest(stock, false)}>
+                  <h4 className="text-xl font-bold text-gray-900 mb-1 truncate uppercase">
+                    {stock.name}
+                  </h4>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs font-black text-blue-500 bg-blue-50 px-2 py-0.5 rounded uppercase tracking-tighter">
+                      {stock.symbol}
+                    </span>
+                    {stock.updatedAt && (
+                      <span className="text-[10px] font-bold text-gray-400">
+                        {stock.updatedAt} 기준
+                      </span>
+                    )}
                   </div>
                 </div>
-                <div className="text-right min-w-max ml-8">
-                  <p className="text-2xl font-black text-[#191f28] mb-2">
-                    {(stock.price?.toLocaleString() || '--')}원
-                  </p>
-                  <div className={`px-10 py-3 rounded-full text-xs font-black ${isUp ? 'text-red-500 bg-red-50' : 'text-blue-600 bg-blue-50'}`}>
-                    {isUp ? '+' : ''}{stock.change?.toFixed(2) || '0.00'}%
+
+                {/* [오른쪽 구역] 가격 및 액션 - 겹침 방지 */}
+                <div className="flex flex-row items-center gap-6 flex-shrink-0 ml-4">
+                  <div className="text-right" onClick={() => analyzeStockOrInterest(stock, false)}>
+                    <p className="text-xl font-black text-gray-900 leading-tight">
+                      {(stock.price?.toLocaleString() || '--')}원
+                    </p>
+                    <p className={`text-xs font-black mt-1 ${isUp ? 'text-red-500' : 'text-blue-600'}`}>
+                      {isUp ? '▲' : '▼'}{Math.abs(stock.change || 0).toFixed(2)}%
+                    </p>
+                  </div>
+                  
+                  {/* 액션 버튼 그룹 */}
+                  <div className="flex items-center gap-3 border-l border-gray-100 pl-6 ml-2">
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); toggleInterestAlert(stock.id, stock.alertEnabled); }}
+                      className={`p-3 rounded-xl transition-all ${stock.alertEnabled ? 'text-blue-500 bg-blue-50' : 'text-gray-300 hover:text-gray-500 bg-gray-50'}`}
+                    >
+                      <Bell size={20} className={stock.alertEnabled ? 'animate-pulse' : ''} />
+                    </button>
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); removeInterest(stock.id); }}
+                      className="p-3 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
+                    >
+                      <Trash2 size={20} />
+                    </button>
                   </div>
                 </div>
               </div>

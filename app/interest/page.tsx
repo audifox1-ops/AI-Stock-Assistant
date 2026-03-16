@@ -12,6 +12,7 @@ interface InterestStock {
   change: number | null;
   alertEnabled: boolean;
   fetchError?: boolean;
+  updatedAt?: string;
 }
 
 const INTERESTS_STORAGE_KEY = 'ai_stock_interests';
@@ -22,21 +23,9 @@ export default function InterestPage() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
 
-  // 1. 데이터 불러오기 (Supabase -> LocalStorage -> State)
+  // 1. 데이터 불러오기
   const fetchInterests = async () => {
     setIsInitialLoading(true);
-    let finalStocks: InterestStock[] = [];
-
-    const localData = localStorage.getItem(INTERESTS_STORAGE_KEY);
-    if (localData) {
-      try {
-        finalStocks = JSON.parse(localData);
-        setInterestStocks(finalStocks);
-      } catch (e) {
-        console.error("Local storage error:", e);
-      }
-    }
-
     try {
       const { data, error } = await supabase
         .from('alerts')
@@ -45,7 +34,7 @@ export default function InterestPage() {
 
       if (error) throw error;
 
-      if (data && data.length > 0) {
+      if (data) {
         const mapped: InterestStock[] = data.map(item => ({
           id: item.id,
           name: item.stock_name,
@@ -54,16 +43,15 @@ export default function InterestPage() {
           change: null,
           alertEnabled: item.alert_enabled,
         }));
-        localStorage.setItem(INTERESTS_STORAGE_KEY, JSON.stringify(mapped));
         setInterestStocks(mapped);
-        finalStocks = mapped;
+        return mapped;
       }
     } catch (err) {
-      console.error("Supabase fetch failed (Interests):", err);
+      console.error("Fetch failed:", err);
     } finally {
       setIsInitialLoading(false);
     }
-    return finalStocks;
+    return [];
   };
 
   // 2. 실시간 시세 연동
@@ -77,25 +65,26 @@ export default function InterestPage() {
       const res = await fetch('/api/stock', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ symbols })
+        body: JSON.stringify({ symbols }),
+        cache: 'no-store'
       });
       const data = await res.json();
 
-      setInterestStocks(prev => {
-        const next = prev.map(stock => {
-          const live = data[stock.symbol];
-          if (live && live.success) {
-            return { ...stock, price: live.price, change: live.changePercent, fetchError: false };
-          } else if (live && live.error) {
-            return { ...stock, fetchError: true };
-          }
-          return stock;
-        });
-        localStorage.setItem(INTERESTS_STORAGE_KEY, JSON.stringify(next));
-        return next;
-      });
+      setInterestStocks(prev => prev.map(stock => {
+        const live = data[stock.symbol];
+        if (live && live.success) {
+          return { 
+            ...stock, 
+            price: live.price, 
+            change: live.changePercent, 
+            fetchError: false,
+            updatedAt: live.updatedAt
+          };
+        }
+        return stock;
+      }));
     } catch (err) {
-      console.error("Price fetch error (Interests):", err);
+      console.error("Price fetch error:", err);
     } finally {
       setIsRefreshing(false);
     }
@@ -104,189 +93,162 @@ export default function InterestPage() {
   useEffect(() => {
     const init = async () => {
       const loaded = await fetchInterests();
-      if (loaded.length > 0) {
-        fetchPrices(loaded);
-      }
+      if (loaded.length > 0) fetchPrices(loaded);
     };
     init();
+    
+    // 10초 주기 실시간 폴링 (무음)
+    const interval = setInterval(() => {
+      setInterestStocks(curr => {
+        fetchPrices(curr);
+        return curr;
+      });
+    }, 10000);
+    
+    return () => clearInterval(interval);
   }, []);
 
   const addStock = async () => {
     if (!searchTerm) return;
-    
     let symbol = searchTerm.toUpperCase().trim();
-    if (!symbol.includes('.') && /^\d{6}$/.test(symbol)) {
-      symbol += '.KS';
-    }
+    if (!symbol.includes('.') && /^\d{6}$/.test(symbol)) symbol += '.KS';
 
     try {
-      const { data, error } = await supabase
-        .from('alerts')
-        .insert([{
-          symbol: symbol,
-          stock_name: searchTerm,
-          alert_enabled: true
-        }])
-        .select();
+      const { data, error } = await supabase.from('alerts').insert([{
+        symbol: symbol,
+        stock_name: searchTerm,
+        alert_enabled: true
+      }]).select();
 
       if (error) throw error;
-
       if (data && data[0]) {
-        const newItem: InterestStock = {
-          id: data[0].id,
-          name: data[0].stock_name,
-          symbol: data[0].symbol,
-          price: null,
-          change: null,
-          alertEnabled: true
-        };
-        const updated = [newItem, ...interestStocks];
-        setInterestStocks(updated);
-        localStorage.setItem(INTERESTS_STORAGE_KEY, JSON.stringify(updated));
+        fetchInterests().then(loaded => fetchPrices(loaded));
         setSearchTerm('');
-        fetchPrices(updated);
       }
-    } catch (err) {
-      console.error("Error adding interest stock:", err);
-      const tempId = Date.now();
-      const newItem: InterestStock = { id: tempId, name: searchTerm, symbol, price: null, change: null, alertEnabled: true };
-      const updated = [newItem, ...interestStocks];
-      setInterestStocks(updated);
-      localStorage.setItem(INTERESTS_STORAGE_KEY, JSON.stringify(updated));
-      alert("DB 저장 실패 - 로컬에 임시 저장되었습니다.");
-    }
+    } catch (err) { console.error(err); }
   };
 
   const removeStock = async (id: string | number) => {
     if (!confirm('관심 종목에서 삭제할까요?')) return;
-
     try {
-      const { error } = await supabase
-        .from('alerts')
-        .delete()
-        .eq('id', id);
-
-      const updated = interestStocks.filter(s => s.id !== id);
-      setInterestStocks(updated);
-      localStorage.setItem(INTERESTS_STORAGE_KEY, JSON.stringify(updated));
-
-      if (error) console.error("Supabase delete failed:", error);
-    } catch (err) {
-      console.error("Remove failed:", err);
-    }
+      await supabase.from('alerts').delete().eq('id', id);
+      setInterestStocks(prev => prev.filter(s => s.id !== id));
+    } catch (err) { console.error(err); }
   };
 
   const toggleAlert = async (id: string | number, current: boolean) => {
     try {
-      const { error } = await supabase
-        .from('alerts')
-        .update({ alert_enabled: !current })
-        .eq('id', id);
-
+      await supabase.from('alerts').update({ alert_enabled: !current }).eq('id', id);
       setInterestStocks(prev => prev.map(s => s.id === id ? { ...s, alertEnabled: !current } : s));
-      
-      if (error) throw error;
-    } catch (err) {
-      console.error("Alert toggle error:", err);
-    }
+    } catch (err) { console.error(err); }
   };
 
   return (
-    <div className="flex flex-col gap-6 animate-in fade-in duration-500 p-6 pb-32 box-border overflow-x-hidden">
-      <div className="flex justify-between items-center px-2">
-        <h2 className="text-2xl font-black font-heading bg-gradient-to-r from-blue-500 to-indigo-400 bg-clip-text text-transparent">관심 종목</h2>
-        <button 
-          onClick={() => fetchPrices()} 
-          disabled={isRefreshing}
-          className="p-2 bg-slate-800 rounded-xl border border-white/5 text-slate-400 hover:text-blue-400 active:scale-95 transition-all disabled:opacity-50"
-        >
-          <RefreshCcw size={16} className={isRefreshing ? 'animate-spin' : ''} />
-        </button>
-      </div>
-      
-      {/* Search & Add */}
-      <div className="flex gap-2">
-        <div className="flex-1 flex items-center gap-3 px-4 py-4 bg-slate-800 border border-white/5 rounded-2xl shadow-xl focus-within:border-blue-500/50 transition-all">
-          <Search size={18} className="text-slate-500" />
-          <input 
-            type="text" 
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && addStock()}
-            placeholder="추가할 종목코드 또는 이름 (005930.KS)" 
-            className="bg-transparent border-none outline-none text-sm w-full font-bold placeholder:text-slate-600 text-slate-100"
-          />
-        </div>
-        <button 
-          onClick={addStock}
-          className="w-14 h-14 bg-blue-500 rounded-2xl flex items-center justify-center text-white shadow-lg active:scale-95 hover:bg-blue-600 transition-all"
-        >
-          <Plus size={24} />
-        </button>
-      </div>
-
-      {/* Watchlist */}
-      <section>
-        <div className="flex justify-between items-center mb-6 px-1">
-          <h3 className="text-lg font-black text-slate-200">실시간 관심 시세 ({interestStocks.length})</h3>
-        </div>
+    <div className="min-h-screen bg-gray-50/50 p-6 pb-44 animate-in fade-in duration-500 overflow-x-hidden">
+      <div className="max-w-xl mx-auto">
+        <header className="flex justify-between items-center mb-10">
+          <h2 className="text-3xl font-black text-gray-900">관심 종목</h2>
+          <button 
+            onClick={() => fetchPrices()} 
+            disabled={isRefreshing}
+            className="p-3 bg-white border border-gray-100 rounded-2xl shadow-sm text-gray-400 hover:text-blue-500 active:scale-95 transition-all"
+          >
+            <RefreshCcw size={20} className={isRefreshing ? 'animate-spin' : ''} />
+          </button>
+        </header>
         
-        {isInitialLoading && interestStocks.length === 0 ? (
-          <div className="flex justify-center py-20"><div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div></div>
-        ) : interestStocks.length === 0 ? (
-          <div className="py-12 bg-slate-800/20 border border-dashed border-white/10 rounded-3xl text-center text-slate-500 font-bold">등록된 관심 종목이 없습니다.</div>
-        ) : (
-          <div className="grid grid-cols-1 gap-4">
-            {interestStocks.map(stock => (
-              /* [지시사항] 왼쪽 둥근 테두리에 글자가 짤리지 않도록 pl-12 pr-10 거대한 패딩 적용 */
-              <div 
-                key={stock.id} 
-                className="py-10 pl-12 pr-10 bg-slate-800/40 border border-white/5 rounded-[2.5rem] hover:bg-slate-800/60 transition-all flex justify-between items-center group relative overflow-hidden"
-              >
-                <div className="absolute top-0 left-0 w-1.5 h-full bg-blue-500/40"></div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-4 mb-2 overflow-visible">
-                    <span className="font-black text-xl text-slate-100 whitespace-normal break-keep">{stock.name}</span>
-                    <span className="text-[10px] text-slate-500 font-bold bg-slate-900 px-2 py-0.5 rounded border border-white/5 shrink-0">{stock.symbol}</span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    {stock.price === null ? (
-                      <span className="text-sm text-slate-600 animate-pulse font-bold tracking-tighter">불러오는 중...</span>
-                    ) : stock.fetchError ? (
-                      <span className="text-xs text-red-500/70 font-black italic">데이터 오류</span>
-                    ) : (
-                      <>
-                        <span className="text-xl font-black text-slate-100">{stock.price.toLocaleString()}원</span>
-                        <div className={`flex items-center gap-0.5 text-sm font-black ${stock.change && stock.change >= 0 ? 'text-red-500' : 'text-blue-400'}`}>
-                          {stock.change && stock.change >= 0 ? '▲' : '▼'}{stock.change ? Math.abs(stock.change).toFixed(2) : '0.00'}%
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </div>
-                <div className="flex gap-4 ml-4 shrink-0">
-                  <button 
-                    onClick={() => toggleAlert(stock.id, stock.alertEnabled)}
-                    className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all ${
-                      stock.alertEnabled 
-                      ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/20' 
-                      : 'bg-slate-900/60 text-slate-600 border border-white/5'
-                    }`}
-                  >
-                    <Bell size={20} className={stock.alertEnabled ? 'animate-bounce' : ''} />
-                  </button>
-                  <button 
-                    onClick={() => removeStock(stock.id)}
-                    className="w-12 h-12 rounded-2xl bg-red-500/10 text-red-500 border border-red-500/10 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all hover:bg-red-500 hover:text-white"
-                  >
-                    <Trash2 size={20} />
-                  </button>
-                </div>
-              </div>
-            ))}
+        {/* Search Bar */}
+        <div className="flex gap-3 mb-12">
+          <div className="flex-1 flex items-center gap-3 px-6 py-5 bg-white border border-gray-100 rounded-[2rem] shadow-sm focus-within:border-blue-400/50 transition-all">
+            <Search size={22} className="text-gray-300" />
+            <input 
+              type="text" 
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && addStock()}
+              placeholder="종목명 또는 코드 입력" 
+              className="bg-transparent border-none outline-none text-lg w-full font-bold placeholder:text-gray-200 text-gray-900"
+            />
           </div>
-        )}
-      </section>
+          <button 
+            onClick={addStock}
+            className="w-16 h-16 bg-[#3182f6] rounded-2xl flex items-center justify-center text-white shadow-lg active:scale-95 transition-all"
+          >
+            <Plus size={30} strokeWidth={3} />
+          </button>
+        </div>
+
+        {/* Watchlist - [지시사항] 모던 클린 카드형 UX 적용 */}
+        <section>
+          <div className="flex justify-between items-center mb-8 px-2">
+            <h3 className="text-xl font-bold text-gray-900">실시간 관심 시세</h3>
+            <span className="text-sm font-bold text-gray-400 bg-gray-100 px-3 py-1 rounded-full">{interestStocks.length}</span>
+          </div>
+          
+          {isInitialLoading && interestStocks.length === 0 ? (
+            <div className="py-20 flex justify-center"><div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div></div>
+          ) : interestStocks.length === 0 ? (
+            <div className="py-20 bg-white border border-dashed border-gray-100 rounded-3xl text-center text-gray-400 font-bold">등록된 관심 종목이 없습니다.</div>
+          ) : (
+            <div className="space-y-4">
+              {interestStocks.map(stock => {
+                const isUp = (stock.change || 0) >= 0;
+                return (
+                  <div 
+                    key={stock.id} 
+                    className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 flex flex-row items-center justify-between transition-all hover:border-blue-100"
+                  >
+                    {/* [왼쪽 구역] 종목 정보 */}
+                    <div className="flex flex-col min-w-0 flex-1">
+                      <h4 className="text-xl font-bold text-gray-900 mb-1 truncate uppercase">
+                        {stock.name}
+                      </h4>
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs font-black text-blue-500 bg-blue-50 px-2 py-0.5 rounded uppercase">
+                          {stock.symbol}
+                        </span>
+                        {stock.updatedAt && (
+                          <span className="text-[10px] font-bold text-gray-400">
+                            {stock.updatedAt} 기준
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* [오른쪽 구역] 가격 및 액션 */}
+                    <div className="flex flex-row items-center gap-6 flex-shrink-0 ml-4">
+                      <div className="text-right">
+                        <p className="text-xl font-black text-gray-900 leading-tight">
+                          {(stock.price?.toLocaleString() || '--')}원
+                        </p>
+                        <p className={`text-xs font-black mt-1 ${isUp ? 'text-red-500' : 'text-blue-600'}`}>
+                          {isUp ? '▲' : '▼'}{Math.abs(stock.change || 0).toFixed(2)}%
+                        </p>
+                      </div>
+                      
+                      {/* 액션 버튼 */}
+                      <div className="flex items-center gap-2 border-l border-gray-100 pl-6 ml-2">
+                        <button 
+                          onClick={() => toggleAlert(stock.id, stock.alertEnabled)}
+                          className={`p-3 rounded-xl transition-all ${stock.alertEnabled ? 'text-blue-500 bg-blue-50' : 'text-gray-300 hover:text-gray-500 bg-gray-50'}`}
+                        >
+                          <Bell size={20} className={stock.alertEnabled ? 'animate-bounce' : ''} />
+                        </button>
+                        <button 
+                          onClick={() => removeStock(stock.id)}
+                          className="p-3 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
+                        >
+                          <Trash2 size={20} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      </div>
     </div>
   );
 }
