@@ -2,9 +2,11 @@
 
 import React, { useState, useEffect } from 'react';
 import { 
-  ChevronLeft, Plus, X, Trash2, TrendingUp, TrendingDown, Eye, RefreshCcw, Search, Star, Sparkles
+  Plus, X, RefreshCcw, Bell, Trash2, BellRing, 
+  ArrowRight, TrendingUp, TrendingDown, Eye, Search, ChevronLeft, Landmark, Info, Star, BarChart3
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { useSession } from "next-auth/react";
 import Link from 'next/link';
 
 interface InterestStock {
@@ -13,34 +15,47 @@ interface InterestStock {
   symbol: string;
   price: number | null;
   change: number | null;
+  alertEnabled: boolean;
   updatedAt?: string;
 }
 
 export default function WatchlistPage() {
+  const { data: session } = useSession();
   const [interestStocks, setInterestStocks] = useState<InterestStock[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [newStock, setNewStock] = useState({ name: '', symbol: '' });
+  
+  // Form state
+  const [targetStock, setTargetStock] = useState({ name: '', symbol: '' });
 
   const fetchInterests = async () => {
     try {
       const { data, error } = await supabase.from('alerts').select('*').order('created_at', { ascending: false });
       if (!error && data) {
         setInterestStocks(data.map(item => ({
-          id: item.id, name: item.stock_name, symbol: item.symbol, price: null, change: null
+          id: item.id, name: item.stock_name, symbol: item.symbol, price: null, change: null, alertEnabled: item.alert_enabled
         })));
       }
     } catch (err) {}
   };
 
   const fetchPrices = async (silent = false) => {
-    const symbols = Array.from(new Set(interestStocks.map(s => s.symbol))).filter(Boolean);
+    const symbols = interestStocks.map(s => s.symbol).filter(Boolean);
     if (symbols.length === 0) return;
     if (!silent) setIsRefreshing(true);
     try {
-      const res = await fetch('/api/stock', { method: 'POST', body: JSON.stringify({ symbols }), cache: 'no-store' });
+      const res = await fetch('/api/stock', { 
+        method: 'POST', 
+        body: JSON.stringify({ symbols }), 
+        cache: 'no-store' // 캐시 방지 옵션 강제
+      });
       const data = await res.json();
-      setInterestStocks(prev => prev.map(s => data[s.symbol] ? { ...s, price: data[s.symbol].price, change: data[s.symbol].changePercent, updatedAt: data[s.symbol].updatedAt } : s));
+      setInterestStocks(prev => prev.map(s => data[s.symbol] ? { 
+        ...s, 
+        price: data[s.symbol].price, 
+        change: data[s.symbol].changePercent,
+        updatedAt: data[s.symbol].updatedAt
+      } : s));
     } catch (error) {}
     finally { setIsRefreshing(false); }
   };
@@ -56,33 +71,46 @@ export default function WatchlistPage() {
   }, [interestStocks.length]);
 
   const removeInterest = async (id: string | number) => {
-    if (!confirm('관심 종목에서 삭제하시겠습니까?')) return;
-    try { await supabase.from('alerts').delete().eq('id', id); fetchInterests(); } catch (err) {}
+    if (!confirm('관심 종목 리스트에서 영구 삭제하시겠습니까?')) return;
+    try {
+      await supabase.from('alerts').delete().eq('id', id);
+      setInterestStocks(prev => prev.filter(s => s.id !== id));
+      alert('정상적으로 삭제되었습니다.');
+    } catch (err) {
+      alert('삭제 중 오류가 발생했습니다.');
+    }
+  };
+
+  const toggleAlert = async (stock: InterestStock) => {
+    const nextState = !stock.alertEnabled;
+    try {
+      await supabase.from('alerts').update({ alert_enabled: nextState }).eq('id', stock.id);
+      setInterestStocks(prev => prev.map(s => s.id === stock.id ? { ...s, alertEnabled: nextState } : s));
+    } catch (err) {}
   };
 
   const handleAddInterest = async () => {
-    if (!newStock.name || !newStock.symbol) {
-      alert('모든 정보를 입력해 주세요.');
+    if (!targetStock.name || !targetStock.symbol) {
+      alert('종목명과 티커를 모두 입력해 주세요.');
       return;
     }
-    
-    let sym = newStock.symbol.toUpperCase().trim();
+
+    let sym = targetStock.symbol.toUpperCase().trim();
     if (!sym.includes('.') && /^\d{6}$/.test(sym)) {
         sym += (sym.startsWith('0') || sym.startsWith('1') || sym.startsWith('2')) ? '.KS' : '.KQ';
     }
 
     try {
       const { error } = await supabase.from('alerts').insert([{
-        stock_name: newStock.name,
+        stock_name: targetStock.name,
         symbol: sym,
         alert_enabled: true
       }]);
-      
       if (error) throw error;
       
       fetchInterests();
       setIsAddModalOpen(false);
-      setNewStock({ name: '', symbol: '' });
+      setTargetStock({ name: '', symbol: '' });
       alert('관심 종목에 추가되었습니다.');
     } catch (err) {
       alert('저장 중 오류가 발생했습니다.');
@@ -90,144 +118,210 @@ export default function WatchlistPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-32">
-      {/* Header */}
-      <header className="px-6 pt-12 pb-10 bg-white sticky top-0 z-50 border-b border-gray-100 flex items-center justify-between">
-         <div className="flex items-center gap-4">
-            <Link href="/" className="p-3 bg-gray-50 rounded-2xl text-gray-400 hover:text-gray-900 transition-all">
-               <ChevronLeft size={28} />
-            </Link>
-            <div>
-               <h1 className="text-2xl font-black text-[#191f28]">관심 종목 리스트</h1>
-               <p className="text-[10px] font-black text-[#3182f6] uppercase tracking-widest mt-1">Smart Stock Monitoring</p>
-            </div>
-         </div>
-         <div className="flex items-center gap-3">
-            <button 
-               onClick={() => fetchPrices()}
-               className={`p-3 bg-gray-50 rounded-2xl text-gray-500 transition-all ${isRefreshing ? 'animate-spin text-[#3182f6]' : ''}`}
-            >
-               <RefreshCcw size={22} />
-            </button>
-            <button 
-               onClick={() => setIsAddModalOpen(true)}
-               className="p-3 bg-[#3182f6] rounded-2xl text-white shadow-lg shadow-blue-50 active:scale-95 transition-all"
-            >
-               <Plus size={22} />
-            </button>
-         </div>
+    <div className="min-h-screen bg-gray-50 pb-40">
+      {/* 1. Header - Strict design system, No rounded-full */}
+      <header className="px-6 pt-16 pb-12 bg-white border-b border-gray-100 sticky top-0 z-50 shadow-sm relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-blue-50/20 rounded-bl-[160px] -z-10" />
+        
+        <div className="flex justify-between items-center mb-10 px-2 relative z-10">
+           <div className="flex items-center gap-5">
+              <Link href="/" className="p-3 bg-gray-50 rounded-2xl text-gray-400 hover:text-[#3182f6] transition-all border border-gray-100">
+                <ChevronLeft size={28} />
+              </Link>
+              <div className="flex flex-col">
+                 <h1 className="text-3xl font-black text-[#191f28] tracking-tight">전체 관심 종목</h1>
+                 <p className="text-[10px] font-black text-blue-400 uppercase tracking-[0.3em] mt-1.5 flex items-center gap-1.5">
+                    <div className="w-1.5 h-1.5 bg-blue-400 rounded-sm animate-pulse" />
+                    Advanced Watching Engine Active
+                 </p>
+              </div>
+           </div>
+           <button 
+             onClick={() => { fetchInterests(); fetchPrices(); }}
+             className="p-3.5 bg-gray-50 rounded-2xl text-gray-500 hover:text-[#3182f6] transition-colors border border-gray-100"
+           >
+              <RefreshCcw size={22} className={isRefreshing ? 'animate-spin' : ''} />
+           </button>
+        </div>
+
+        {/* Search Bar Placeholder - No rounded-full */}
+        <div className="px-2 relative z-10">
+           <div className="bg-gray-50 rounded-[1.5rem] px-8 h-18 flex items-center gap-5 border border-gray-50 focus-within:border-blue-100 transition-all">
+              <Search className="text-gray-300" size={24} />
+              <input 
+                type="text" 
+                placeholder="검색어를 입력하여 종목 필터링" 
+                className="bg-transparent border-none outline-none font-bold text-lg text-gray-600 w-full placeholder:text-gray-200"
+              />
+           </div>
+        </div>
       </header>
 
-      <div className="max-w-xl mx-auto px-6 mt-10 space-y-4">
-         {interestStocks.length > 0 ? (
-            interestStocks.map(stock => {
-               const isUp = (stock.change || 0) >= 0;
-               return (
-                  <div key={stock.id} className="bg-white px-8 py-8 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between group hover:shadow-md transition-all active:scale-[0.99] overflow-hidden relative">
-                     <div className="absolute top-0 left-0 w-1.5 h-full bg-blue-50 opacity-0 group-hover:opacity-100 transition-all" />
-                     <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2 mb-1.5">
-                           <h5 className="text-xl font-bold text-[#191f28] truncate">{stock.name}</h5>
-                           <div className="w-1 h-1 bg-gray-200 rounded-full" />
-                           <span className="text-[10px] font-bold text-gray-300 uppercase tracking-widest">{stock.symbol}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                           <Star size={12} className="text-amber-400 fill-amber-400" />
-                           <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Premium Watchlist Active</span>
-                        </div>
-                     </div>
-                     
-                     <div className="flex items-center gap-10">
-                        <div className="text-right">
-                           <p className="text-xl font-black text-[#191f28] mb-1.5 leading-none">
-                              {(stock.price?.toLocaleString() || '--')}원
-                           </p>
-                           <div className={`px-2.5 py-1 rounded-lg text-xs font-bold inline-flex items-center gap-1 ${isUp ? 'bg-red-50 text-[#EF4444]' : 'bg-blue-50 text-[#3B82F6]'}`}>
-                              {isUp ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
-                              {isUp ? '+' : ''}{stock.change?.toFixed(2)}%
-                           </div>
-                        </div>
-                        
-                        <button 
-                           onClick={() => removeInterest(stock.id)}
-                           className="w-12 h-12 flex items-center justify-center bg-gray-50 rounded-2xl text-gray-200 hover:bg-red-50 hover:text-[#EF4444] transition-all opacity-0 group-hover:opacity-100"
-                        >
-                           <Trash2 size={20} />
-                        </button>
-                     </div>
+      {/* 2. Watchlist Section - px-8 Wide Cards, No rounded-full */}
+      <div className="max-w-xl mx-auto px-6 mt-12 space-y-10">
+        
+        <div className="flex justify-between items-center px-2">
+           <div className="flex flex-col gap-1">
+              <h3 className="text-sm font-black text-gray-400 uppercase tracking-widest">Active Watchlist</h3>
+              <p className="text-[10px] font-bold text-gray-300 uppercase leading-none">Total {interestStocks.length} Monitoring</p>
+           </div>
+           <button 
+             onClick={() => setIsAddModalOpen(true)}
+             className="flex items-center gap-2 px-6 py-3 bg-[#3182f6] text-white rounded-2xl text-sm font-black shadow-xl shadow-blue-50 hover:bg-[#1b64da] transition-all active:scale-95"
+           >
+              <Plus size={20} />
+              종목 추가
+           </button>
+        </div>
+
+        <div className="space-y-5 px-1">
+          {interestStocks.map(stock => {
+            const isUp = (stock.change || 0) >= 0;
+            return (
+              <div 
+                key={stock.id} 
+                className="bg-white px-8 py-10 rounded-[2rem] border border-gray-100 shadow-sm flex items-center justify-between group hover:border-[#3182f6] transition-all relative overflow-hidden"
+              >
+                <div className="absolute top-0 left-0 w-2 h-full bg-blue-50 opacity-0 group-hover:opacity-100 transition-all" />
+                
+                <div className="flex items-center gap-8 flex-1 min-w-0">
+                   <div className="w-16 h-16 bg-gray-50 rounded-2xl flex items-center justify-center text-gray-300 group-hover:bg-blue-50 group-hover:text-[#3182f6] transition-colors border border-gray-50">
+                      <Star size={30} className={stock.alertEnabled ? 'fill-[#3182f6] text-[#3182f6]' : ''} />
+                   </div>
+                   <div className="min-w-0">
+                      <h4 className="text-2xl font-black text-[#191f28] truncate mb-1 group-hover:text-[#3182f6] transition-colors">{stock.name}</h4>
+                      <div className="flex items-center gap-3">
+                         <span className="text-[11px] font-black text-gray-400 uppercase tracking-[0.2em]">{stock.symbol}</span>
+                         <div className="flex items-center gap-1.5 px-2 py-0.5 bg-gray-50 rounded-lg">
+                            <div className={`w-1.5 h-1.5 ${stock.alertEnabled ? 'bg-emerald-500 animate-pulse' : 'bg-gray-300'} rounded-sm`} />
+                            <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">{stock.alertEnabled ? 'Alert On' : 'Muted'}</span>
+                         </div>
+                      </div>
+                   </div>
+                </div>
+
+                <div className="flex items-center gap-10 ml-4">
+                  <div className="text-right">
+                    <p className="text-2xl font-black text-[#191f28] tracking-tighter mb-1">{(stock.price?.toLocaleString() || '--')}원</p>
+                    <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-black ${isUp ? 'bg-red-50 text-[#EF4444]' : 'bg-blue-50 text-[#3B82F6]'}`}>
+                      {isUp ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
+                      {isUp ? '+' : ''}{stock.change?.toFixed(2)}%
+                    </div>
                   </div>
-               );
-            })
-         ) : (
-            <div className="bg-white border-2 border-dashed border-gray-100 rounded-2xl p-20 text-center flex flex-col items-center gap-6">
-               <div className="w-20 h-20 bg-gray-50 rounded-[2rem] flex items-center justify-center text-gray-200">
-                  <Eye size={40} />
-               </div>
-               <div className="space-y-2">
-                  <h3 className="text-xl font-bold text-gray-400">관심 종목을 채워보세요.</h3>
-                  <p className="text-sm font-bold text-gray-300">잠재력 높은 종목을 찾아 리스트에 추가하세요.</p>
-               </div>
-               <button 
-                  onClick={() => setIsAddModalOpen(true)}
-                  className="px-8 py-3 bg-gray-100 text-gray-500 rounded-xl text-sm font-black hover:bg-blue-50 hover:text-[#3182f6] transition-all"
-               >
-                  지금 바로 추가하기
-               </button>
+                  
+                  <div className="flex flex-col gap-2">
+                     <button 
+                       onClick={() => toggleAlert(stock)}
+                       className={`p-3 rounded-2xl transition-all border ${stock.alertEnabled ? 'bg-emerald-50 text-emerald-500 border-emerald-100 shadow-sm shadow-emerald-50' : 'bg-gray-50 text-gray-300 border-gray-100'}`}
+                       title="알림 토글"
+                     >
+                       <Bell size={22} className={stock.alertEnabled ? 'animate-bounce' : ''} />
+                     </button>
+                     <button 
+                        onClick={() => removeInterest(stock.id)}
+                        className="p-3 bg-red-50 text-red-400 hover:bg-[#EF4444] hover:text-white rounded-2xl transition-all border border-red-50 opacity-0 group-hover:opacity-100"
+                        title="영구 삭제"
+                     >
+                        <Trash2 size={22} />
+                     </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+
+          {interestStocks.length === 0 && (
+            <div className="bg-white border-2 border-dashed border-gray-100 rounded-[2.5rem] py-24 text-center flex flex-col items-center gap-6">
+              <div className="w-20 h-20 bg-gray-50 rounded-[2rem] flex items-center justify-center text-gray-200">
+                 <Eye size={40} />
+              </div>
+              <div className="space-y-2">
+                 <h4 className="text-xl font-bold text-gray-400">관심 종목을 등록해 보세요!</h4>
+                 <p className="text-sm font-bold text-gray-300 uppercase tracking-widest">Start tracking your favorate stocks</p>
+              </div>
+              <button 
+                onClick={() => setIsAddModalOpen(true)}
+                className="mt-4 px-10 py-4 bg-[#191f28] text-white rounded-2xl font-black text-base shadow-xl active:scale-95 transition-all"
+              >
+                 + 지금 첫 종목 추가
+              </button>
             </div>
-         )}
+          )}
+        </div>
       </div>
 
-      {/* Add Modal */}
+      {/* 3. Add Interest Modal - Strict Design System, No rounded-full */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-md p-6 flex items-center justify-center animate-in fade-in duration-300">
-           <div className="bg-white w-full max-w-md rounded-[2.5rem] p-10 space-y-10 animate-in slide-in-from-bottom-6 duration-500 shadow-2xl">
-              <div className="flex justify-between items-center">
-                 <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center text-[#3182f6]">
-                       <Sparkles size={24} />
-                    </div>
-                    <div>
-                       <h2 className="text-2xl font-black text-[#191f28]">새 관심 종목</h2>
-                       <p className="text-[9px] font-black text-gray-300 uppercase tracking-widest mt-1 px-0.5">Add to Prime Watchlist</p>
-                    </div>
+        <div className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-lg p-8 flex items-center justify-center animate-in fade-in duration-300">
+           <div className="bg-white w-full max-w-lg rounded-[3rem] p-12 space-y-12 animate-in slide-in-from-bottom-10 duration-700 shadow-[0_50px_100px_-20px_rgba(0,0,0,0.3)] relative overflow-hidden">
+              <div className="absolute top-0 left-0 w-32 h-32 bg-blue-50/50 rounded-br-[120px] -z-10" />
+              
+              <div className="flex justify-between items-center border-b border-gray-50 pb-8">
+                 <div>
+                    <h2 className="text-4xl font-black text-[#191f28] tracking-tighter">관심 종목 등록</h2>
+                    <p className="text-[11px] font-black text-blue-400 uppercase tracking-[0.4em] mt-3 flex items-center gap-2">
+                       <Landmark size={14} />
+                       Asset Monitoring System v1.7
+                    </p>
                  </div>
-                 <button onClick={() => setIsAddModalOpen(false)} className="p-3 bg-gray-50 rounded-2xl text-gray-300 hover:text-gray-900 transition-colors">
-                    <X size={26} />
+                 <button onClick={() => setIsAddModalOpen(false)} className="p-4 bg-gray-50 rounded-[1.5rem] text-gray-300 hover:text-gray-900 transition-colors border border-gray-100">
+                    <X size={32} />
                  </button>
               </div>
               
-              <div className="space-y-6">
+              <div className="space-y-10">
                  <div className="space-y-3">
-                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">종목명 (예: 삼성전자)</label>
+                    <label className="text-[11px] font-black text-gray-400 uppercase tracking-[0.3em] px-2 flex items-center gap-2">
+                       <div className="w-1 h-1 bg-blue-500 rounded-sm" />
+                       종목 이름 (정식 명칭)
+                    </label>
                     <input 
                       type="text" 
-                      className="w-full h-18 bg-gray-50 rounded-2xl px-6 font-bold text-xl outline-none focus:ring-2 focus:ring-blue-100 border border-transparent focus:border-blue-300 transition-all placeholder:text-gray-200"
-                      placeholder="삼성전자"
-                      value={newStock.name}
-                      onChange={e => setNewStock({...newStock, name: e.target.value})}
+                      className="w-full h-20 bg-gray-50 rounded-[1.5rem] px-8 font-black text-2xl outline-none focus:ring-8 focus:ring-blue-50 border-2 border-transparent focus:border-blue-100 transition-all placeholder:text-gray-100"
+                      placeholder="예: 태웅"
+                      value={targetStock.name}
+                      onChange={e => setTargetStock({...targetStock, name: e.target.value})}
                     />
                  </div>
                  <div className="space-y-3">
-                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">티커 코드 (예: 005930)</label>
+                    <label className="text-[11px] font-black text-gray-400 uppercase tracking-[0.3em] px-2 flex items-center gap-2">
+                       <div className="w-1 h-1 bg-blue-500 rounded-sm" />
+                       티커 번호 (6자리)
+                    </label>
                     <input 
                       type="text" 
-                      className="w-full h-18 bg-gray-50 rounded-2xl px-6 font-bold text-xl outline-none focus:ring-2 focus:ring-blue-100 border border-transparent focus:border-blue-300 transition-all placeholder:text-gray-200 uppercase"
-                      placeholder="005930"
-                      value={newStock.symbol}
-                      onChange={e => setNewStock({...newStock, symbol: e.target.value})}
+                      className="w-full h-20 bg-gray-50 rounded-[1.5rem] px-8 font-black text-2xl outline-none focus:ring-8 focus:ring-blue-50 border-2 border-transparent focus:border-blue-100 transition-all placeholder:text-gray-100 uppercase tracking-widest"
+                      placeholder="예: 044490"
+                      value={targetStock.symbol}
+                      onChange={e => setTargetStock({...targetStock, symbol: e.target.value})}
                     />
                  </div>
               </div>
 
-              <button 
-                onClick={handleAddInterest}
-                className="w-full h-20 bg-[#3182f6] text-white rounded-2xl font-black text-xl shadow-2xl shadow-blue-100 hover:bg-[#1b64da] active:scale-[0.98] transition-all"
-              >
-                리스트에 등록하기
-              </button>
+              <div className="pt-4 flex flex-col gap-4">
+                 <button 
+                  onClick={handleAddInterest}
+                  className="w-full h-22 bg-[#191f28] text-white rounded-[1.5rem] font-black text-2xl shadow-2xl hover:bg-[#3182f6] transition-all transform active:scale-[0.98]"
+                 >
+                   모니터링 대상에 추가
+                 </button>
+                 <div className="flex items-center justify-center gap-2 opacity-30">
+                    <Info size={14} />
+                    <span className="text-[9px] font-black uppercase tracking-widest text-gray-900">Automatic Ticker Suffix (.KS / .KQ) enabled</span>
+                 </div>
+              </div>
            </div>
         </div>
       )}
+
+      {/* Footer Branding */}
+      <footer className="mt-32 text-center px-12 pb-24 opacity-10">
+         <div className="flex justify-center items-center gap-4 mb-3">
+            <BarChart3 className="text-gray-900" size={36} />
+            <span className="text-3xl font-black tracking-tighter text-gray-900 uppercase">AI STOCK Monitoring Center</span>
+         </div>
+         <p className="text-[10px] font-black text-gray-500 uppercase tracking-[1.2em]">Deep Analysis Engine v1.7.0X-Gold Edition</p>
+      </footer>
     </div>
   );
 }
