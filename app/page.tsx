@@ -1,13 +1,7 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from 'react';
-import { 
-  Plus, 
-  X,
-  RefreshCcw,
-  Bell,
-  AlertCircle
-} from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Plus, X, RefreshCcw, Bell } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 // --- Interfaces ---
@@ -34,6 +28,7 @@ interface Stock {
   fetchError?: boolean;
   isFallback?: boolean;
   status?: string;
+  updatedAt?: string; // 추가
 }
 
 interface InterestStock {
@@ -47,6 +42,7 @@ interface InterestStock {
   isFallback?: boolean;
   status?: string;
   analysis?: AiAnalysisResult;
+  updatedAt?: string; // 추가
 }
 
 interface MarketIndex {
@@ -57,6 +53,7 @@ interface MarketIndex {
   success: boolean;
   isFallback?: boolean;
   status?: string;
+  updatedAt?: string; // 추가
 }
 
 // --- Skeleton UI Components ---
@@ -87,9 +84,6 @@ export default function PortfolioPage() {
   const [newStock, setNewStock] = useState<Partial<Stock>>({
     name: '', symbol: '', avgPrice: 0, quantity: 0, type: '스윙', target: 0, stopLoss: 0
   });
-
-  // [지시사항] 폴링 로직을 위해 상태 참조용 Ref (갱신 시 로딩바 방지용)
-  const isPollingRef = useRef(false);
 
   // Data Fetching
   const fetchMarketIndices = async (silent = false) => {
@@ -153,20 +147,19 @@ export default function PortfolioPage() {
       
       setStocks(prev => prev.map(s => {
         const live = data[s.symbol];
-        if (live) return { ...s, currentPrice: live.price, changePercent: live.changePercent, isFallback: live.isFallback, status: live.status };
+        if (live) return { ...s, currentPrice: live.price, changePercent: live.changePercent, isFallback: live.isFallback, status: live.status, updatedAt: live.updatedAt };
         return s;
       }));
 
       setInterestStocks(prev => prev.map(s => {
         const live = data[s.symbol];
-        if (live) return { ...s, price: live.price, change: live.changePercent, isFallback: live.isFallback, status: live.status };
+        if (live) return { ...s, price: live.price, change: live.changePercent, isFallback: live.isFallback, status: live.status, updatedAt: live.updatedAt };
         return s;
       }));
     } catch (error) { console.error("[Front] Price Fetch Error:", error); }
     finally { if (!silent) setIsRefreshing(false); }
   };
 
-  // [지시사항] 10초 주기 실시간 폴링 로직
   useEffect(() => {
     const init = async () => {
       setIsInitialLoading(true);
@@ -178,17 +171,23 @@ export default function PortfolioPage() {
 
     init();
 
-    // 10초마다 백그라운드 갱신 (화면 깜빡임 없이)
-    const pollInterval = setInterval(async () => {
+    // 10초마다 자동 갱신 (무음)
+    const pollInterval = setInterval(() => {
       fetchMarketIndices(true);
-      // 현재 상태의 stocks와 interestStocks를 기반으로 가격 갱신
-      // 참고: 클로저 문제 방지를 위해 ref나 상태 패칭 함수 내 최신 상태 활용이 필요할 수 있으나
-      // 여기서는 fetchPrices 내부의 prev 상태 업데이트 로직으로 해결
-      fetchPrices(stocks, interestStocks, true);
+      // 의존성 배열로 인해 stocks, interestStocks 접근을 위해 prev 패턴 권장되나
+      // 여기서는 fetchPrices가 setStocks/setInterestStocks 내부에서 맵핑하므로
+      // 호출 시점의 상태를 그대로 넘겨도 됨 (setInterval 클로저 주의 필요시 Ref 사용)
+      setStocks(currentStocks => {
+        setInterestStocks(currentInterests => {
+          fetchPrices(currentStocks, currentInterests, true);
+          return currentInterests;
+        });
+        return currentStocks;
+      });
     }, 10000);
 
     return () => clearInterval(pollInterval);
-  }, []); // [] 의존성 유지하되 내부에서 fetchPrices가 prev를 사용하도록 설계됨
+  }, []);
 
   const handleAddStock = async () => {
     if (!newStock.name || !newStock.avgPrice || !newStock.symbol) { alert('필수 입력!'); return; }
@@ -237,7 +236,6 @@ export default function PortfolioPage() {
 
   return (
     <div className="min-h-screen bg-white text-[#191f28] pb-44 animate-in fade-in duration-500 overflow-x-hidden overflow-y-visible">
-      {/* Header */}
       <header className="w-full px-8 pt-14 pb-8 overflow-hidden box-border">
         <div className="flex justify-between items-center mb-12 overflow-visible">
           <h1 className="text-3xl font-black tracking-tight text-[#3182f6]">AI Stock</h1>
@@ -253,14 +251,18 @@ export default function PortfolioPage() {
 
         <div className="flex gap-10 items-center overflow-x-auto no-scrollbar py-4 w-full">
           {isMarketLoading ? <SkeletonText width="w-40" /> : marketIndices.map(market => (
-            <div key={market.symbol} className="flex items-center gap-4 whitespace-nowrap min-w-fit">
-              <span className="text-sm font-black text-gray-400">{market.name}</span>
-              <span className={`text-lg font-black ${market.changePercent >= 0 ? 'text-red-500' : 'text-blue-600'}`}>
-                {market.price.toLocaleString(undefined, { maximumFractionDigits: 1 })}
-              </span>
-              <span className={`text-xs font-black px-10 py-3 rounded-full ${market.changePercent >= 0 ? 'text-red-500 bg-red-50' : 'text-blue-600 bg-blue-50'}`}>
-                {market.changePercent >= 0 ? '▲' : '▼'}{Math.abs(market.changePercent).toFixed(1)}%
-              </span>
+            <div key={market.symbol} className="flex flex-col gap-1 min-w-fit">
+              <div className="flex items-center gap-4 whitespace-nowrap">
+                <span className="text-sm font-black text-gray-400">{market.name}</span>
+                <span className={`text-lg font-black ${market.changePercent >= 0 ? 'text-red-500' : 'text-blue-600'}`}>
+                  {market.price.toLocaleString(undefined, { maximumFractionDigits: 1 })}
+                </span>
+                <span className={`text-xs font-black px-10 py-3 rounded-full ${market.changePercent >= 0 ? 'text-red-500 bg-red-50' : 'text-blue-600 bg-blue-50'}`}>
+                  {market.changePercent >= 0 ? '▲' : '▼'}{Math.abs(market.changePercent).toFixed(1)}%
+                </span>
+              </div>
+              {/* [지시사항] 업데이트 시간 표시 */}
+              <p className="text-[10px] text-gray-400 font-bold ml-1">({market.updatedAt || '--:--:--'} 기준)</p>
             </div>
           ))}
         </div>
@@ -291,7 +293,7 @@ export default function PortfolioPage() {
             </p>
             <button 
               onClick={() => setIsAddModalOpen(true)} 
-              className="px-8 py-3 bg-blue-500 text-white font-bold rounded-full w-fit whitespace-nowrap shadow-md"
+              className="px-8 py-3 bg-blue-500 text-white font-bold rounded-full w-fit whitespace-nowrap shadow-md hover:bg-blue-600 transition-colors"
             >
               지금 시작하기
             </button>
@@ -308,7 +310,7 @@ export default function PortfolioPage() {
                       <div className={`flex-shrink-0 w-16 h-16 rounded-2xl flex items-center justify-center font-black text-white ${isProfit ? 'bg-red-400' : 'bg-blue-400'}`}>{stock.name.charAt(0)}</div>
                       <div className="min-w-0 flex-1">
                         <h4 className="text-2xl font-black text-[#191f28] leading-tight mb-2 whitespace-nowrap overflow-visible uppercase">{stock.name}</h4>
-                        <p className="text-xs font-bold text-gray-400">실시간 시세 · {stock.quantity.toLocaleString()}주</p>
+                        <p className="text-xs font-bold text-gray-400">실시간 {stock.updatedAt ? `(${stock.updatedAt})` : ''} · {stock.quantity.toLocaleString()}주</p>
                       </div>
                     </div>
                     <div className="text-right min-w-max">
@@ -337,7 +339,7 @@ export default function PortfolioPage() {
                   </div>
                   <div className="min-w-0">
                     <h4 className="text-2xl font-black text-[#191f28] whitespace-nowrap overflow-visible uppercase">{stock.name}</h4>
-                    <p className="text-xs font-black text-gray-400 tracking-widest">{stock.symbol}</p>
+                    <p className="text-xs font-black text-gray-400 tracking-widest">{stock.symbol} {stock.updatedAt && `(${stock.updatedAt})`}</p>
                   </div>
                 </div>
                 <div className="text-right min-w-max">
