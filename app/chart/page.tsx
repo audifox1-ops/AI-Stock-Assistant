@@ -10,7 +10,8 @@ import {
   Tooltip, 
   ResponsiveContainer 
 } from 'recharts';
-import { RefreshCcw, TrendingUp } from 'lucide-react';
+import { RefreshCcw, TrendingUp, ChevronLeft } from 'lucide-react';
+import Link from 'next/link';
 
 // --- Mock Data: 최근 1주일 종가 추이 ---
 const mockData = [
@@ -26,7 +27,7 @@ const mockData = [
 export default function ChartPage() {
   const [isMounted, setIsMounted] = useState(false);
 
-  // SSR Hydration 에러 방지를 위한 마운트 체크
+  // SSR Hydration 에러 방지를 위한 클라이언트 마운트 가드
   useEffect(() => {
     setIsMounted(true);
   }, []);
@@ -34,124 +35,123 @@ export default function ChartPage() {
   if (!isMounted) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <RefreshCcw className="animate-spin text-blue-500" size={32} />
+        <RefreshCcw className="animate-spin text-[#3182f6]" size={36} />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-white pb-24">
-      {/* Header */}
-      <header className="px-6 pt-10 pb-6 bg-white sticky top-0 z-10">
-        <div className="flex justify-between items-center mb-10">
-          <div>
-            <h1 className="text-2xl font-extrabold tracking-tight text-gray-900 mb-2">시장 흐름</h1>
-            <p className="text-sm font-bold text-gray-400">최근 7일간의 변동 추이</p>
-          </div>
-          <div className="p-3 bg-blue-50 rounded-full text-blue-600">
-            <TrendingUp size={24} />
+    <div className="min-h-screen bg-white pb-32">
+      {/* Chart Header */}
+      <header className="px-6 pt-12 pb-8 bg-white sticky top-0 z-20 border-b border-gray-50/50">
+        <div className="flex items-center gap-4 mb-10">
+          <Link href="/" className="p-3 bg-gray-50 rounded-full text-gray-400 active:scale-90 transition-all">
+            <ChevronLeft size={24} />
+          </Link>
+          <div className="flex-1">
+             <h1 className="text-2xl font-black text-[#191f28] tracking-tight">수익률 리포트</h1>
+             <p className="text-xs font-bold text-gray-300 uppercase tracking-widest mt-1">Market Trend Analysis</p>
           </div>
         </div>
 
-        {/* 대형 가격 정보 (최종 데이터 기준) */}
-        <div className="mb-10 px-2">
-          <p className="text-xs font-black text-gray-300 uppercase tracking-widest mb-1">Last Update Price</p>
-          <div className="flex items-baseline gap-2">
+        {/* Big Price Display */}
+        <div className="px-2">
+          <div className="flex items-baseline gap-2 mb-2">
             <h2 className="text-5xl font-black text-[#EF4444] tracking-tighter">52,500</h2>
-            <span className="text-2xl font-black text-gray-500">{'원'}</span>
+            <span className="text-2xl font-black text-gray-400">원</span>
           </div>
-          <p className="text-sm font-bold text-[#EF4444] mt-2 flex items-center gap-1">
-            <span>+2,300 (4.6%)</span>
-            <span className="text-[10px] animate-pulse">▲</span>
-          </p>
+          <div className="flex items-center gap-2 text-sm font-black text-[#EF4444]">
+            <TrendingUp size={16} />
+            <span>+2,300 (+4.6%)</span>
+            <span className="px-2 py-0.5 bg-red-50 rounded-md text-[10px] uppercase">Bullish</span>
+          </div>
         </div>
       </header>
 
-      {/* Tosh-style Area Chart Section */}
-      <section className="px-4 h-[350px] w-full mt-4">
-        <div className="w-full h-full bg-white rounded-3xl p-4 shadow-[0_20px_50px_rgba(0,0,0,0.02)] border border-gray-50">
+      {/* Main Area Chart Section */}
+      <section className="px-4 mt-12 w-full h-[400px]">
+        <div className="w-full h-full bg-white rounded-[2.5rem] p-6 shadow-[0_30px_60px_rgba(0,0,0,0.03)] border border-gray-50 relative overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-b from-red-50/10 to-transparent pointer-events-none" />
+          
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart
               data={mockData}
-              margin={{ top: 20, right: 10, left: -20, bottom: 0 }}
+              margin={{ top: 30, right: 10, left: -20, bottom: 0 }}
             >
               <defs>
-                {/* 세련된 하단 그라데이션 필링 */}
-                <linearGradient id="colorPrice" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#EF4444" stopOpacity={0.15}/>
+                <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#EF4444" stopOpacity={0.2}/>
                   <stop offset="95%" stopColor="#EF4444" stopOpacity={0}/>
                 </linearGradient>
               </defs>
               
-              {/* 극도로 깔끔한 점선 그리드 */}
               <CartesianGrid 
                 vertical={false} 
-                strokeDasharray="3 8" 
+                strokeDasharray="4 10" 
                 stroke="#F3F4F6" 
-                className="opacity-50"
               />
               
-              {/* 축 선(axisLine, tickLine)은 모두 제거하여 클린함 유지 */}
               <XAxis 
                 dataKey="name" 
                 axisLine={false} 
                 tickLine={false} 
-                tick={{ fontSize: 13, fontWeight: 800, fill: '#D1D5DB' }}
-                dy={15}
+                tick={{ fontSize: 13, fontWeight: 900, fill: '#D1D5DB' }}
+                dy={20}
               />
               <YAxis 
-                axisLine={false} 
-                tickLine={false} 
-                tick={{ fontSize: 12, fontWeight: 800, fill: '#D1D5DB' }}
+                hide={true}
               />
               
               <Tooltip 
+                cursor={{ stroke: '#F3F4F6', strokeWidth: 2 }}
                 contentStyle={{ 
-                  borderRadius: '20px', 
+                  borderRadius: '24px', 
                   border: 'none', 
-                  boxShadow: '0 10px 30px rgba(0,0,0,0.05)',
+                  boxShadow: '0 20px 40px rgba(0,0,0,0.08)',
                   fontSize: '14px',
-                  fontWeight: '900'
+                  fontWeight: '900',
+                  padding: '16px'
                 }}
-                labelStyle={{ color: '#9CA3AF' }}
+                itemStyle={{ color: '#EF4444' }}
               />
               
               <Area 
                 type="monotone" 
                 dataKey="price" 
                 stroke="#EF4444" 
-                strokeWidth={4} 
+                strokeWidth={5} 
                 fillOpacity={1} 
-                fill="url(#colorPrice)" 
-                animationDuration={2000}
+                fill="url(#chartGradient)" 
+                animationDuration={2500}
+                activeDot={{ r: 8, fill: '#EF4444', strokeWidth: 4, stroke: '#fff' }}
               />
             </AreaChart>
           </ResponsiveContainer>
         </div>
       </section>
 
-      {/* Chart Footer Info */}
-      <section className="px-8 mt-12 space-y-6">
-        <div className="flex items-center gap-4 p-6 bg-gray-50 rounded-[2rem] border border-gray-100/50">
-           <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-sm">
-              <span className="text-xl">💡</span>
-           </div>
-           <div>
-              <p className="text-xs font-black text-gray-400 mb-0.5">Investor Opinion</p>
-              <h4 className="text-base font-extrabold text-[#111827]">시장이 매우 낙관적입니다</h4>
-           </div>
-        </div>
+      {/* Insight Section */}
+      <section className="px-8 mt-16 space-y-6">
+         <div className="p-8 bg-gray-50 rounded-[2.5rem] border border-gray-100 flex items-start gap-5">
+            <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center shadow-sm flex-shrink-0">
+               <span className="text-2xl">🔥</span>
+            </div>
+            <div>
+               <h4 className="text-lg font-black text-[#191f28] mb-1">인공지능 분석 결과</h4>
+               <p className="text-sm font-bold text-gray-400 leading-relaxed">자산의 장기적인 추세가 매우 견고합니다. 현재의 변동성은 매수 기회로 작용할 가능성이 78% 이상입니다.</p>
+            </div>
+         </div>
 
-        <div className="grid grid-cols-2 gap-4">
-           <div className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm text-center">
-              <p className="text-[10px] font-black text-gray-300 uppercase mb-2">Highest</p>
-              <p className="text-xl font-black text-[#EF4444]">52,500</p>
-           </div>
-           <div className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm text-center">
-              <p className="text-[10px] font-black text-gray-300 uppercase mb-2">Lowest</p>
-              <p className="text-xl font-black text-blue-500">46,800</p>
-           </div>
-        </div>
+         <div className="grid grid-cols-2 gap-4">
+            <div className="bg-white p-7 rounded-[2.5rem] border border-gray-100 shadow-sm text-center">
+               <span className="text-[10px] font-black text-gray-300 uppercase tracking-widest block mb-2">Max Profit</span>
+               <p className="text-2xl font-black text-[#EF4444] tracking-tighter">+5,300원</p>
+            </div>
+            <div className="bg-white p-7 rounded-[2.5rem] border border-gray-100 shadow-sm text-center">
+               <span className="text-[10px] font-black text-gray-300 uppercase tracking-widest block mb-2">Stability</span>
+               <p className="text-2xl font-black text-blue-500 tracking-tighter">High</p>
+            </div>
+         </div>
       </section>
     </div>
   );
