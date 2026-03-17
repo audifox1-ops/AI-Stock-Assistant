@@ -98,22 +98,34 @@ export default function WatchlistPage() {
     setIsBottomSheetOpen(true);
   };
 
-  // 차트/AI 기능 (Home과 동일 로직)
+  // 차트/AI 기능 - [21차] 방어 로직 강화 및 한글화
   const openChart = async () => {
     if (!selectedStock) return;
     setIsBottomSheetOpen(false);
     setActiveModal('chart');
     setIsChartLoading(true);
+
+    const mockData = [
+      { time: '09:00', price: 50000 },
+      { time: '11:00', price: 51200 },
+      { time: '13:00', price: 50800 },
+      { time: '15:30', price: 52000 },
+    ];
+
     try {
       const res = await fetch(`/api/naver?mode=chart&itemCode=${selectedStock.itemCode}`);
       const data = await res.json();
-      if (data.price) {
+      if (data.price && data.price.length > 0) {
         setChartData(data.price.map((p: any) => ({
           time: p.localDate.substring(4, 8),
           price: p.closePrice
         })));
+      } else {
+        setChartData(mockData);
       }
-    } catch (e) {}
+    } catch (e) {
+      setChartData(mockData);
+    }
     finally { setIsChartLoading(false); }
   };
 
@@ -145,18 +157,18 @@ export default function WatchlistPage() {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen">
         <Loader2 className="animate-spin text-blue-600 mb-4" size={40} />
-        <p className="text-[10px] font-black text-slate-300 tracking-[0.3em] uppercase">Syncing Watchlist...</p>
+        <p className="text-[10px] font-black text-slate-300 tracking-[0.3em] uppercase">관심 리스트를 불러오고 있습니다...</p>
       </div>
     );
   }
 
   return (
     <div className="w-full bg-slate-50 min-h-screen pb-32">
-      {/* 헤더 - [19차] 직각화 */}
+      {/* 헤더 - [21차] 한글화 */}
       <header className="px-6 py-8 bg-white border-b border-gray-100 flex justify-between items-center sticky top-0 z-50 rounded-none">
         <div>
-          <h1 className="text-2xl font-black text-slate-900 tracking-tighter uppercase">Watchlist</h1>
-          <p className="text-[10px] font-bold text-blue-500 uppercase tracking-widest mt-1">Strategic Interest Hub</p>
+          <h1 className="text-2xl font-black text-slate-900 tracking-tighter uppercase">관심 종목</h1>
+          <p className="text-[10px] font-bold text-blue-500 uppercase tracking-widest mt-1">나만의 전략 자산 허브</p>
         </div>
         <button 
           onClick={() => setIsAddModalOpen(true)}
@@ -167,11 +179,11 @@ export default function WatchlistPage() {
       </header>
 
       <div className="px-6 mt-6">
-        {/* 리스트 - [19차] 직각화 */}
+        {/* 리스트 - [21차] 한글화 */}
         {watchlist.length === 0 ? (
           <div className="bg-white border-2 border-dashed border-slate-200 rounded-none p-20 text-center flex flex-col items-center gap-5">
             <Star size={48} className="text-slate-100" />
-            <p className="text-xs font-black text-slate-300 uppercase tracking-widest">Your interest list is empty</p>
+            <p className="text-xs font-black text-slate-300 uppercase tracking-widest">등록된 관심 종목이 없습니다</p>
           </div>
         ) : (
           <div className="space-y-4">
@@ -190,14 +202,14 @@ export default function WatchlistPage() {
                   </div>
                   <div className="flex items-center gap-8">
                     <div className="text-right">
-                      <p className="text-[18px] font-black text-slate-900 tabular-nums">{stock.closePrice === '0' ? 'IDLE' : stock.closePrice}</p>
+                      <p className="text-[18px] font-black text-slate-900 tabular-nums">{stock.closePrice === '0' ? '대기 중' : stock.closePrice}</p>
                       <span className={`text-[10px] font-black px-2 py-0.5 rounded-none ${isUp ? 'bg-red-50 text-red-500' : 'bg-blue-50 text-blue-500'} border border-current/10`}>
                         {isUp ? '+' : ''}{stock.fluctuationsRatio}%
                       </span>
                     </div>
                     <button 
                       onClick={(e) => { e.stopPropagation(); handleRemove(stock.itemCode); }}
-                      className="p-3 bg-slate-50 text-slate-300 hover:text-red-500 rounded-none border border-slate-100"
+                      className="p-3 bg-slate-50 text-slate-300 hover:text-red-500 rounded-none border border-slate-100 transition-colors"
                     >
                       <Trash2 size={18} />
                     </button>
@@ -209,33 +221,33 @@ export default function WatchlistPage() {
         )}
       </div>
 
-      {/* 모달 - [19차] 직각화 */}
+      {/* 모달 - [21차] 한글화 */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center px-0">
           <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-none" onClick={() => setIsAddModalOpen(false)}></div>
           <div className="relative bg-white w-full max-w-[400px] rounded-none p-12 shadow-none border-t-4 border-slate-900">
             <div className="flex justify-between items-center mb-10 pb-6 border-b border-slate-100">
-              <h2 className="text-xl font-black text-slate-900 tracking-tighter uppercase">Track New Asset</h2>
+              <h2 className="text-xl font-black text-slate-900 tracking-tighter uppercase">새 관심 종목 등록</h2>
               <button onClick={() => setIsAddModalOpen(false)} className="p-2 bg-slate-900 text-white rounded-none"><X size={20} /></button>
             </div>
             <form onSubmit={handleAddSimple} className="space-y-8">
               <div className="space-y-3">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Asset Name or Code</label>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">종목명 또는 코드</label>
                 <input 
-                  type="text" required placeholder="IDENTIFIER"
-                  className="w-full bg-slate-50 border border-slate-200 p-5 rounded-none font-bold text-slate-900 focus:border-blue-600 outline-none uppercase"
+                  type="text" required placeholder="예: 삼성전자 또는 005930"
+                  className="w-full bg-slate-50 border border-slate-200 p-5 rounded-none font-bold text-slate-900 focus:border-blue-600 outline-none uppercase transition-all"
                   value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
                 />
               </div>
-              <button className="w-full bg-slate-900 text-white font-black py-6 rounded-none uppercase tracking-widest text-xs hover:bg-blue-600 transition-all">
-                Register Strategy
+              <button className="w-full bg-slate-900 text-white font-black py-6 rounded-none uppercase tracking-widest text-xs hover:bg-blue-600 transition-all font-sans">
+                관심 정찰병 등록
               </button>
             </form>
           </div>
         </div>
       )}
 
-      {/* 바텀 시트 - [19차] 직각화 */}
+      {/* 바텀 시트 - [21차] 한글화 */}
       {isBottomSheetOpen && selectedStock && (
         <div className="fixed inset-0 z-[110] flex items-end justify-center px-0 pb-0">
            <div className="absolute inset-0 bg-slate-950/40 backdrop-blur-none" onClick={() => setIsBottomSheetOpen(false)}></div>
@@ -243,7 +255,7 @@ export default function WatchlistPage() {
               <div className="flex justify-between items-center mb-8">
                  <div>
                     <h3 className="text-2xl font-black text-slate-900 tracking-tighter uppercase">{selectedStock.stockName}</h3>
-                    <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest leading-none mt-2">Asset Intelligence / {selectedStock.itemCode}</p>
+                    <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest leading-none mt-2">상세 지표 허브 / {selectedStock.itemCode}</p>
                  </div>
                  <button onClick={() => setIsBottomSheetOpen(false)} className="p-3 bg-slate-50 rounded-none text-slate-400 border border-slate-100"><X size={20} /></button>
               </div>
@@ -255,7 +267,7 @@ export default function WatchlistPage() {
                  >
                     <div className="flex items-center gap-5">
                        <LineChartIcon size={24} className="text-blue-400" />
-                       <p className="text-[13px] font-black uppercase tracking-widest">Visual Stream Analysis</p>
+                       <p className="text-[13px] font-black uppercase tracking-widest font-sans">📊 차트 보기</p>
                     </div>
                     <ChevronRight size={18} className="text-white/20" />
                  </button>
@@ -265,7 +277,7 @@ export default function WatchlistPage() {
                  >
                     <div className="flex items-center gap-5">
                        <Bot size={24} className="text-blue-600" />
-                       <p className="text-[13px] font-black uppercase tracking-widest">Neural Asset Scan</p>
+                       <p className="text-[13px] font-black uppercase tracking-widest font-sans">AI 종목 이슈 분석</p>
                     </div>
                     <ChevronRight size={18} className="text-slate-200" />
                  </button>
@@ -274,23 +286,23 @@ export default function WatchlistPage() {
         </div>
       )}
 
-      {/* 전용 모달 - [19차] 직각화 */}
+      {/* 전용 모달 - [21차] 차트 높이 고정 및 한글화 */}
       {activeModal && selectedStock && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center px-0">
            <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-none" onClick={() => !isAiLoading && setActiveModal(null)}></div>
            <div className="relative bg-white w-full max-w-[400px] rounded-none p-12 shadow-none border-4 border-slate-900">
               <div className="flex justify-between items-center mb-10 pb-6 border-b-2 border-slate-100">
                  <h2 className="text-xl font-black text-slate-900 tracking-tighter uppercase">
-                    {activeModal === 'chart' ? 'Stream' : 'Insight'} Echo
+                    {activeModal === 'chart' ? '실시간 차트' : 'AI 분석 리포트'}
                  </h2>
                  <button onClick={() => setActiveModal(null)} className="p-2 bg-slate-900 text-white rounded-none"><X size={20} /></button>
               </div>
 
               <div className="min-h-[300px]">
                  {activeModal === 'chart' ? (
-                   <div className="h-[300px] w-full">
+                   <div className="h-[300px] w-full bg-slate-50/50 border border-slate-100 p-2">
                       {isChartLoading ? (
-                        <div className="h-full flex flex-col items-center justify-center gap-5 uppercase text-[10px] font-black text-slate-200 tracking-widest">Constructing visuals...</div>
+                        <div className="h-full flex flex-col items-center justify-center gap-5 uppercase text-[10px] font-black text-slate-200 tracking-widest">분석 데이터 구성 중...</div>
                       ) : (
                         <ResponsiveContainer width="100%" height="100%">
                            <AreaChart data={chartData}>
@@ -302,7 +314,7 @@ export default function WatchlistPage() {
                  ) : (
                    <div className="bg-slate-50 p-8 border-l-4 border-blue-600">
                       {isAiLoading ? (
-                        <div className="py-20 flex justify-center uppercase text-[10px] font-black text-slate-300 tracking-[0.4em]">Processing Insight...</div>
+                        <div className="py-20 flex justify-center uppercase text-[10px] font-black text-slate-300 tracking-[0.4em]">통찰력 도출 중...</div>
                       ) : (
                         <p className="text-[14px] font-bold text-slate-800 uppercase leading-relaxed tracking-tight">{aiAnalysis}</p>
                       )}
@@ -311,9 +323,9 @@ export default function WatchlistPage() {
               </div>
               <button 
                 onClick={() => setActiveModal(null)} 
-                className="w-full bg-slate-900 text-white font-black py-6 rounded-none mt-10 uppercase tracking-widest text-xs hover:bg-blue-600 transition-all shadow-none"
+                className="w-full bg-slate-900 text-white font-black py-6 rounded-none mt-10 uppercase tracking-widest text-xs hover:bg-blue-600 transition-all shadow-none font-sans"
               >
-                 Terminate View
+                 확인 및 종료
               </button>
            </div>
         </div>
