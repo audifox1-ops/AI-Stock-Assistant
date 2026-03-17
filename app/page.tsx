@@ -42,16 +42,16 @@ export default function HomePage() {
   const [rankingStocks, setRankingStocks] = useState<NaverStock[]>([]);
   const [isRankingLoading, setIsRankingLoading] = useState(false);
   
-  // [16차] 확장된 6가지 탭 구성
-  const [activeTab, setActiveTab] = useState('KOSPI 시총');
-  // API 전송용 매핑
-  const tabMapping: Record<string, { type: string, category: string }> = {
-    'KOSPI 시총': { type: 'marketValue', category: 'KOSPI' },
-    'KOSDAQ 시총': { type: 'marketValue', category: 'KOSDAQ' },
-    '거래량상위': { type: 'volume', category: 'all' },
-    '거래량급증': { type: 'jump', category: 'all' },
-    '거래량급락': { type: 'fall', category: 'all' },
-    '골든크로스': { type: 'golden', category: 'all' }
+  // [16차 & 18차] 확장된 6가지 탭 구성
+  const [activeTab, setActiveTab] = useState('KOSPI');
+  // API 전송용 매핑 (18차에서 /api/market?category= 형태로 통일)
+  const tabMapping: Record<string, string> = {
+    'KOSPI': 'KOSPI',
+    'KOSDAQ': 'KOSDAQ',
+    '거래량상위': '거래량상위',
+    '거래량급증': '거래량급증',
+    '거래량급락': '거래량급락',
+    '골든크로스': '골든크로스'
   };
 
   // 인터랙션 상태
@@ -75,12 +75,19 @@ export default function HomePage() {
 
   const fetchNaverRanking = async () => {
     setIsRankingLoading(true);
-    const { type, category } = tabMapping[activeTab] || tabMapping['KOSPI 시총'];
+    const category = tabMapping[activeTab] || 'KOSPI';
     try {
-      const res = await fetch(`/api/naver?type=${type}&category=${category}`, { cache: 'no-store' });
+      // [18차] /api/market 통합 엔드포인트 호출
+      const res = await fetch(`/api/market?category=${category}`, { cache: 'no-store' });
       const data = await res.json();
-      if (Array.isArray(data)) setRankingStocks(data);
-    } catch (e) {}
+      if (Array.isArray(data)) {
+        setRankingStocks(data);
+      } else {
+        setRankingStocks([]);
+      }
+    } catch (e) {
+      setRankingStocks([]);
+    }
     finally { setIsRankingLoading(false); }
   };
 
@@ -105,6 +112,7 @@ export default function HomePage() {
     setActiveModal('chart');
     setIsChartLoading(true);
     try {
+      // 차트는 네이버 API 프록시 그대로 활용
       const res = await fetch(`/api/naver?mode=chart&itemCode=${selectedStock.itemCode}`);
       const data = await res.json();
       if (data.price) {
@@ -191,7 +199,7 @@ export default function HomePage() {
            ))}
         </section>
 
-        {/* [16차] 실전 확장 탭 바 */}
+        {/* [16차 & 18차] 실전 확장 탭 바 */}
         <section className="bg-white rounded-[2.5rem] border border-gray-50 shadow-sm overflow-hidden flex flex-col">
            <div className="px-8 pt-8 pb-4 flex justify-between items-end">
               <div className="space-y-1">
@@ -221,10 +229,15 @@ export default function HomePage() {
                   <Loader2 className="animate-spin text-blue-100" size={40} />
                   <p className="text-[10px] font-black text-slate-200 uppercase tracking-widest">Streaming Intelligence...</p>
                 </div>
+              ) : rankingStocks.length === 0 ? (
+                <div className="py-40 text-center flex flex-col items-center gap-4">
+                  <Info className="text-slate-100" size={48} />
+                  <p className="text-[10px] font-black text-slate-200 uppercase tracking-widest">No rankings found for this category</p>
+                </div>
               ) : rankingStocks.slice(0, 30).map((rs, idx) => {
                 const isUp = rs.fluctuationsRatio.startsWith('+') || parseFloat(rs.fluctuationsRatio) > 0;
                 return (
-                  <div key={rs.itemCode} onClick={() => handleStockClick(rs)} className="p-7 bg-white rounded-[2.25rem] border border-gray-50 shadow-sm flex justify-between items-center group active:scale-[0.98] transition-all hover:border-blue-100 hover:shadow-lg hover:shadow-slate-100">
+                  <div key={`${rs.itemCode}-${idx}`} onClick={() => handleStockClick(rs)} className="p-7 bg-white rounded-[2.25rem] border border-gray-50 shadow-sm flex justify-between items-center group active:scale-[0.98] transition-all hover:border-blue-100 hover:shadow-lg hover:shadow-slate-100">
                      <div className="flex items-center gap-5">
                         <span className="text-[16px] font-black text-slate-200 group-hover:text-blue-300 transition-colors w-7">{idx + 1}</span>
                         <div>
@@ -232,7 +245,7 @@ export default function HomePage() {
                            <div className="flex items-center gap-2 mt-1">
                               <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">{rs.itemCode}</span>
                               <span className="w-1 h-1 bg-slate-200 rounded-full"></span>
-                              {/* [16차] 거래량 렌더링 복구 */}
+                              {/* [16차 & 18차] 거래량 렌더링 복구 */}
                               <span className="text-[11px] font-black text-slate-400">거래량: {rs.volume} 주</span>
                            </div>
                         </div>
@@ -253,7 +266,7 @@ export default function HomePage() {
       {/* [16차] 고도화된 바텀 시트 (고급 투자 지표 패널 포함) */}
       {isBottomSheetOpen && selectedStock && (
         <div className="fixed inset-0 z-[110] flex items-end justify-center px-6 pb-12">
-           <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-md" onClick={() => setIsBottomSheetOpen(false)}></div>
+           <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setIsBottomSheetOpen(false)}></div>
            <div className="relative bg-white w-full max-w-[420px] rounded-[3.5rem] p-10 shadow-2xl animate-in slide-in-from-bottom-32 duration-700 overflow-hidden">
               <div className="absolute top-4 left-1/2 -translate-x-1/2 w-12 h-1.5 bg-slate-100 rounded-full"></div>
               
