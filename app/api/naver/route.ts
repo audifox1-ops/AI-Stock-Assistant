@@ -32,7 +32,7 @@ async function fetchIntegration(itemCode: string) {
   return data;
 }
 
-// [14차 추가] 네이버 차트 데이터 프록시
+// 네이버 차트 데이터 프록시
 async function fetchChartData(itemCode: string) {
   const url = `https://m.stock.naver.com/api/stock/${itemCode}/chart/day?range=1month`;
   const res = await fetch(url, { cache: 'no-store' });
@@ -45,10 +45,9 @@ export async function GET(request: Request) {
   const type = searchParams.get('type') || 'marketValue'; 
   const category = searchParams.get('category') || 'KOSPI';
   const itemCode = searchParams.get('itemCode');
-  const mode = searchParams.get('mode'); // 'chart' 모드 추가
+  const mode = searchParams.get('mode');
 
   try {
-    // 차트 데이터 요청인 경우 처리
     if (mode === 'chart' && itemCode) {
       const chartData = await fetchChartData(itemCode);
       return NextResponse.json(chartData);
@@ -61,8 +60,8 @@ export async function GET(request: Request) {
       const detail = await fetchIntegration(code);
       
       const infos = detail?.totalInfos || [];
-      const high52 = infos.find((i: any) => i.code === 'highPriceOf52Weeks')?.value || '-';
-      const low52 = infos.find((i: any) => i.code === 'lowPriceOf52Weeks')?.value || '-';
+      const high52w = infos.find((i: any) => i.code === 'highPriceOf52Weeks')?.value || '-';
+      const low52w = infos.find((i: any) => i.code === 'lowPriceOf52Weeks')?.value || '-';
       
       const targetPriceStr = detail?.consensusInfo?.priceTargetMean || '0';
       const currentPriceStr = stock.closePrice || '0';
@@ -78,14 +77,18 @@ export async function GET(request: Request) {
 
       const opinionMean = detail?.consensusInfo?.recommMean || null;
 
+      // [15차] 거래량 포맷팅 및 요청 필드 반영
+      const volumeRaw = stock.accumulatedTradingVolume || '0';
+      const volumeFormatted = parseInt(volumeRaw.toString().replace(/,/g, '')).toLocaleString();
+
       return {
         itemCode: code,
         stockName: stock.stockName,
         closePrice: stock.closePrice,
         fluctuationsRatio: stock.fluctuationsRatio,
-        accumulatedTradingVolume: stock.accumulatedTradingVolume,
-        high52,
-        low52,
+        volume: volumeFormatted, // 콤마 포맷팅된 거래량
+        high52w, // 52주 최고가 복구
+        low52w,  // 52주 최저가 복구
         targetPrice: targetPriceStr === '0' ? '-' : targetPriceStr,
         upsidePotential,
         opinion: getOpinionText(opinionMean)
