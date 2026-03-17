@@ -32,6 +32,8 @@
   margin: 0;
   padding: 0;
   box-sizing: border-box;
+  /* [19차] 글로벌 직각화 강제 */
+  border-radius: 0 !important;
 }
 
 body {
@@ -49,13 +51,13 @@ h1, h2, h3, h4 {
   font-weight: 700;
 }
 
-/* Glassmorphism Utilities */
+/* Glassmorphism Utilities - [19차] 직각화 대응 */
 .glass-panel {
   background: var(--glass-bg);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border: 1px solid var(--glass-border);
-  border-radius: 20px;
+  border-radius: 0; /* Sharp corner */
   box-shadow: var(--glass-shadow);
 }
 
@@ -63,7 +65,7 @@ h1, h2, h3, h4 {
   background: rgba(255, 255, 255, 0.03);
   backdrop-filter: blur(8px);
   border: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: 16px;
+  border-radius: 0; /* Sharp corner */
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -89,7 +91,7 @@ h1, h2, h3, h4 {
   width: 100%;
 }
 
-/* Scrollbar */
+/* Scrollbar - [19차] 직각화 대응 */
 ::-webkit-scrollbar {
   width: 6px;
 }
@@ -100,7 +102,7 @@ h1, h2, h3, h4 {
 
 ::-webkit-scrollbar-thumb {
   background: var(--bg-tertiary);
-  border-radius: 10px;
+  border-radius: 0; /* Sharp corner */
 }
 
 ::-webkit-scrollbar-thumb:hover {
@@ -115,4 +117,13 @@ h1, h2, h3, h4 {
 
 .fade-in {
   animation: fadeIn 0.5s ease-out forwards;
+}
+
+/* [19차] 둥근 효과 완전 제거를 위한 유틸리티 */
+.rounded-none-important {
+  border-radius: 0 !important;
+}
+
+input, button, select, textarea {
+  border-radius: 0 !important;
 }

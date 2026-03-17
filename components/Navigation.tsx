@@ -32,7 +32,8 @@ export default function Navigation() {
               isActive ? "text-blue-600 scale-105" : "text-gray-400 hover:text-gray-600"
             }`}
           >
-            <div className={`p-2 rounded-2xl transition-all duration-300 ${isActive ? "bg-blue-50" : "bg-transparent"}`}>
+            {/* [19차] Navigation 직각화: rounded-2xl 제거 및 rounded-none 적용 */}
+            <div className={`p-2 transition-all duration-300 rounded-none ${isActive ? "bg-blue-50" : "bg-transparent"}`}>
               <Icon 
                 size={24} 
                 strokeWidth={isActive ? 2.5 : 2} 
