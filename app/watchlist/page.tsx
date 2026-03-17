@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from 'react';
-import { 
+import {
   Plus, Search, Star, Trash2, TrendingUp, TrendingDown, RefreshCcw, Loader2, X,
   ArrowRight, ShieldAlert, Sparkles, AlertCircle, BarChart3, Info, Zap, Check
 } from 'lucide-react';
@@ -24,12 +24,12 @@ export default function WatchlistPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  
+
   // 검색 및 자동완성 상태
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
-  
+
   // 수급 레이더 알림 상태
   const [radarStocks, setRadarStocks] = useState<string[]>([]);
 
@@ -44,7 +44,7 @@ export default function WatchlistPage() {
       setIsSyncing(false);
       return;
     }
-    
+
     // 티커 목록 추출 및 정규화
     const codes = currentItems.map(item => String(item.ticker || item.itemCode || '').trim()).filter(c => c !== '').join(',');
     if (!codes) {
@@ -56,16 +56,16 @@ export default function WatchlistPage() {
       setIsSyncing(true);
       const res = await fetch(`/api/market?tickers=${codes}`);
       const data = await res.json();
-      
+
       if (data.success && Array.isArray(data.data)) {
-        const rtData = data.data; 
-        
+        const rtData = data.data;
+
         // [매칭 절대 규칙] 및 실시간 값 덮어쓰기 적용
         setWatchlist(prev => {
           return prev.map(local => {
             const localTicker = String(local.ticker || local.itemCode || '').trim();
             const rt = rtData.find((r: any) => String(r.ticker || '').trim() === localTicker);
-            
+
             if (rt) {
               return {
                 ...local,
@@ -146,12 +146,12 @@ export default function WatchlistPage() {
     };
   }, []);
 
-  // 관심종목 리스트가 변할 때마다 스토리지 업데이트
+  // [수정 포인트]: 초기 로딩이 끝난 후에만 로컬 스토리지를 업데이트하여 데이터 증발 버그 차단!
   useEffect(() => {
-    if (watchlist.length >= 0) {
+    if (!isLoading) {
       localStorage.setItem(WATCHLIST_STORAGE_KEY, JSON.stringify(watchlist));
     }
-  }, [watchlist]);
+  }, [watchlist, isLoading]);
 
   /**
    * 종목 검색
@@ -172,7 +172,7 @@ export default function WatchlistPage() {
           setIsSearching(false);
         }
       } else {
-        setSearchResults([]);
+        searchResults.length > 0 && setSearchResults([]);
       }
     }, 300);
     return () => clearTimeout(timer);
@@ -183,7 +183,7 @@ export default function WatchlistPage() {
    */
   const addStockFromSearch = async (item: any) => {
     const ticker = String(item.code).trim();
-    
+
     if (watchlist.some(w => String(w.ticker || w.itemCode || '').trim() === ticker)) {
       alert('이미 등록된 종목입니다.');
       return;
@@ -203,7 +203,7 @@ export default function WatchlistPage() {
     setSearchQuery('');
     setSearchResults([]);
     setIsAddModalOpen(false);
-    
+
     await fetchRealtimePrices(updated);
   };
 
@@ -238,7 +238,7 @@ export default function WatchlistPage() {
     setWatchlist(updated);
     setSearchQuery('');
     setIsAddModalOpen(false);
-    
+
     await fetchRealtimePrices(updated);
   };
 
@@ -259,69 +259,69 @@ export default function WatchlistPage() {
             <p className="text-[10px] font-bold text-blue-500 uppercase tracking-widest mt-2">Real-time Watchlist Engine</p>
           </div>
           <div className="flex gap-2">
-            <button 
+            <button
               onClick={() => {
                 fetchRealtimePrices(watchlist);
               }}
-              className="p-3 bg-slate-100 text-slate-400 hover:bg-blue-600 hover:text-white transition-all shadow-md active:scale-95"
+              className="p-3 bg-slate-100 text-slate-400 hover:bg-blue-600 hover:text-white transition-all shadow-md active:scale-95 rounded-xl"
             >
               <RefreshCcw size={18} className={isSyncing ? 'animate-spin' : ''} />
             </button>
-            <button 
+            <button
               onClick={() => setIsAddModalOpen(true)}
-              className="bg-slate-900 text-white p-3 shadow-lg active:bg-blue-600 transition-all active:scale-95"
+              className="bg-slate-900 text-white p-3 shadow-lg active:bg-blue-600 transition-all active:scale-95 rounded-xl"
             >
               <Plus size={24} />
             </button>
           </div>
         </div>
 
-        <div className="flex gap-4 overflow-x-auto hide-scrollbar">
-           <div className="flex items-center gap-2 px-5 py-3 bg-slate-900 text-white text-[11px] font-black uppercase tracking-widest whitespace-nowrap">
-             <Star size={14} className="text-blue-400" /> Watchlist Portfolio
-           </div>
-           <div className="flex items-center gap-2 px-5 py-3 bg-white text-slate-400 text-[11px] font-black uppercase tracking-widest whitespace-nowrap border border-slate-100 italic">
-             Live Updates Every 10s
-           </div>
+        <div className="flex gap-4 overflow-x-auto hide-scrollbar rounded-xl">
+          <div className="flex items-center gap-2 px-5 py-3 bg-slate-900 text-white text-[11px] font-black uppercase tracking-widest whitespace-nowrap rounded-lg">
+            <Star size={14} className="text-blue-400" /> Watchlist Portfolio
+          </div>
+          <div className="flex items-center gap-2 px-5 py-3 bg-white text-slate-400 text-[11px] font-black uppercase tracking-widest whitespace-nowrap border border-slate-100 italic rounded-lg">
+            Live Updates Every 10s
+          </div>
         </div>
       </header>
 
       {/* 실시간 싱크 바 */}
       <div className={`transition-all duration-500 overflow-hidden ${isSyncing ? 'h-6' : 'h-0'}`}>
         <div className="px-6 py-1 bg-blue-600 flex items-center justify-center gap-2">
-           <Loader2 size={10} className="text-white animate-spin" />
-           <span className="text-[9px] font-black text-white uppercase tracking-[0.2em]">Syncing nodes...</span>
+          <Loader2 size={10} className="text-white animate-spin" />
+          <span className="text-[9px] font-black text-white uppercase tracking-[0.2em]">Syncing nodes...</span>
         </div>
       </div>
 
       {/* 수급 포착 알림 바 */}
       {(radarStocks?.length || 0) > 0 && (
-        <div className="mx-6 mt-6 bg-red-600 p-5 border-l-[6px] border-red-900 shadow-xl flex items-center justify-between animate-bounce">
-           <div className="flex items-center gap-4">
-              <ShieldAlert size={24} className="text-white" />
-              <div>
-                 <p className="text-[10px] font-black text-red-200 uppercase tracking-widest leading-none mb-1">매수세 유입 포착</p>
-                 <h2 className="text-lg font-black text-white tracking-tighter uppercase leading-tight">
-                    {(radarStocks || []).join(', ')} 포지션 유입!
-                 </h2>
-              </div>
-           </div>
-           <div className="w-10 h-10 bg-white/20 flex items-center justify-center font-black text-white text-xs">
-              LIVE
-           </div>
+        <div className="mx-6 mt-6 bg-red-600 p-5 border-l-[6px] border-red-900 shadow-xl flex items-center justify-between animate-pulse rounded-xl">
+          <div className="flex items-center gap-4">
+            <ShieldAlert size={24} className="text-white" />
+            <div>
+              <p className="text-[10px] font-black text-red-200 uppercase tracking-widest leading-none mb-1">매수세 유입 포착</p>
+              <h2 className="text-lg font-black text-white tracking-tighter uppercase leading-tight">
+                {(radarStocks || []).join(', ')} 포지션 유입!
+              </h2>
+            </div>
+          </div>
+          <div className="w-10 h-10 bg-white/20 flex items-center justify-center font-black text-white text-xs rounded-lg">
+            LIVE
+          </div>
         </div>
       )}
 
       <main className="px-6 mt-8 space-y-4">
         {isLoading ? (
           <div className="py-20 flex flex-col items-center justify-center gap-6">
-            <Loader2 className="animate-spin text-slate-200" size={40} />
-            <p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.4em]">INITIALIZING DEPLOYMENT...</p>
+            <Loader2 className="animate-spin text-slate-300" size={40} />
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.4em]">INITIALIZING DEPLOYMENT...</p>
           </div>
         ) : (!watchlist || watchlist.length === 0) ? (
-          <div className="bg-white border-2 border-dashed border-slate-200 p-20 text-center flex flex-col items-center gap-6">
-            <AlertCircle size={32} className="text-slate-100" />
-             <p className="text-xs font-black text-slate-300 uppercase tracking-widest leading-relaxed">심볼 데이터가 비어있습니다.</p>
+          <div className="bg-white rounded-3xl border-2 border-dashed border-slate-200 p-20 text-center flex flex-col items-center gap-6 shadow-sm">
+            <AlertCircle size={32} className="text-slate-200" />
+            <p className="text-xs font-black text-slate-400 uppercase tracking-widest leading-relaxed">심볼 데이터가 비어있습니다.</p>
           </div>
         ) : (
           watchlist.map((item, idx) => {
@@ -330,11 +330,11 @@ export default function WatchlistPage() {
             const isMinus = (item.changeRate || 0) < 0;
 
             return (
-              <div key={`${item.ticker || item.itemCode}-${idx}`} className={`bg-white border transition-all duration-300 ${isRadar ? 'border-red-500 shadow-lg' : 'border-slate-100 hover:border-blue-200 shadow-sm'}`}>
+              <div key={`${item.ticker || item.itemCode}-${idx}`} className={`bg-white rounded-2xl border transition-all duration-300 ${isRadar ? 'border-red-500 shadow-xl' : 'border-slate-100 hover:border-blue-200 shadow-sm hover:shadow-md hover:-translate-y-0.5'} overflow-hidden`}>
                 <div className="p-6">
                   <div className="flex justify-between items-start mb-6">
                     <div className="flex items-center gap-4">
-                      <div className={`w-10 h-10 flex items-center justify-center text-[11px] font-black uppercase ${isRadar ? 'bg-red-600 text-white' : 'bg-slate-900 text-white'}`}>
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-[11px] font-black uppercase shadow-sm ${isRadar ? 'bg-red-600 text-white shadow-red-200' : 'bg-slate-900 text-white shadow-slate-200'}`}>
                         {idx + 1}
                       </div>
                       <div>
@@ -342,28 +342,30 @@ export default function WatchlistPage() {
                         <p className="text-[9px] font-bold text-slate-400 tracking-[0.2em]">{item.ticker || item.itemCode}</p>
                       </div>
                     </div>
-                    <button onClick={() => removeItem(item.ticker || item.itemCode || '')} className="p-2 text-slate-200 hover:text-red-500 transition-colors">
-                      <Trash2 size={16} />
+                    <button onClick={() => removeItem(item.ticker || item.itemCode || '')} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">
+                      <Trash2 size={18} />
                     </button>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-px bg-slate-50 border border-slate-50">
-                    <div className="bg-white p-4">
-                      <p className="text-[9px] font-bold text-slate-400 uppercase mb-1 tracking-widest">Pricing Terminal</p>
-                      <p className="text-lg font-black text-slate-900 tabular-nums leading-none tracking-tight">
-                         {item.currentPrice ? `${item.currentPrice.toLocaleString()}원` : '0원'}
+                  <div className="grid grid-cols-2 gap-px bg-slate-50 border border-slate-50 rounded-xl overflow-hidden">
+                    <div className="bg-white p-5">
+                      <p className="text-[9px] font-bold text-slate-400 uppercase mb-1.5 tracking-widest">Pricing Terminal</p>
+                      <p className="text-xl font-black text-slate-900 tabular-nums leading-none tracking-tight">
+                        {item.currentPrice ? `${item.currentPrice.toLocaleString()}원` : '0원'}
                       </p>
                     </div>
-                    <div className="bg-white p-4 text-right">
-                      <p className="text-[9px] font-bold text-slate-400 uppercase mb-1 tracking-widest">Rate Change</p>
-                      <span className={`text-lg font-black tabular-nums p-1 inline-block ${isPlus ? 'text-red-500 bg-red-50/50' : isMinus ? 'text-blue-500 bg-blue-50/50' : 'text-slate-400 bg-slate-50'}`}>
+                    <div className="bg-white p-5 text-right flex flex-col items-end">
+                      <p className="text-[9px] font-bold text-slate-400 uppercase mb-1.5 tracking-widest">Rate Change</p>
+                      <span className={`text-lg font-black tabular-nums px-2 py-0.5 rounded-lg inline-block ${isPlus ? 'text-red-500 bg-red-50' : isMinus ? 'text-blue-500 bg-blue-50' : 'text-slate-400 bg-slate-50'}`}>
                         {isPlus ? '+' : ''}{item.changeRate?.toFixed(2)}%
                       </span>
                     </div>
-                    
-                    <div className="bg-white p-4 col-span-2 border-t border-slate-50 flex justify-between items-center opacity-40">
-                       <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Volume Node</span>
-                       <span className="text-[10px] font-bold text-slate-900 tabular-nums uppercase">거래량: {(item.volume || 0).toLocaleString()}</span>
+
+                    <div className="bg-white p-4 col-span-2 border-t border-slate-50 flex justify-between items-center opacity-70">
+                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                        <BarChart3 size={12} /> Volume Node
+                      </span>
+                      <span className="text-[11px] font-black text-slate-700 tabular-nums uppercase">{(item.volume || 0).toLocaleString()} 주</span>
                     </div>
                   </div>
                 </div>
@@ -377,48 +379,48 @@ export default function WatchlistPage() {
       {isAddModalOpen && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center p-6 bg-slate-950/80 backdrop-blur-md">
           <div className="absolute inset-0" onClick={() => setIsAddModalOpen(false)}></div>
-          <div className="relative bg-white w-full max-w-[450px] p-12 border-t-8 border-slate-900 shadow-2xl">
-            <div className="flex justify-between items-center mb-10 pb-6 border-b border-slate-100">
-               <div>
-                  <h2 className="text-xl font-black text-slate-900 tracking-tighter uppercase">Watchlist Add</h2>
-                  <p className="text-[9px] font-bold text-blue-500 uppercase tracking-widest mt-1">Search cloud database or enter ticker</p>
-               </div>
-               <button onClick={() => setIsAddModalOpen(false)} className="bg-slate-900 text-white p-2"><X size={20} /></button>
+          <div className="relative bg-white w-full max-w-[450px] p-10 rounded-[2rem] border-t-8 border-slate-900 shadow-2xl overflow-hidden">
+            <div className="flex justify-between items-center mb-8 pb-6 border-b border-slate-100">
+              <div>
+                <h2 className="text-xl font-black text-slate-900 tracking-tighter uppercase">Watchlist Add</h2>
+                <p className="text-[9px] font-bold text-blue-500 uppercase tracking-widest mt-1">Search cloud database</p>
+              </div>
+              <button onClick={() => setIsAddModalOpen(false)} className="bg-slate-50 hover:bg-red-50 text-slate-400 hover:text-red-500 rounded-xl p-3 transition-all"><X size={20} /></button>
             </div>
-            
+
             <form onSubmit={handleManualAdd} className="space-y-8">
-               <div className="space-y-3 relative">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Symbol Search Query</label>
-                  <div className="relative">
-                    <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300" size={20} />
-                    <input 
-                      type="text" 
-                      placeholder="종목명 또는 심볼 입력"
-                      className="w-full bg-white text-slate-900 border-2 border-slate-200 p-6 pl-14 font-black outline-none focus:border-blue-500 transition-all text-sm uppercase tracking-widest"
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                    />
+              <div className="space-y-3 relative">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Symbol Search Query</label>
+                <div className="relative">
+                  <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+                  <input
+                    type="text"
+                    placeholder="종목명 또는 심볼 입력 (예: 삼성전자)"
+                    className="w-full bg-slate-50 text-slate-900 border-2 border-slate-200 p-5 pl-14 rounded-2xl font-black outline-none focus:border-blue-500 focus:bg-white transition-all text-sm uppercase tracking-wider"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                </div>
+
+                {(searchResults.length > 0 || isSearching) && (
+                  <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-100 rounded-2xl z-[150] max-h-60 overflow-y-auto shadow-2xl">
+                    {isSearching && <div className="p-6 text-xs font-black text-slate-400 animate-pulse uppercase tracking-widest text-center">Fetching data...</div>}
+                    {searchResults.map((item, idx) => (
+                      <div key={`${item.code}-${idx}`} onClick={() => addStockFromSearch(item)} className="p-5 flex justify-between items-center hover:bg-blue-50 cursor-pointer border-b border-slate-50 group transition-colors">
+                        <span className="text-sm font-black text-slate-900 group-hover:text-blue-600 transition-colors">{item.name}</span>
+                        <div className="flex items-center gap-3">
+                          <span className="text-[10px] font-bold text-slate-400 group-hover:text-blue-500 uppercase tracking-widest bg-slate-100 group-hover:bg-blue-100 px-2 py-1 rounded-md">{item.code}</span>
+                          <Check size={16} className="text-blue-500 opacity-0 group-hover:opacity-100 transition-all" />
+                        </div>
+                      </div>
+                    ))}
                   </div>
+                )}
+              </div>
 
-                  {(searchResults.length > 0 || isSearching) && (
-                    <div className="absolute top-full left-0 right-0 bg-white border-2 border-slate-900 z-[150] max-h-60 overflow-y-auto shadow-2xl">
-                       {isSearching && <div className="p-4 text-xs font-black text-slate-300 animate-pulse uppercase tracking-widest">Fetching...</div>}
-                       {searchResults.map((item, idx) => (
-                         <div key={`${item.code}-${idx}`} onClick={() => addStockFromSearch(item)} className="p-4 flex justify-between items-center hover:bg-slate-50 cursor-pointer border-b border-slate-50 group transition-colors">
-                            <span className="text-sm font-black text-slate-900">{item.name}</span>
-                            <div className="flex items-center gap-3">
-                               <span className="text-[10px] font-bold text-slate-400 group-hover:text-blue-500 uppercase">{item.code}</span>
-                               <Check size={14} className="text-blue-500 opacity-0 group-hover:opacity-100" />
-                            </div>
-                         </div>
-                       ))}
-                    </div>
-                  )}
-               </div>
-
-               <button className="w-full bg-slate-900 text-white font-black py-7 uppercase tracking-[0.3em] text-xs hover:bg-blue-600 transition-all shadow-xl active:scale-[0.98]">
-                  Commit Monitoring Node
-               </button>
+              <button className="w-full bg-slate-900 text-white font-black py-6 rounded-2xl uppercase tracking-[0.3em] text-xs hover:bg-blue-600 hover:-translate-y-0.5 transition-all shadow-xl hover:shadow-2xl active:scale-[0.98]">
+                Commit Monitoring Node
+              </button>
             </form>
           </div>
         </div>
