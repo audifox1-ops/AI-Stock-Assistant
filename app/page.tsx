@@ -4,8 +4,10 @@ import React, { useState, useEffect } from 'react';
 import { 
   Plus, Search, Star, TrendingUp, TrendingDown, RefreshCcw, Loader2, X,
   ArrowRight, ShieldAlert, Sparkles, AlertCircle, BarChart3, Info, Zap,
-  Menu, Bell, Settings, Filter, Target, Activity, PieChart, ChevronRight
+  Menu, Bell, Settings, Filter, Target, Activity, PieChart, ChevronRight,
+  CandlestickChart
 } from 'lucide-react';
+import StockChart from '@/components/StockChart';
 
 export const dynamic = 'force-dynamic';
 
@@ -51,6 +53,15 @@ const TABS = [
   { id: 'institution_buy', label: '기관 매수', value: 'institution_buy' }
 ];
 
+const TIMEFRAMES = [
+  { label: '1분', value: '1m' },
+  { label: '3분', value: '3m' },
+  { label: '5분', value: '5m' },
+  { label: '일', value: 'day' },
+  { label: '주', value: 'week' },
+  { label: '월', value: 'month' }
+];
+
 export default function HomePage() {
   const [indices, setIndices] = useState<IndexInfo[]>([]);
   const [rankingList, setRankingList] = useState<RankedStock[]>([]);
@@ -66,6 +77,11 @@ export default function HomePage() {
   const [isDetailLoading, setIsDetailLoading] = useState(false);
   const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
   const [isAiLoading, setIsAiLoading] = useState(false);
+
+  // 차트 상태
+  const [chartData, setChartData] = useState<any[]>([]);
+  const [isChartLoading, setIsChartLoading] = useState(false);
+  const [selectedTimeframe, setSelectedTimeframe] = useState('day');
 
   const fetchIndices = async () => {
     setIsLoadingIndices(true);
@@ -99,12 +115,29 @@ export default function HomePage() {
     }
   };
 
+  const fetchChartData = async (ticker: string, timeframe: string) => {
+    setIsChartLoading(true);
+    try {
+      const res = await fetch(`/api/stock/chart?ticker=${ticker}&timeframe=${timeframe}`);
+      const data = await res.json();
+      if (data.success) {
+        setChartData(data.data);
+      }
+    } catch (e) {
+      console.error('Chart Fetch Error:', e);
+    } finally {
+      setIsChartLoading(false);
+    }
+  };
+
   const openDetailModal = async (ticker: string) => {
     setSelectedTicker(ticker);
     setIsModalOpen(true);
     setIsDetailLoading(true);
     setAiAnalysis(null);
     setDetailData(null);
+    setChartData([]);
+    setSelectedTimeframe('day'); // 리셋
 
     try {
       // 1. 상세 지표 데이터 페칭
@@ -113,7 +146,10 @@ export default function HomePage() {
       if (data.success && data.data) {
         setDetailData(data.data);
         
-        // 2. AI 분석 요청 (상세 지표가 있는 경우에만)
+        // 2. 차트 데이터 페칭 (기본 일봉)
+        await fetchChartData(ticker, 'day');
+
+        // 3. AI 분석 요청
         setIsAiLoading(true);
         const aiRes = await fetch('/api/analyze-stock', {
           method: 'POST',
@@ -129,6 +165,12 @@ export default function HomePage() {
       setIsDetailLoading(false);
       setIsAiLoading(false);
     }
+  };
+
+  const handleTimeframeChange = async (tf: string) => {
+    if (!selectedTicker) return;
+    setSelectedTimeframe(tf);
+    await fetchChartData(selectedTicker, tf);
   };
 
   useEffect(() => {
@@ -277,11 +319,11 @@ export default function HomePage() {
         </div>
       </main>
 
-      {/* 3. 종목 상세 모달 (고도화 버전) */}
+      {/* 3. 종목 상세 모달 (캔들 차트 도입 버전) */}
       {isModalOpen && (
         <div className="fixed inset-0 z-[1000] flex items-center justify-center p-6 bg-slate-950/90 backdrop-blur-xl">
           <div className="absolute inset-0" onClick={() => setIsModalOpen(false)}></div>
-          <div className="relative bg-white w-full max-w-[550px] max-h-[85vh] overflow-y-auto rounded-none border-t-[16px] border-slate-900 shadow-2xl hide-scrollbar">
+          <div className="relative bg-white w-full max-w-[650px] max-h-[90vh] overflow-y-auto rounded-none border-t-[16px] border-slate-900 shadow-2xl hide-scrollbar">
             
             {isDetailLoading ? (
               <div className="py-40 flex flex-col items-center justify-center gap-8">
@@ -291,7 +333,7 @@ export default function HomePage() {
             ) : detailData && (
               <div className="p-10">
                 {/* 모달 헤더 */}
-                <div className="flex justify-between items-start mb-10 pb-8 border-b-2 border-slate-100">
+                <div className="flex justify-between items-start mb-8 pb-8 border-b-2 border-slate-100">
                   <div>
                     <div className="flex items-center gap-3 mb-2">
                        <span className="bg-slate-900 text-white text-[9px] font-black px-3 py-1 uppercase">{detailData.industryName}</span>
@@ -304,28 +346,65 @@ export default function HomePage() {
                   </button>
                 </div>
 
-                {/* 현재가 및 목표가 괴리율 */}
-                <div className="bg-slate-900 p-8 rounded-none mb-10 relative overflow-hidden">
-                   <div className="relative z-10 flex justify-between items-end">
-                      <div>
-                         <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-3">Real-time Trading Price</p>
-                         <div className="flex items-end gap-3">
-                            <h3 className="text-4xl font-black text-white tabular-nums tracking-tighter leading-none">{detailData.price.toLocaleString()}</h3>
-                            <span className="text-lg font-bold text-white/40 pb-0.5 uppercase">KRW</span>
-                         </div>
+                {/* 현재가 및 수치 카드 */}
+                <div className="grid grid-cols-3 gap-px bg-slate-100 border border-slate-100 mb-8">
+                   <div className="col-span-2 bg-slate-900 p-8">
+                      <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-3">Real-time Price</p>
+                      <div className="flex items-end gap-3">
+                         <h3 className="text-4xl font-black text-white tabular-nums tracking-tighter leading-none">{detailData.price.toLocaleString()}</h3>
+                         <span className="text-lg font-bold text-white/40 pb-0.5 uppercase">KRW</span>
                       </div>
-                      <div className="text-right">
-                         <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3">Consensus Target</p>
-                         <p className="text-xl font-black text-white tabular-nums tracking-tighter">{detailData.targetPrice.toLocaleString()}원</p>
-                         {detailData.targetPrice > 0 && (
-                            <div className="mt-2 inline-flex items-center gap-2 bg-blue-600 px-3 py-1">
-                               <Sparkles size={10} className="text-white" />
-                               <span className="text-[10px] font-black text-white uppercase tracking-widest">
-                                 UP {(((detailData.targetPrice - detailData.price) / detailData.price) * 100).toFixed(1)}% LEFT
-                               </span>
-                            </div>
-                         )}
+                   </div>
+                   <div className="bg-white p-6 flex flex-col justify-center text-right">
+                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Target Price</p>
+                      <p className="text-lg font-black text-slate-900 tabular-nums leading-none mb-2">{detailData.targetPrice.toLocaleString()}</p>
+                      {detailData.targetPrice > 0 && (
+                        <span className="text-[10px] font-black text-blue-600 uppercase">
+                          +{(((detailData.targetPrice - detailData.price) / detailData.price) * 100).toFixed(1)}% Gap
+                        </span>
+                      )}
+                   </div>
+                </div>
+
+                {/* 차트 영역 및 주기 선택 */}
+                <div className="mb-10 bg-white border border-slate-100 p-6">
+                   <div className="flex justify-between items-center mb-6">
+                      <div className="flex items-center gap-2">
+                         <CandlestickChart size={18} className="text-slate-900" />
+                         <span className="text-[11px] font-black text-slate-900 uppercase tracking-widest">Professional Chart</span>
                       </div>
+                      {/* 주기 선택 버튼 그룹 */}
+                      <div className="flex gap-1 bg-slate-50 p-1">
+                         {TIMEFRAMES.map(tf => (
+                           <button
+                             key={tf.value}
+                             onClick={() => handleTimeframeChange(tf.value)}
+                             className={`px-3 py-1.5 text-[10px] font-black uppercase tracking-tighter transition-all ${
+                               selectedTimeframe === tf.value 
+                                 ? 'bg-slate-900 text-white shadow-md' 
+                                 : 'text-slate-400 hover:text-slate-900'
+                             }`}
+                           >
+                             {tf.label}
+                           </button>
+                         ))}
+                      </div>
+                   </div>
+
+                   <div className="relative min-h-[400px] border border-slate-50">
+                      {isChartLoading ? (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/80 z-10 gap-4">
+                           <Loader2 className="animate-spin text-blue-600" size={32} />
+                           <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Syncing Chart Data...</p>
+                        </div>
+                      ) : chartData.length > 0 ? (
+                        <StockChart data={chartData} isMinute={['1m', '3m', '5m'].includes(selectedTimeframe)} />
+                      ) : (
+                        <div className="flex flex-col items-center justify-center py-20 grayscale opacity-20">
+                           <BarChart3 size={48} />
+                           <p className="text-[10px] font-black mt-4 uppercase tracking-[0.5em]">No Chart Data available</p>
+                        </div>
+                      )}
                    </div>
                 </div>
 
@@ -340,27 +419,20 @@ export default function HomePage() {
                       </div>
                    </div>
                    <div className="bg-white p-5 flex flex-col gap-1">
-                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">시가총액</span>
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Market Cap (시총)</span>
                       <span className="text-xs font-black text-slate-900 tracking-tighter">{detailData.marketCap.toLocaleString()}억원</span>
                    </div>
                    <div className="bg-white p-5 flex flex-col gap-1">
-                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">PER / PBR</span>
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Valuation (PER/PBR)</span>
                       <div className="flex items-center gap-3">
-                         <span className="text-xs font-black text-slate-900">{detailData.per}x</span>
-                         <span className="text-xs font-black text-slate-900">{detailData.pbr}x</span>
+                         <span className="text-xs font-black text-slate-900">PER {detailData.per}x</span>
+                         <span className="text-xs font-black text-slate-900">PBR {detailData.pbr}x</span>
                       </div>
                    </div>
                    <div className="bg-white p-5 flex flex-col gap-1">
-                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Dividend Yield (배당)</span>
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Yield (배당수익률)</span>
                       <span className="text-xs font-black text-green-600">{detailData.dividendYield}%</span>
                    </div>
-                </div>
-
-                {/* 차트 플레이스홀더 */}
-                <div className="w-full h-48 bg-slate-50 border-2 border-dashed border-slate-200 flex flex-col items-center justify-center gap-4 mb-10 overflow-hidden relative">
-                   <BarChart3 size={32} className="text-slate-200" />
-                   <p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.4em]">Advanced Chart Service Pending</p>
-                   <div className="absolute inset-0 bg-gradient-to-t from-slate-50 to-transparent"></div>
                 </div>
 
                 {/* AI 분석 리포트 영역 */}
@@ -379,7 +451,7 @@ export default function HomePage() {
                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.3em] animate-pulse">심층 밸류에이션 분석 중...</p>
                         </div>
                       ) : (
-                        <div className="text-[14px] font-bold text-slate-800 leading-relaxed whitespace-pre-wrap">
+                        <div className="text-[14px] font-bold text-slate-800 leading-relaxed whitespace-pre-wrap text-justify">
                            {aiAnalysis || "분석 데이터를 가져오지 못했습니다."}
                         </div>
                       )}
@@ -390,7 +462,7 @@ export default function HomePage() {
                    onClick={() => setIsModalOpen(false)}
                    className="w-full bg-slate-900 text-white font-black py-7 rounded-none mt-12 uppercase tracking-[0.5em] text-xs shadow-2xl active:scale-[0.98] transition-all"
                 >
-                   Close Detail Node
+                   Terminating Analysis Node
                 </button>
               </div>
             )}
