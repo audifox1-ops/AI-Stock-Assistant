@@ -11,15 +11,14 @@ export const dynamic = 'force-dynamic';
 const WATCHLIST_STORAGE_KEY = 'myWatchlist';
 
 interface WatchlistItem {
-  itemCode: string;
+  itemCode: string; // Ticker 기준
   stockName: string;
-  closePrice?: string;
-  fluctuationsRatio?: string;
-  volume?: string;
+  closePrice?: number;
+  fluctuationsRatio?: string | number;
+  volume?: string | number;
 }
 
 export default function WatchlistPage() {
-  // 1. 상태 초기값 빈 배열 강제 지정
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -29,40 +28,33 @@ export default function WatchlistPage() {
   // 수급 레이더 알림 상태
   const [radarStocks, setRadarStocks] = useState<string[]>([]);
 
-  const fetchRealtimePrices = async (items: WatchlistItem[]) => {
-    // 배열 여부 및 길이 방어
-    if (!items || !Array.isArray(items) || items.length === 0) return;
-    
+  const fetchRealtimePrices = async (currentItems: WatchlistItem[]) => {
+    if (!currentItems || currentItems.length === 0) return;
     setIsSyncing(true);
-    const codes = items.map(item => item.itemCode).join(',');
+    const codes = currentItems.map(item => item.itemCode).join(',');
     try {
       const res = await fetch(`/api/market?tickers=${codes}`);
       const data = await res.json();
       
-      // 데이터 형식 방어
       if (data.success && Array.isArray(data.data)) {
-        const priceData = data.data; 
-        const updated = items.map(item => {
-          const live = priceData.find((p: any) => p.ticker === item.itemCode);
-          if (live) {
+        const rtData = data.data; // [{ ticker, price, changeRate, volume }, ...]
+        
+        // 데이터 병합(Merge) 로직
+        const merged = currentItems.map(local => {
+          const rt = rtData.find((r: any) => r.ticker === local.itemCode);
+          if (rt) {
             return {
-              ...item,
-              closePrice: live.price?.toLocaleString(),
-              fluctuationsRatio: live.changeRate?.toString() || '0.00',
-              volume: live.volume?.toLocaleString() || '0'
+              ...local,
+              closePrice: rt.price,
+              fluctuationsRatio: rt.changeRate,
+              volume: rt.volume
             };
           }
-          return item;
+          return local;
         });
         
-        // 최종 업데이트 전 배열 확인
-        if (Array.isArray(updated)) {
-          setWatchlist(updated);
-          localStorage.setItem(WATCHLIST_STORAGE_KEY, JSON.stringify(updated));
-        }
-      } else {
-        // 비정상 응답 시 상태 유지 또는 빈 배열 방어 (필요시)
-        console.warn('Invalid price data format received');
+        setWatchlist(merged);
+        localStorage.setItem(WATCHLIST_STORAGE_KEY, JSON.stringify(merged));
       }
     } catch (e) {
       console.error('Watchlist Sync Error:', e);
@@ -72,7 +64,7 @@ export default function WatchlistPage() {
   };
 
   const checkSupplyRadar = async (items: WatchlistItem[]) => {
-    if (!items || !Array.isArray(items) || items.length === 0) return;
+    if (!items || items.length === 0) return;
     try {
       const codes = items.map(i => i.itemCode);
       const res = await fetch('/api/supply-radar', {
@@ -94,7 +86,6 @@ export default function WatchlistPage() {
       const saved = localStorage.getItem(WATCHLIST_STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
-        // 파싱 결과가 배열인지 확인
         if (Array.isArray(parsed)) {
           setWatchlist(parsed);
           // 즉시 동기화 실행
@@ -102,15 +93,11 @@ export default function WatchlistPage() {
             fetchRealtimePrices(parsed),
             checkSupplyRadar(parsed)
           ]);
-        } else {
-          setWatchlist([]);
         }
-      } else {
-        setWatchlist([]);
       }
     } catch (e) {
-      console.error('Local Storage Load Error:', e);
-      setWatchlist([]); // 에러 시 빈 배열로 초기화하여 'length' 에러 방지
+      console.error(e);
+      setWatchlist([]);
     } finally {
       setIsLoading(false);
     }
@@ -132,9 +119,7 @@ export default function WatchlistPage() {
       stockName: name ? name.trim() : '신규종목'
     };
 
-    // watchlist가 undefined인 경우 대비 방어
     const currentList = Array.isArray(watchlist) ? watchlist : [];
-    
     if (currentList.some(item => item.itemCode === newItem.itemCode)) {
       alert('이미 등록된 종목입니다.');
       return;
@@ -146,7 +131,6 @@ export default function WatchlistPage() {
     setSearchQuery('');
     setIsAddModalOpen(false);
     
-    // 추가 후 즉시 시세 갱신
     await fetchRealtimePrices(updated);
   };
 
@@ -183,7 +167,6 @@ export default function WatchlistPage() {
         </div>
       </header>
 
-      {/* 실시간 시세 동기화 배너 */}
       {isSyncing && (
         <div className="px-6 py-2 bg-blue-600 flex items-center justify-center gap-2 animate-pulse">
            <Loader2 size={12} className="text-white animate-spin" />
@@ -191,7 +174,7 @@ export default function WatchlistPage() {
         </div>
       )}
 
-      {/* 수급 포착 알림 바 - optional chaining 방어 */}
+      {/* 수급 포착 알림 바 */}
       {(radarStocks?.length || 0) > 0 && (
         <div className="mx-6 mt-6 bg-red-600 p-5 rounded-none border-l-[6px] border-red-900 shadow-xl flex items-center justify-between animate-bounce">
            <div className="flex items-center gap-4">
@@ -228,7 +211,7 @@ export default function WatchlistPage() {
         ) : (
           (watchlist || []).map((item, idx) => {
             const isRadar = (radarStocks || []).includes(item.stockName);
-            const changeVal = parseFloat(item.fluctuationsRatio || '0');
+            const changeVal = parseFloat(item.fluctuationsRatio?.toString() || '0');
             const isPlus = changeVal > 0;
 
             return (
@@ -240,8 +223,8 @@ export default function WatchlistPage() {
                         {idx + 1}
                       </div>
                       <div>
-                        <h3 className="text-[17px] font-black text-slate-900 tracking-tighter uppercase">{item.stockName || 'Unknown'}</h3>
-                        <p className="text-[9px] font-bold text-slate-400 tracking-[0.2em]">{item.itemCode || '-'}</p>
+                        <h3 className="text-[17px] font-black text-slate-900 tracking-tighter uppercase">{item.stockName}</h3>
+                        <p className="text-[9px] font-bold text-slate-400 tracking-[0.2em]">{item.itemCode}</p>
                       </div>
                     </div>
                     <button onClick={() => removeItem(item.itemCode)} className="p-2 text-slate-200 hover:text-red-500 transition-colors">
@@ -253,18 +236,18 @@ export default function WatchlistPage() {
                     <div className="bg-white p-4">
                       <p className="text-[9px] font-bold text-slate-400 uppercase mb-1">현재가</p>
                       <p className="text-lg font-black text-slate-900 tabular-nums leading-none tracking-tight">
-                        {item.closePrice || '-'}원
+                        {item.closePrice?.toLocaleString() || '-'}원
                       </p>
                     </div>
                     <div className="bg-white p-4 text-right">
                       <p className="text-[9px] font-bold text-slate-400 uppercase mb-1">등락률</p>
                       <span className={`text-lg font-black tabular-nums ${isPlus ? 'text-red-500' : 'text-blue-500'}`}>
-                        {isPlus ? '+' : ''}{item.fluctuationsRatio || '0.00'}%
+                        {isPlus ? '+' : ''}{item.fluctuationsRatio?.toString() || '0.00'}%
                       </span>
                     </div>
                     <div className="bg-white p-4 col-span-2 border-t border-slate-50 flex justify-between items-center">
                        <p className="text-[9px] font-bold text-slate-400 uppercase">거래량</p>
-                       <p className="text-sm font-black text-slate-900 tabular-nums uppercase">{item.volume || '-'}주</p>
+                       <p className="text-sm font-black text-slate-900 tabular-nums uppercase">{item.volume?.toLocaleString() || '-'}주</p>
                     </div>
                   </div>
 

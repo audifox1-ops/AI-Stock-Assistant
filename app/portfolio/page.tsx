@@ -20,8 +20,8 @@ interface Holding {
   targetPrice: number;
   stopLossPrice: number;
   currentPrice?: number;
-  fluctuationsRatio?: string;
-  volume?: string;
+  changeRate?: number;
+  volume?: number;
 }
 
 export default function PortfolioPage() {
@@ -50,26 +50,28 @@ export default function PortfolioPage() {
     setIsSyncing(true);
     const codes = currentHoldings.map(h => h.itemCode).join(',');
     try {
-      // 새로운 파라미터 ?tickers=... 사용
       const res = await fetch(`/api/market?tickers=${codes}`);
       const data = await res.json();
       
       if (data.success && Array.isArray(data.data)) {
-        const livePriceData = data.data; 
-        const updated = currentHoldings.map(h => {
-          const live = livePriceData.find((p: any) => p.ticker === h.itemCode);
-          if (live) {
+        const rtData = data.data; // [{ ticker, price, changeRate, volume }, ...]
+        
+        // 데이터 병합(Merge) 로직
+        const merged = currentHoldings.map(local => {
+          const rt = rtData.find((r: any) => r.ticker === local.itemCode);
+          if (rt) {
             return {
-              ...h,
-              currentPrice: Number(live.price),
-              fluctuationsRatio: live.changeRate?.toString(),
-              volume: live.volume?.toString()
+              ...local,
+              currentPrice: rt.price || 0,
+              changeRate: rt.changeRate || 0,
+              volume: rt.volume || 0
             };
           }
-          return h;
+          return local;
         });
-        setHoldings(updated);
-        localStorage.setItem(PORTFOLIO_STORAGE_KEY, JSON.stringify(updated));
+        
+        setHoldings(merged);
+        localStorage.setItem(PORTFOLIO_STORAGE_KEY, JSON.stringify(merged));
       }
     } catch (e) {
       console.error('Portfolio Sync Error:', e);
@@ -90,6 +92,7 @@ export default function PortfolioPage() {
       }
     } catch (e) {
       console.error(e);
+      setHoldings([]);
     } finally {
       setIsLoading(false);
     }
@@ -100,8 +103,9 @@ export default function PortfolioPage() {
   }, []);
 
   const filteredHoldings = useMemo(() => {
-    if (activeFilter === '전체') return holdings || [];
-    return (holdings || []).filter(h => h.category === activeFilter);
+    const list = Array.isArray(holdings) ? holdings : [];
+    if (activeFilter === '전체') return list;
+    return list.filter(h => h.category === activeFilter);
   }, [holdings, activeFilter]);
 
   const summary = useMemo(() => {
@@ -109,9 +113,9 @@ export default function PortfolioPage() {
     let totalValuation = 0;
 
     (filteredHoldings || []).forEach(h => {
-      const current = h.currentPrice || h.avgPrice;
-      totalInvested += h.avgPrice * h.quantity;
-      totalValuation += current * h.quantity;
+      const current = h.currentPrice || h.avgPrice || 0;
+      totalInvested += (h.avgPrice || 0) * (h.quantity || 0);
+      totalValuation += current * (h.quantity || 0);
     });
 
     const totalProfit = totalValuation - totalInvested;
@@ -128,8 +132,8 @@ export default function PortfolioPage() {
   const handleAddHolding = async (e: React.FormEvent) => {
     e.preventDefault();
     const newHolding: Holding = {
-      itemCode: formData.itemCode,
-      stockName: formData.stockName,
+      itemCode: formData.itemCode.trim(),
+      stockName: formData.stockName.trim(),
       avgPrice: Number(formData.avgPrice),
       quantity: Number(formData.quantity),
       category: formData.category,
@@ -137,7 +141,8 @@ export default function PortfolioPage() {
       stopLossPrice: Number(formData.stopLossPrice),
     };
 
-    const updated = [newHolding, ...(holdings || [])];
+    const currentList = Array.isArray(holdings) ? holdings : [];
+    const updated = [newHolding, ...currentList];
     setHoldings(updated);
     localStorage.setItem(PORTFOLIO_STORAGE_KEY, JSON.stringify(updated));
     setIsAddModalOpen(false);
@@ -147,7 +152,8 @@ export default function PortfolioPage() {
   };
 
   const removeHolding = (itemCode: string) => {
-    const updated = (holdings || []).filter(h => h.itemCode !== itemCode);
+    const currentList = Array.isArray(holdings) ? holdings : [];
+    const updated = currentList.filter(h => h.itemCode !== itemCode);
     setHoldings(updated);
     localStorage.setItem(PORTFOLIO_STORAGE_KEY, JSON.stringify(updated));
   };
@@ -254,10 +260,10 @@ export default function PortfolioPage() {
               <p className="text-xs font-black text-slate-300 uppercase tracking-widest">운용 중인 포지션이 없습니다</p>
             </div>
           ) : (
-            filteredHoldings.map((h, i) => {
-              const current = h.currentPrice || h.avgPrice;
+            (filteredHoldings || []).map((h, i) => {
+              const current = h.currentPrice || h.avgPrice || 0;
               const profit = (current - h.avgPrice) * h.quantity;
-              const rate = ((current - h.avgPrice) / h.avgPrice) * 100;
+              const rate = h.avgPrice > 0 ? ((current - h.avgPrice) / h.avgPrice) * 100 : 0;
               const isPlus = profit >= 0;
 
               return (
@@ -291,7 +297,7 @@ export default function PortfolioPage() {
                          <span className={`text-[15px] font-black tabular-nums ${isPlus ? 'text-red-500' : 'text-blue-500'}`}>
                            {isPlus ? '+' : ''}{rate.toFixed(2)}% ({profit.toLocaleString()}원)
                          </span>
-                         <span className="text-[10px] font-bold text-slate-400 uppercase">Volume: {(h.volume || '-')}</span>
+                         <span className="text-[10px] font-bold text-slate-400 uppercase">Vol: {h.volume?.toLocaleString() || '-'}</span>
                       </div>
                     </div>
                   </div>
