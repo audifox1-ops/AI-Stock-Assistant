@@ -4,6 +4,14 @@ export const dynamic = 'force-dynamic';
 
 const NAVER_FRONT_API = 'https://m.stock.naver.com/front-api';
 
+interface DetectedSupply {
+  ticker: string;
+  name: string;
+  type: '외국인' | '기관';
+  rank: number;
+  netBuyValue: string;
+}
+
 async function fetchRanking(investorType: 'foreigner' | 'organization') {
   const apiUrl = `${NAVER_FRONT_API}/market/tradingTrend/ranking?periodType=daily&investorType=${investorType}&tradingType=trendBuy&stockExchangeType=KRX`;
   
@@ -34,7 +42,7 @@ export async function POST(req: Request) {
       fetchRanking('organization')
     ]);
 
-    const detected = [];
+    const detected: DetectedSupply[] = [];
 
     // 외인 수급 매칭
     foreignStocks.forEach((s: any) => {
