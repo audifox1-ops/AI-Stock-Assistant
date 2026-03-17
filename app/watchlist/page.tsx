@@ -42,6 +42,7 @@ export default function WatchlistPage() {
     }
     setIsSyncing(true);
     
+    // 티커 목록 추출 및 정규화
     const codes = currentItems.map(item => String(item.itemCode).trim()).filter(c => c !== '').join(',');
     if (!codes) {
       setIsSyncing(false);
@@ -55,10 +56,11 @@ export default function WatchlistPage() {
       if (data.success && Array.isArray(data.data)) {
         const rtData = data.data; // [{ticker, price, changeRate, volume, status}, ...]
         
-        // 데이터 병합: String().trim() 강제 매칭 적용
+        // 데이터 병합: String().trim() 강제 매칭 및 필드명 보정
         const merged = currentItems.map(local => {
+          const localCode = String(local.itemCode).trim();
           const rt = rtData.find((r: any) => 
-            String(r.ticker).trim() === String(local.itemCode).trim()
+            String(r.ticker).trim() === localCode
           );
           
           if (rt) {
@@ -114,11 +116,9 @@ export default function WatchlistPage() {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
           setWatchlist(parsed);
-          // 실시간 시세 및 수급 레이더 동시 실행
-          await Promise.allSettled([
-            fetchRealtimePrices(parsed),
-            checkSupplyRadar(parsed)
-          ]);
+          // 실시간 시세 및 수급 레이더 동시 실행 (await 제거하여 병렬성 확보)
+          fetchRealtimePrices(parsed);
+          checkSupplyRadar(parsed);
         } else {
           setWatchlist([]);
         }
@@ -147,7 +147,7 @@ export default function WatchlistPage() {
         try {
           const res = await fetch(`/api/market?q=${encodeURIComponent(searchQuery)}`);
           const data = await res.json();
-          if (data.success) {
+          if (data.success && Array.isArray(data.data)) {
             setSearchResults(data.data);
           }
         } catch (e) {
@@ -186,9 +186,12 @@ export default function WatchlistPage() {
     setSearchResults([]);
     setIsAddModalOpen(false);
     
-    await fetchRealtimePrices(updated);
+    fetchRealtimePrices(updated);
   };
 
+  /**
+   * 수동 직접 추가 (Ticker:Name)
+   */
   const handleManualAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!searchQuery) return;
@@ -216,7 +219,7 @@ export default function WatchlistPage() {
     setSearchQuery('');
     setIsAddModalOpen(false);
     
-    await fetchRealtimePrices(updated);
+    fetchRealtimePrices(updated);
   };
 
   /**
@@ -230,7 +233,7 @@ export default function WatchlistPage() {
   };
 
   return (
-    <div className="w-full bg-slate-50 min-h-screen pb-32">
+    <div className="w-full bg-slate-50 min-h-screen pb-32 font-sans">
       <header className="px-6 py-8 bg-white border-b border-gray-100 sticky top-0 z-[100] shadow-sm">
         <div className="flex justify-between items-center mb-6">
           <div>
@@ -239,7 +242,7 @@ export default function WatchlistPage() {
           </div>
           <button 
             onClick={() => setIsAddModalOpen(true)}
-            className="bg-slate-900 text-white p-3 rounded-none active:bg-blue-600 transition-all shadow-lg"
+            className="bg-slate-900 text-white p-3 shadow-lg active:bg-blue-600 transition-all"
           >
             <Plus size={24} />
           </button>
@@ -247,10 +250,10 @@ export default function WatchlistPage() {
 
         <div className="flex gap-4 overflow-x-auto hide-scrollbar">
            <div className="flex items-center gap-2 px-5 py-3 bg-slate-900 text-white text-[11px] font-black uppercase tracking-widest whitespace-nowrap">
-             <Star size={14} className="text-blue-400" /> My List
+             <Star size={14} className="text-blue-400" /> Watchlist Portfolio
            </div>
            <div className="flex items-center gap-2 px-5 py-3 bg-slate-50 text-slate-400 text-[11px] font-black uppercase tracking-widest whitespace-nowrap border border-slate-100">
-             Total {watchlist?.length || 0} Stocks
+             Total Monitoring: {watchlist?.length || 0}
            </div>
         </div>
       </header>
@@ -264,7 +267,7 @@ export default function WatchlistPage() {
 
       {/* 수급 포착 알림 바 */}
       {(radarStocks?.length || 0) > 0 && (
-        <div className="mx-6 mt-6 bg-red-600 p-5 rounded-none border-l-[6px] border-red-900 shadow-xl flex items-center justify-between animate-bounce">
+        <div className="mx-6 mt-6 bg-red-600 p-5 border-l-[6px] border-red-900 shadow-xl flex items-center justify-between animate-bounce">
            <div className="flex items-center gap-4">
               <ShieldAlert size={24} className="text-white" />
               <div>
@@ -280,17 +283,17 @@ export default function WatchlistPage() {
         </div>
       )}
 
-      <main className="px-6 mt-8 space-y-4 font-sans">
+      <main className="px-6 mt-8 space-y-4">
         {isLoading ? (
           <div className="py-20 flex flex-col items-center justify-center gap-6">
             <Loader2 className="animate-spin text-slate-200" size={40} />
-            <p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.4em]">SYNCING DATA...</p>
+            <p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.4em]">INITIALIZING DEPLOYMENT...</p>
           </div>
         ) : (!watchlist || watchlist.length === 0) ? (
           <div className="bg-white border-2 border-dashed border-slate-200 p-20 text-center flex flex-col items-center gap-6">
             <AlertCircle size={32} className="text-slate-100" />
             <div>
-               <p className="text-xs font-black text-slate-300 uppercase tracking-widest">관심종목이 비어있습니다</p>
+               <p className="text-xs font-black text-slate-300 uppercase tracking-widest leading-relaxed">심볼이 비어있습니다.<br/>우측 상단 + 버튼으로 종목을 추가하세요.</p>
             </div>
           </div>
         ) : (
@@ -302,7 +305,7 @@ export default function WatchlistPage() {
             const isMinus = parseFloat(String(changeRate)) < 0;
 
             return (
-              <div key={`${item.itemCode}-${idx}`} className={`bg-white border rounded-none group transition-all duration-300 ${isRadar ? 'border-red-500 shadow-lg' : 'border-slate-100 hover:border-blue-200 shadow-sm'}`}>
+              <div key={`${item.itemCode}-${idx}`} className={`bg-white border transition-all duration-300 ${isRadar ? 'border-red-500 shadow-lg' : 'border-slate-100 hover:border-blue-200 shadow-sm'}`}>
                 <div className="p-6">
                   <div className="flex justify-between items-start mb-6">
                     <div className="flex items-center gap-4">
@@ -319,23 +322,23 @@ export default function WatchlistPage() {
                     </button>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-px bg-slate-50 border border-slate-50 font-sans">
+                  <div className="grid grid-cols-2 gap-px bg-slate-50 border border-slate-50">
                     <div className="bg-white p-4">
-                      <p className="text-[9px] font-bold text-slate-400 uppercase mb-1 tracking-widest">Pricing Node</p>
+                      <p className="text-[9px] font-bold text-slate-400 uppercase mb-1 tracking-widest">Pricing Terminal</p>
                       <p className="text-lg font-black text-slate-900 tabular-nums leading-none tracking-tight">
-                        {currentPrice > 0 ? `${currentPrice.toLocaleString()}원` : '-'}
+                         {currentPrice > 0 ? `${currentPrice.toLocaleString()}원` : '-'}
                       </p>
                     </div>
                     <div className="bg-white p-4 text-right">
-                      <p className="text-[9px] font-bold text-slate-400 uppercase mb-1 tracking-widest">Change Rate</p>
+                      <p className="text-[9px] font-bold text-slate-400 uppercase mb-1 tracking-widest">Rate Change</p>
                       <span className={`text-lg font-black tabular-nums p-1 ${isPlus ? 'text-red-500 bg-red-50/50' : isMinus ? 'text-blue-500 bg-blue-50/50' : 'text-slate-400 bg-slate-50'}`}>
                         {isPlus ? '+' : ''}{changeRate}%
                       </span>
                     </div>
                     
                     <div className="bg-white p-4 col-span-2 border-t border-slate-50 flex justify-between items-center opacity-40">
-                       <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Volume (Daily)</span>
-                       <span className="text-[10px] font-bold text-slate-900 tabular-nums uppercase">{item.volume?.toLocaleString() || '-'} 주</span>
+                       <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Daily Trading Units</span>
+                       <span className="text-[10px] font-bold text-slate-900 tabular-nums uppercase">{(item.volume || 0).toLocaleString()} 주</span>
                     </div>
                   </div>
                 </div>
@@ -349,38 +352,37 @@ export default function WatchlistPage() {
       {isAddModalOpen && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center p-6 bg-slate-950/80 backdrop-blur-md">
           <div className="absolute inset-0" onClick={() => setIsAddModalOpen(false)}></div>
-          <div className="relative bg-white w-full max-w-[450px] rounded-none p-12 border-t-8 border-slate-900 shadow-2xl">
+          <div className="relative bg-white w-full max-w-[450px] p-12 border-t-8 border-slate-900 shadow-2xl">
             <div className="flex justify-between items-center mb-10 pb-6 border-b border-slate-100">
                <div>
                   <h2 className="text-xl font-black text-slate-900 tracking-tighter uppercase">Watchlist Add</h2>
                   <p className="text-[9px] font-bold text-blue-500 uppercase tracking-widest mt-1">Search stock name or enter ticker</p>
                </div>
-               <button onClick={() => setIsAddModalOpen(false)} className="bg-slate-900 text-white p-2 rounded-none"><X size={20} /></button>
+               <button onClick={() => setIsAddModalOpen(false)} className="bg-slate-900 text-white p-2"><X size={20} /></button>
             </div>
             
             <form onSubmit={handleManualAdd} className="space-y-8">
                <div className="space-y-3 relative">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Stock Search</label>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Cloud Database Search</label>
                   <div className="relative">
                     <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300" size={20} />
                     <input 
                       type="text" 
                       placeholder="종목명 또는 심볼 입력"
-                      className="w-full bg-white text-slate-900 border-2 border-slate-200 p-6 pl-14 rounded-none font-black outline-none focus:border-blue-500 placeholder:text-slate-400 transition-all text-sm uppercase tracking-widest"
+                      className="w-full bg-white text-slate-900 border-2 border-slate-200 p-6 pl-14 font-black outline-none focus:border-blue-500 placeholder:text-slate-400 transition-all text-sm uppercase tracking-widest"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                     />
                   </div>
 
-                  {/* 자동완성 검색 결과 */}
                   {(searchResults.length > 0 || isSearching) && (
                     <div className="absolute top-full left-0 right-0 bg-white border-2 border-slate-900 z-[150] max-h-60 overflow-y-auto shadow-2xl">
-                       {isSearching && <div className="p-4 text-xs font-black text-slate-300 animate-pulse uppercase tracking-widest">Searching...</div>}
+                       {isSearching && <div className="p-4 text-xs font-black text-slate-300 animate-pulse uppercase tracking-widest">Fetching...</div>}
                        {searchResults.map((item, idx) => (
-                         <div key={idx} onClick={() => addStockFromSearch(item)} className="p-4 flex justify-between items-center hover:bg-slate-50 cursor-pointer border-b border-slate-50 group">
+                         <div key={`${item.code}-${idx}`} onClick={() => addStockFromSearch(item)} className="p-4 flex justify-between items-center hover:bg-slate-50 cursor-pointer border-b border-slate-50 group transition-colors">
                             <span className="text-sm font-black text-slate-900">{item.name}</span>
                             <div className="flex items-center gap-3">
-                               <span className="text-[10px] font-bold text-slate-400 group-hover:text-blue-500 transition-colors uppercase">{item.code}</span>
+                               <span className="text-[10px] font-bold text-slate-400 group-hover:text-blue-500 uppercase">{item.code}</span>
                                <Check size={14} className="text-blue-500 opacity-0 group-hover:opacity-100" />
                             </div>
                          </div>
@@ -389,12 +391,12 @@ export default function WatchlistPage() {
                   )}
                </div>
 
-               <p className="text-[9px] font-bold text-slate-400 leading-relaxed italic uppercase opacity-50">
-                  * Tip: "Ticker:Name" 형태로 직접 추가도 가능합니다.
+               <p className="text-[9px] font-bold text-slate-400 leading-relaxed italic uppercase opacity-60">
+                  * Manual Input Format: "Ticker:Name"
                </p>
 
-               <button className="w-full bg-slate-900 text-white font-black py-7 rounded-none uppercase tracking-[0.3em] text-xs hover:bg-blue-600 transition-all shadow-xl active:scale-[0.98]">
-                  Commit Watchlist Node
+               <button className="w-full bg-slate-900 text-white font-black py-7 uppercase tracking-[0.3em] text-xs hover:bg-blue-600 transition-all shadow-xl active:scale-[0.98]">
+                  Commit Monitoring Node
                </button>
             </form>
           </div>

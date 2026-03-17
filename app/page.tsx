@@ -103,8 +103,10 @@ export default function HomePage() {
     try {
       const res = await fetch(`/api/market?type=${tabValue}`);
       const data = await res.json();
-      if (data.success) {
+      if (data.success && Array.isArray(data.data)) {
         setRankingList(data.data);
+      } else {
+        setRankingList([]);
       }
     } catch (e) {
       console.error(e);
@@ -131,7 +133,8 @@ export default function HomePage() {
   };
 
   const openDetailModal = async (ticker: string) => {
-    setSelectedTicker(ticker);
+    const cleanTicker = String(ticker).trim();
+    setSelectedTicker(cleanTicker);
     setIsModalOpen(true);
     setIsDetailLoading(true);
     setAiAnalysis(null);
@@ -140,16 +143,13 @@ export default function HomePage() {
     setSelectedTimeframe('day'); 
 
     try {
-      // 1. 상세 지표 데이터 페칭
-      const res = await fetch(`/api/market?type=detail&ticker=${ticker}`);
+      const res = await fetch(`/api/market?type=detail&ticker=${cleanTicker}`);
       const data = await res.json();
       if (data.success && data.data) {
         setDetailData(data.data);
         
-        // 2. 차트 데이터 페칭 (기본 일봉)
-        await fetchChartData(ticker, 'day');
+        await fetchChartData(cleanTicker, 'day');
 
-        // 3. AI 분석 요청 (모든 상세 지표 전달)
         setIsAiLoading(true);
         const aiRes = await fetch('/api/analyze-stock', {
           method: 'POST',
@@ -183,7 +183,7 @@ export default function HomePage() {
 
   return (
     <div className="h-screen flex flex-col overflow-hidden bg-slate-50 font-sans">
-      {/* 1. 상단 고정 헤더 영역 */}
+      {/* 상단 헤더 */}
       <section className="flex-none bg-white shadow-xl z-50">
         <header className="px-6 py-8 border-b border-gray-100 flex justify-between items-center">
            <div>
@@ -191,7 +191,7 @@ export default function HomePage() {
               <p className="text-[10px] font-bold text-blue-500 uppercase tracking-widest mt-1">Real-time Trading Cloud</p>
            </div>
            <div className="flex gap-4">
-              <button className="p-3 bg-slate-900 text-white rounded-none shadow-lg"><Plus size={18} /></button>
+              <button className="p-3 bg-slate-900 text-white shadow-lg"><Plus size={18} /></button>
            </div>
         </header>
 
@@ -214,7 +214,7 @@ export default function HomePage() {
                   <h2 className="text-xl font-black text-slate-900 tabular-nums tracking-tighter mb-2">{idx.value}</h2>
                   <div className={`flex items-center gap-3 ${isUp ? 'text-red-500' : 'text-blue-500'}`}>
                     <span className="text-[10px] font-black tabular-nums">{isUp ? '▲' : '▼'} {idx.change}</span>
-                    <span className="text-[10px] font-black tabular-nums bg-slate-50 px-2 py-1 rounded-none border border-current">{idx.changeRate}%</span>
+                    <span className="text-[10px] font-black tabular-nums bg-slate-50 px-2 py-1 border border-current">{idx.changeRate}%</span>
                   </div>
                 </div>
               );
@@ -228,7 +228,7 @@ export default function HomePage() {
              <button
                key={tab.id}
                onClick={() => setActiveTab(tab.value)}
-               className={`flex-none px-6 py-3 text-[11px] font-black uppercase tracking-widest transition-all rounded-none border ${
+               className={`flex-none px-6 py-3 text-[11px] font-black uppercase tracking-widest transition-all border ${
                  activeTab === tab.value 
                    ? 'bg-slate-900 text-white border-slate-900 shadow-xl' 
                    : 'text-slate-400 border-transparent hover:border-slate-100'
@@ -240,7 +240,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* 2. 메인 컨텐츠 영역 */}
+      {/* 메인 컨텐츠 영역 */}
       <main className="flex-1 overflow-y-auto hide-scrollbar pb-32">
         <div className="px-6 py-6 flex justify-between items-center bg-slate-50 border-b border-slate-100 sticky top-0 z-40 backdrop-blur-md bg-white/50">
            <div>
@@ -261,7 +261,7 @@ export default function HomePage() {
           ) : rankingList.length === 0 ? (
              <div className="bg-white border-2 border-dashed border-slate-200 p-20 text-center flex flex-col items-center gap-5">
                 <AlertCircle size={40} className="text-slate-100" />
-                <p className="text-xs font-black text-slate-300 uppercase tracking-widest leading-relaxed">데이터를 불러올 수 없습니다.<br/>서버 연결 상태를 확인해주세요.</p>
+                <p className="text-xs font-black text-slate-300 uppercase tracking-widest leading-relaxed">데이터를 찾을 수 없습니다.<br/>서버가 응답을 거부했거나 데이터가 비어있습니다.</p>
              </div>
           ) : (
             rankingList.map((stock, idx) => {
@@ -271,9 +271,9 @@ export default function HomePage() {
 
               return (
                 <div 
-                  key={stock.itemCode} 
+                  key={`${stock.itemCode}-${idx}`} 
                   onClick={() => openDetailModal(stock.itemCode)}
-                  className="bg-white border border-slate-100 p-6 flex flex-col gap-5 hover:border-blue-500 group transition-all duration-300 rounded-none shadow-sm hover:shadow-xl cursor-pointer"
+                  className="bg-white border border-slate-100 p-6 flex flex-col gap-5 hover:border-blue-500 group transition-all duration-300 shadow-sm hover:shadow-xl cursor-pointer"
                 >
                    <div className="flex justify-between items-start">
                       <div className="flex items-center gap-5">
@@ -319,37 +319,35 @@ export default function HomePage() {
         </div>
       </main>
 
-      {/* 3. 종목 상세 모달 */}
+      {/* 종목 상세 모달 */}
       {isModalOpen && (
         <div className="fixed inset-0 z-[1000] flex items-center justify-center p-6 bg-slate-950/90 backdrop-blur-xl">
           <div className="absolute inset-0" onClick={() => setIsModalOpen(false)}></div>
-          <div className="relative bg-white w-full max-w-[650px] max-h-[90vh] overflow-y-auto rounded-none border-t-[16px] border-slate-900 shadow-2xl hide-scrollbar">
+          <div className="relative bg-white w-full max-w-[650px] max-h-[90vh] overflow-y-auto border-t-[16px] border-slate-900 shadow-2xl hide-scrollbar">
             
             {isDetailLoading ? (
               <div className="py-40 flex flex-col items-center justify-center gap-8">
                 <Loader2 className="animate-spin text-blue-600" size={48} />
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.4em]">ANALYZING MARKET DATA...</p>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.4em]">CONNECTING TO FINANCIAL CLOUD...</p>
               </div>
             ) : detailData && (
               <div className="p-10">
-                {/* 모달 헤더 */}
                 <div className="flex justify-between items-start mb-8 pb-8 border-b-2 border-slate-100">
                   <div>
                     <div className="flex items-center gap-3 mb-2">
-                       <span className="bg-slate-900 text-white text-[9px] font-black px-3 py-1 uppercase">{detailData.industryName}</span>
+                       <span className="bg-slate-900 text-white text-[9px] font-black px-3 py-1 uppercase">{detailData.industryName || 'Market'}</span>
                        <span className="text-[10px] font-bold text-slate-400 tracking-widest uppercase">{detailData.ticker}</span>
                     </div>
                     <h2 className="text-3xl font-black text-slate-900 tracking-tighter uppercase leading-none">{detailData.stockName}</h2>
                   </div>
-                  <button onClick={() => setIsModalOpen(false)} className="p-3 bg-slate-900 text-white rounded-none shadow-xl hover:bg-red-600 transition-colors">
+                  <button onClick={() => setIsModalOpen(false)} className="p-3 bg-slate-900 text-white shadow-xl hover:bg-red-600 transition-colors">
                     <X size={20} />
                   </button>
                 </div>
 
-                {/* 현재가 및 수치 카드 */}
                 <div className="grid grid-cols-3 gap-px bg-slate-100 border border-slate-100 mb-8">
                    <div className="col-span-2 bg-slate-900 p-8">
-                      <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-3">Real-time Price</p>
+                      <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-3">Real-time Node Price</p>
                       <div className="flex items-end gap-3">
                          <h3 className="text-4xl font-black text-white tabular-nums tracking-tighter leading-none">{detailData.price.toLocaleString()}</h3>
                          <span className="text-lg font-bold text-white/40 pb-0.5 uppercase">KRW</span>
@@ -357,8 +355,8 @@ export default function HomePage() {
                    </div>
                    <div className="bg-white p-6 flex flex-col justify-center text-right">
                       <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Target Price</p>
-                      <p className="text-lg font-black text-slate-900 tabular-nums leading-none mb-2">{detailData.targetPrice.toLocaleString()}</p>
-                      {detailData.targetPrice > 0 && detailData.price > 0 && (
+                      <p className="text-lg font-black text-slate-900 tabular-nums leading-none mb-2">{(detailData.targetPrice || 0).toLocaleString()}</p>
+                      {detailData.targetPrice > 0 && (
                         <span className="text-[10px] font-black text-blue-600 uppercase">
                           +{(((detailData.targetPrice - detailData.price) / detailData.price) * 100).toFixed(1)}% Gap
                         </span>
@@ -366,12 +364,11 @@ export default function HomePage() {
                    </div>
                 </div>
 
-                {/* 차트 영역 */}
                 <div className="mb-10 bg-white border border-slate-100 p-6 overflow-hidden">
                    <div className="flex justify-between items-center mb-6">
                       <div className="flex items-center gap-2">
                          <CandlestickChart size={18} className="text-slate-900" />
-                         <span className="text-[11px] font-black text-slate-900 uppercase tracking-widest">Professional Chart</span>
+                         <span className="text-[11px] font-black text-slate-900 uppercase tracking-widest">Interactive Index Chart</span>
                       </div>
                       <div className="flex gap-1 bg-slate-50 p-1">
                          {TIMEFRAMES.map(tf => (
@@ -394,66 +391,64 @@ export default function HomePage() {
                       {isChartLoading ? (
                         <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/80 z-10 gap-4">
                            <Loader2 className="animate-spin text-blue-600" size={32} />
-                           <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Syncing Chart Data...</p>
+                           <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Syncing Chart Node...</p>
                         </div>
                       ) : chartData.length > 0 ? (
                         <StockChart data={chartData} isMinute={['1m', '3m', '5m'].includes(selectedTimeframe)} />
                       ) : (
                         <div className="flex flex-col items-center justify-center py-20 grayscale opacity-20">
                            <BarChart3 size={48} />
-                           <p className="text-[10px] font-black mt-4 uppercase tracking-[0.5em]">No Chart Data available</p>
+                           <p className="text-[10px] font-black mt-4 uppercase tracking-[0.5em]">No Data Transmission</p>
                         </div>
                       )}
                    </div>
                 </div>
 
-                {/* 핵심 지표 그리드 */}
                 <div className="grid grid-cols-2 gap-px bg-slate-100 border border-slate-100 mb-10">
                    <div className="bg-white p-5 flex flex-col gap-1">
                       <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">52주 최고/최저</span>
                       <div className="flex items-center gap-2">
-                         <span className="text-xs font-black text-red-500">{detailData.high52w.toLocaleString()}</span>
+                         <span className="text-xs font-black text-red-500">{(detailData.high52w || 0).toLocaleString()}</span>
                          <span className="text-slate-200">/</span>
-                         <span className="text-xs font-black text-blue-500">{detailData.low52w.toLocaleString()}</span>
+                         <span className="text-xs font-black text-blue-500">{(detailData.low52w || 0).toLocaleString()}</span>
                       </div>
                    </div>
                    <div className="bg-white p-5 flex flex-col gap-1">
                       <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Market Cap (시총)</span>
                       <span className="text-xs font-black text-slate-900 tracking-tighter">
-                         {detailData.marketCap.toLocaleString()} 억원
+                         {(detailData.marketCap || 0).toLocaleString()} 억원
                       </span>
                    </div>
                    <div className="bg-white p-5 flex flex-col gap-1">
-                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Valuation (PER/PBR)</span>
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Valuation Index (PER/PBR)</span>
                       <div className="flex items-center gap-3">
-                         <span className="text-xs font-black text-slate-900">PER {detailData.per}x</span>
-                         <span className="text-xs font-black text-slate-900">PBR {detailData.pbr}x</span>
+                         <span className="text-xs font-black text-slate-900">PER {detailData.per || 0}x</span>
+                         <span className="text-xs font-black text-slate-900">PBR {detailData.pbr || 0}x</span>
                       </div>
                    </div>
                    <div className="bg-white p-5 flex flex-col gap-1">
                       <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Yield (배당수익률)</span>
-                      <span className="text-xs font-black text-green-600">{detailData.dividendYield}%</span>
+                      <span className="text-xs font-black text-green-600">{detailData.dividendYield || '0.00'}%</span>
                    </div>
                 </div>
 
-                {/* AI 분석 리포트 */}
                 <div className="border-t-4 border-slate-900 pt-10">
                    <div className="flex items-center gap-3 mb-8">
-                      <div className="w-10 h-10 bg-blue-600 flex items-center justify-center rounded-none shadow-lg">
+                      <div className="w-10 h-10 bg-blue-600 flex items-center justify-center shadow-lg">
                          <Bot size={20} className="text-white" />
                       </div>
-                      <h4 className="text-lg font-black text-slate-900 tracking-tighter uppercase leading-none">🤖 AI 인텔리전스 투자 리포부</h4>
+                      <h4 className="text-lg font-black text-slate-900 tracking-tighter uppercase leading-none">AI Intelligence Portfolio Report</h4>
                    </div>
 
                    <div className="bg-slate-50 p-8 border-l-4 border-blue-600 min-h-[150px] font-sans">
                       {isAiLoading ? (
                         <div className="flex flex-col items-center justify-center py-10 gap-5">
                            <Loader2 className="animate-spin text-blue-600" size={24} />
-                           <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.3em] animate-pulse">심층 밸류에이션 분석 중...</p>
+                           <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.3em] animate-pulse">Deep Valuation Analysis...</p>
                         </div>
                       ) : (
-                        <div className="text-[14px] font-bold text-slate-800 leading-relaxed whitespace-pre-wrap text-justify">
-                           {aiAnalysis || "분석 데이터를 가져오지 못했습니다."}
+                        <div className="text-[14px] font-bold text-slate-800 leading-relaxed whitespace-pre-wrap text-justify lowercase">
+                           {aiAnalysis || "Failed to retrieve AI analysis data."}
                         </div>
                       )}
                    </div>
@@ -461,9 +456,9 @@ export default function HomePage() {
                 
                 <button 
                    onClick={() => setIsModalOpen(false)}
-                   className="w-full bg-slate-900 text-white font-black py-7 rounded-none mt-12 uppercase tracking-[0.5em] text-xs shadow-2xl active:scale-[0.98] transition-all"
+                   className="w-full bg-slate-900 text-white font-black py-7 mt-12 uppercase tracking-[0.5em] text-xs shadow-2xl active:scale-[0.98] transition-all"
                 >
-                   Terminating Analysis Node
+                   Close Analysis Terminal
                 </button>
               </div>
             )}

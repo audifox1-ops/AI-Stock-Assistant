@@ -9,19 +9,34 @@ const ALLOWED_ORIGINS = [
 
 const REQUEST_HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-  'Referer': 'https://finance.naver.com/',
+  'Referer': 'https://m.stock.naver.com/',
   'Accept': 'application/json, text/plain, */*'
 };
 
 /**
- * 네이버 API 데이터 파싱 헬퍼 (엄격한 숫자 정제)
+ * 네이버 API 데이터 파싱 헬퍼 (단위 및 특수문자 정밀 정제)
  */
 const cleanNumber = (val: any): number => {
   if (typeof val === 'number') return val;
   if (!val || val === '-' || val === '') return 0;
-  const cleaned = val.toString().replace(/,/g, '');
-  const num = Number(cleaned);
-  return isNaN(num) ? 0 : num;
+  
+  let str = val.toString().replace(/,/g, '');
+  
+  // 한국어 단위 처리 (조, 억, 배, % 등 제거)
+  if (str.includes('조')) {
+    const parts = str.split('조');
+    const jo = parseFloat(parts[0] || '0');
+    const eok = parts[1] ? parseFloat(parts[1].replace(/억/g, '') || '0') : 0;
+    return (jo * 10000) + eok; // 억 단위로 변환 반환 (시총용)
+  }
+  
+  // 단순 숫자 추출 (배, %, 억 등 제거)
+  const match = str.match(/[-?0-9.]+/);
+  if (match) {
+    return parseFloat(match[0]);
+  }
+  
+  return 0;
 };
 
 /**
@@ -48,7 +63,7 @@ async function fetchIndexData(type: 'KOSPI' | 'KOSDAQ') {
 }
 
 /**
- * 네이버 Polling API 개별 종목 시세 조회
+ * 네이버 Polling API 개별 종목 시세 조회 (실시간용)
  */
 async function fetchStockDetail(ticker: string) {
   try {
@@ -71,7 +86,7 @@ async function fetchStockDetail(ticker: string) {
 }
 
 /**
- * 네이버 Integration API 종목 상세 정보 조회 (0원 표시 해결 필드 매핑)
+ * 네이버 Integration API 종목 상세 정보 조회 (배열 순회 방식으로 필드 매핑 보완)
  */
 async function fetchStockIntegration(ticker: string) {
   try {
@@ -79,62 +94,53 @@ async function fetchStockIntegration(ticker: string) {
     const res = await fetch(url, { headers: REQUEST_HEADERS, next: { revalidate: 0 } });
     const data = await res.json();
     
-    // 네이버 Integration API는 다양한 위치에 데이터를 배치함
-    const totalInfo = data?.totalInfos?.[0] || {};
-    const stockItem = data?.stockItem || {};
-    
-    // 시가총액은 수치형으로 가져와서 억원 단위로 변환 (value / 100,000,000)
-    const rawMarketCap = cleanNumber(totalInfo.marketCap || data.marketCap || stockItem.marketCap);
-    const convertedMarketCap = Math.floor(rawMarketCap / 100000000);
+    const totalInfos = data?.totalInfos || [];
+    const dealTrendInfo = data?.dealTrendInfos?.[0] || {};
+    const consensusInfo = data?.consensusInfo || {};
 
+    const findVal = (code: string) => {
+      const found = totalInfos.find((info: any) => info.code === code);
+      return found ? found.value : null;
+    };
+
+    // 현재가 (dealTrendInfos[0].closePrice가 가장 정확)
+    const currentPrice = cleanNumber(dealTrendInfo.closePrice || data.closePrice || data.now);
+    
+    // 시가총액 (totalInfos 배열 내 marketValue) - 억 단위로 변환됨 (cleanNumber 조/억 처리 로직에 의해)
+    const marketCap = cleanNumber(findVal('marketValue'));
+    
+    // 수치 매핑
     return {
       ticker: ticker,
-      stockName: totalInfo.stockName || data.stockName || stockItem.stockName || '',
-      price: cleanNumber(totalInfo.closePrice || data.closePrice || stockItem.closePrice || data.now),
-      changeRate: totalInfo.fluctuationsRatio || data.fluctuationsRatio || stockItem.fluctuationsRatio || '0.00',
+      stockName: data.stockName || data.itemName || '',
+      price: currentPrice,
+      changeRate: data.fluctuationsRatio || dealTrendInfo.fluctuationsRatio || '0.00',
       
-      // 상세 투자 지표 (정확한 필드 매핑)
-      high52w: cleanNumber(totalInfo.high52w || totalInfo.high52Weeks || data.high52Weeks || stockItem.high52Weeks),
-      low52w: cleanNumber(totalInfo.low52w || totalInfo.low52Weeks || data.low52Weeks || stockItem.low52Weeks),
-      targetPrice: cleanNumber(totalInfo.targetPrice || data.targetPrice || stockItem.targetPrice),
-      marketCap: convertedMarketCap, // 억원 단위로 프론트엔드 전달
-      per: cleanNumber(totalInfo.per || data.per || stockItem.per),
-      pbr: cleanNumber(totalInfo.pbr || data.pbr || stockItem.pbr),
-      eps: cleanNumber(totalInfo.eps || data.eps || stockItem.eps),
-      bps: cleanNumber(totalInfo.bps || data.bps || stockItem.bps),
-      dividendYield: totalInfo.dividendYield || data.dividendYield || stockItem.dividendYield || '0.00',
-      industryName: totalInfo.industryName || data.itemType || stockItem.industryName || ''
+      high52w: cleanNumber(findVal('highPriceOf52Weeks')),
+      low52w: cleanNumber(findVal('lowPriceOf52Weeks')),
+      targetPrice: cleanNumber(consensusInfo.priceTargetMean),
+      marketCap: marketCap, 
+      per: cleanNumber(findVal('per')),
+      pbr: cleanNumber(findVal('pbr')),
+      eps: cleanNumber(findVal('eps')),
+      bps: cleanNumber(findVal('bps')),
+      dividendYield: findVal('dividendYield') || '0.00',
+      industryName: data.itemType || ''
     };
   } catch (e) {
-    console.error(`Stock Integration Error (${ticker}):`, e);
+    console.error(`Integration Error (${ticker}):`, e);
     return null;
   }
 }
 
 /**
- * 네이버 종목 검색 API
- */
-async function fetchStockSearch(query: string) {
-  try {
-    const url = `https://ac.stock.naver.com/ac?q=${encodeURIComponent(query)}&target=stock`;
-    const res = await fetch(url, { headers: REQUEST_HEADERS, next: { revalidate: 0 } });
-    const data = await res.json();
-    const items = data?.items?.[0] || [];
-    return items.map((item: any) => ({
-      name: item[0][0],
-      code: item[0][1]
-    }));
-  } catch (e) {
-    console.error(`Search Error (${query}):`, e);
-    return [];
-  }
-}
-
-/**
- * 네이버 모바일 API 랭킹 리스트 조회 (랭킹 로직 완전 복구)
+ * 네이버 모바일 API 랭킹 리스트 조회 (구조적 계층 및 필드명 보정)
  */
 async function fetchRankingList(type: string) {
   let url = '';
+  let dataPath = 'stocks'; // 기본
+  let itemNameKey = 'stockName';
+
   switch (type) {
     case 'kospi_market_cap':
       url = 'https://m.stock.naver.com/api/stocks/marketValue/KOSPI?page=1&pageSize=30';
@@ -143,13 +149,19 @@ async function fetchRankingList(type: string) {
       url = 'https://m.stock.naver.com/api/stocks/marketValue/KOSDAQ?page=1&pageSize=30';
       break;
     case 'volume':
-      url = 'https://m.stock.naver.com/api/stocks/volume/KOSPI?page=1&pageSize=30';
+      url = 'https://m.stock.naver.com/front-api/market/realTimeTop?nationType=domestic&sortType=quantTop';
+      dataPath = 'result.stocks';
+      itemNameKey = 'itemName';
       break;
     case 'foreign_buy':
-      url = 'https://m.stock.naver.com/api/stocks/investorBuy/KOSPI/FOREIGNER?page=1&pageSize=30';
+      url = 'https://m.stock.naver.com/front-api/market/tradingTrend/ranking?periodType=daily&investorType=foreigner&tradingType=trendBuy';
+      dataPath = 'result.stocks';
+      itemNameKey = 'itemName';
       break;
     case 'institution_buy':
-      url = 'https://m.stock.naver.com/api/stocks/investorBuy/KOSPI/INSTITUTION?page=1&pageSize=30';
+      url = 'https://m.stock.naver.com/front-api/market/tradingTrend/ranking?periodType=daily&investorType=organization&tradingType=trendBuy';
+      dataPath = 'result.stocks';
+      itemNameKey = 'itemName';
       break;
     default:
       url = 'https://m.stock.naver.com/api/stocks/marketValue/KOSPI?page=1&pageSize=30';
@@ -157,13 +169,20 @@ async function fetchRankingList(type: string) {
 
   try {
     const res = await fetch(url, { headers: REQUEST_HEADERS, next: { revalidate: 0 } });
-    const data = await res.json();
-    const stocks = data.stocks || [];
+    const json = await res.json();
     
+    // 데이터 경로 접근
+    let stocks = [];
+    if (dataPath === 'stocks') {
+      stocks = json.stocks || [];
+    } else if (dataPath === 'result.stocks') {
+      stocks = json.result?.stocks || [];
+    }
+
     return stocks.map((s: any) => ({
       itemCode: s.itemCode || s.code,
-      stockName: s.stockName || s.name,
-      closePrice: cleanNumber(s.closePrice),
+      stockName: s[itemNameKey] || s.stockName || s.itemName || '',
+      closePrice: cleanNumber(s.closePrice || s.now),
       fluctuationsRatio: s.fluctuationsRatio || '0.00',
       volume: cleanNumber(s.accumulatedTradingVolume || s.volume),
       fluctuationType: s.fluctuationType || 'STABLE'
@@ -175,12 +194,6 @@ async function fetchRankingList(type: string) {
 }
 
 export async function GET(request: Request) {
-  const origin = request.headers.get('origin');
-  if (origin && !ALLOWED_ORIGINS.includes(origin)) {
-    // Vercel 배포 환경에서는 origin 검사를 유연하게 함
-    // return new NextResponse('Forbidden', { status: 403 });
-  }
-
   const { searchParams } = new URL(request.url);
   const type = searchParams.get('type');
   const tickersParam = searchParams.get('tickers');
@@ -193,7 +206,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ success: true, data: indices });
   }
 
-  // 2. 종목 상세 지표 (Integration)
+  // 2. 종목 상세 지표
   if (type === 'detail' && ticker) {
     const detail = await fetchStockIntegration(ticker);
     return NextResponse.json({ success: true, data: detail });
@@ -201,17 +214,28 @@ export async function GET(request: Request) {
 
   // 3. 종목 검색
   if (query) {
-    const results = await fetchStockSearch(query);
-    return NextResponse.json({ success: true, data: results });
+    try {
+      const url = `https://ac.stock.naver.com/ac?q=${encodeURIComponent(query)}&target=stock`;
+      const res = await fetch(url, { headers: REQUEST_HEADERS, next: { revalidate: 0 } });
+      const data = await res.json();
+      const items = data?.items?.[0] || [];
+      const results = items.map((item: any) => ({
+        name: item[0][0],
+        code: item[0][1]
+      }));
+      return NextResponse.json({ success: true, data: results });
+    } catch (e) {
+      return NextResponse.json({ success: false, data: [] });
+    }
   }
 
-  // 4. 홈 화면 랭킹 리스트
+  // 4. 랭킹 리스트
   if (type && !tickersParam && !ticker) {
     const ranks = await fetchRankingList(type);
     return NextResponse.json({ success: true, data: ranks });
   }
 
-  // 5. 다중 종목 실시간 시세 (Polling)
+  // 5. 다중 종목 실시간 시세
   if (tickersParam) {
     const tickers = tickersParam.split(',').filter(t => t.trim() !== '');
     const details = await Promise.all(tickers.map(t => fetchStockDetail(t.trim())));
