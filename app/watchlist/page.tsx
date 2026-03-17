@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Plus, Search, Star, Trash2, TrendingUp, TrendingDown, RefreshCcw, Loader2, X,
-  ArrowRight, ShieldAlert, Sparkles, AlertCircle, BarChart3, Info, Zap
+  ArrowRight, ShieldAlert, Sparkles, AlertCircle, BarChart3, Info, Zap, Check
 } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
@@ -23,7 +23,11 @@ export default function WatchlistPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  
+  // 검색 및 자동완성 상태
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
   
   // 수급 레이더 알림 상태
   const [radarStocks, setRadarStocks] = useState<string[]>([]);
@@ -37,16 +41,14 @@ export default function WatchlistPage() {
       const data = await res.json();
       
       if (data.success && Array.isArray(data.data)) {
-        const rtData = data.data; // [{ ticker, price, changeRate, volume }, ...]
+        const rtData = data.data;
         
-        // 데이터 병합(Merge) 로직: 'String() 형변환 및 강제 매칭' 적용
+        // 데이터 병합(Merge) 로직 강화: 'String().trim() 형변환 및 강제 매칭' 적용
         const merged = currentItems.map(local => {
-          // 서버 ticker와 로컬 itemCode를 강제로 String으로 변환하여 매칭 실패 차단
           const rt = rtData.find((r: any) => String(r.ticker).trim() === String(local.itemCode).trim());
           if (rt && rt.price > 0) {
             return {
               ...local,
-              // 실시간 가격(rt.price)을 Number 타입으로 강제 주입
               closePrice: Number(rt.price),
               fluctuationsRatio: rt.changeRate !== undefined ? Number(rt.changeRate) : (local.fluctuationsRatio || 0),
               volume: rt.volume !== undefined ? Number(rt.volume) : (local.volume || 0)
@@ -108,16 +110,65 @@ export default function WatchlistPage() {
     loadWatchlist();
   }, []);
 
-  const handleAddStock = async (e: React.FormEvent) => {
+  // 종목 검색 디바운싱
+  useEffect(() => {
+    const timer = setTimeout(async () => {
+      if (searchQuery.length >= 2) {
+        setIsSearching(true);
+        try {
+          const res = await fetch(`/api/market?q=${encodeURIComponent(searchQuery)}`);
+          const data = await res.json();
+          if (data.success) {
+            setSearchResults(data.data);
+          }
+        } catch (e) {
+          console.error(e);
+        } finally {
+          setIsSearching(false);
+        }
+      } else {
+        setSearchResults([]);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  const addStockFromSearch = async (item: any) => {
+    const currentList = Array.isArray(watchlist) ? watchlist : [];
+    if (currentList.some(w => String(w.itemCode).trim() === String(item.code).trim())) {
+      alert('이미 등록된 종목입니다.');
+      return;
+    }
+
+    const newItem: WatchlistItem = {
+      itemCode: item.code,
+      stockName: item.name
+    };
+
+    const updated = [newItem, ...currentList];
+    setWatchlist(updated);
+    localStorage.setItem(WATCHLIST_STORAGE_KEY, JSON.stringify(updated));
+    setSearchQuery('');
+    setSearchResults([]);
+    setIsAddModalOpen(false);
+    
+    await fetchRealtimePrices(updated);
+  };
+
+  const handleManualAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!searchQuery) return;
 
-    const [code, name] = searchQuery.split(':');
+    // "티커:종목명" 또는 "티커" 직접 입력 처리
+    const parts = searchQuery.split(':');
+    const code = parts[0].trim();
+    const name = parts[1] ? parts[1].trim() : '신규종목';
+
     if (!code) return;
 
     const newItem: WatchlistItem = {
-      itemCode: code.trim(),
-      stockName: name ? name.trim() : '신규종목'
+      itemCode: code,
+      stockName: name
     };
 
     const currentList = Array.isArray(watchlist) ? watchlist : [];
@@ -209,13 +260,13 @@ export default function WatchlistPage() {
         ) : (
           (watchlist || []).map((item, idx) => {
             const isRadar = (radarStocks || []).includes(item.stockName);
-            // 실시간 가격(closePrice)이 0보다 크면 무조건 최우선 적용
             const currentPrice = (item.closePrice && item.closePrice > 0) ? item.closePrice : 0;
             const changeRate = item.fluctuationsRatio || 0;
             const isPlus = Number(changeRate) > 0;
+            const isMinus = Number(changeRate) < 0;
 
             return (
-              <div key={`${item.itemCode}-${idx}`} className={`bg-white border rounded-none group transition-all duration-300 ${isRadar ? 'border-red-500 shadow-lg' : 'border-slate-100 hover:border-blue-200'}`}>
+              <div key={`${item.itemCode}-${idx}`} className={`bg-white border rounded-none group transition-all duration-300 ${isRadar ? 'border-red-500 shadow-lg' : 'border-slate-100 hover:border-blue-200 shadow-sm'}`}>
                 <div className="p-6">
                   <div className="flex justify-between items-start mb-6">
                     <div className="flex items-center gap-4">
@@ -232,18 +283,23 @@ export default function WatchlistPage() {
                     </button>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-px bg-slate-50 border border-slate-50">
+                  <div className="grid grid-cols-2 gap-px bg-slate-50 border border-slate-50 font-sans">
                     <div className="bg-white p-4">
-                      <p className="text-[9px] font-bold text-slate-400 uppercase mb-1">현재가</p>
+                      <p className="text-[9px] font-bold text-slate-400 uppercase mb-1 tracking-widest">Pricing Node</p>
                       <p className="text-lg font-black text-slate-900 tabular-nums leading-none tracking-tight">
                         {currentPrice > 0 ? `${currentPrice.toLocaleString()}원` : '-'}
                       </p>
                     </div>
                     <div className="bg-white p-4 text-right">
-                      <p className="text-[9px] font-bold text-slate-400 uppercase mb-1">등락률</p>
-                      <span className={`text-lg font-black tabular-nums ${isPlus ? 'text-red-500' : 'text-blue-500'}`}>
+                      <p className="text-[9px] font-bold text-slate-400 uppercase mb-1 tracking-widest">Change Rate</p>
+                      <span className={`text-lg font-black tabular-nums p-1 ${isPlus ? 'text-red-500 bg-red-50/50' : isMinus ? 'text-blue-500 bg-blue-50/50' : 'text-slate-400 bg-slate-50'}`}>
                         {isPlus ? '+' : ''}{changeRate}%
                       </span>
+                    </div>
+                    
+                    <div className="bg-white p-4 col-span-2 border-t border-slate-50 flex justify-between items-center opacity-40">
+                       <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Volume (Daily)</span>
+                       <span className="text-[10px] font-bold text-slate-900 tabular-nums uppercase">{item.volume?.toLocaleString() || '-'} 주</span>
                     </div>
                   </div>
                 </div>
@@ -253,37 +309,56 @@ export default function WatchlistPage() {
         )}
       </main>
 
-      {/* 등록 모달 - 가독성 개선 버전 */}
+      {/* 관심종목 추가 모달 - 검색 연동 및 가독성 최적화 */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center p-6 bg-slate-950/80 backdrop-blur-md">
           <div className="absolute inset-0" onClick={() => setIsAddModalOpen(false)}></div>
-          <div className="relative bg-white w-full max-w-[450px] rounded-none p-10 border-t-8 border-slate-900 shadow-2xl">
+          <div className="relative bg-white w-full max-w-[450px] rounded-none p-12 border-t-8 border-slate-900 shadow-2xl">
             <div className="flex justify-between items-center mb-10 pb-6 border-b border-slate-100">
                <div>
-                  <h2 className="text-xl font-black text-slate-900 tracking-tighter uppercase">종목 수동 추가</h2>
-                  <p className="text-[9px] font-bold text-blue-500 uppercase tracking-widest mt-1">티커와 종목명을 입력하세요</p>
+                  <h2 className="text-xl font-black text-slate-900 tracking-tighter uppercase">Watchlist Add</h2>
+                  <p className="text-[9px] font-bold text-blue-500 uppercase tracking-widest mt-1">Search stock name or enter ticker</p>
                </div>
                <button onClick={() => setIsAddModalOpen(false)} className="bg-slate-900 text-white p-2 rounded-none"><X size={20} /></button>
             </div>
             
-            <form onSubmit={handleAddStock} className="space-y-8">
-               <div className="space-y-3">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Search Or Input (005930:삼성전자)</label>
+            <form onSubmit={handleManualAdd} className="space-y-8">
+               <div className="space-y-3 relative">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Stock Search</label>
                   <div className="relative">
-                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
+                    <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300" size={20} />
                     <input 
                       type="text" 
-                      placeholder="005930:삼성전자 형태 입력"
-                      // 가독성 확보를 위한 스타일 강제 지정
-                      className="w-full bg-white text-slate-900 border-2 border-slate-200 p-6 pl-12 rounded-none font-black outline-none focus:border-blue-500 placeholder:text-slate-400 transition-all text-sm uppercase tracking-widest"
+                      placeholder="삼성전자, SK하이닉스 등 입력"
+                      className="w-full bg-white text-slate-900 border-2 border-slate-200 p-6 pl-14 rounded-none font-black outline-none focus:border-blue-500 placeholder:text-slate-400 transition-all text-sm uppercase tracking-widest"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                     />
                   </div>
+
+                  {/* 자동완성 검색 결과 */}
+                  {(searchResults.length > 0 || isSearching) && (
+                    <div className="absolute top-full left-0 right-0 bg-white border-2 border-slate-900 z-[150] max-h-60 overflow-y-auto shadow-2xl">
+                       {isSearching && <div className="p-4 text-xs font-black text-slate-300 animate-pulse uppercase tracking-widest">Searching...</div>}
+                       {searchResults.map((item, idx) => (
+                         <div key={idx} onClick={() => addStockFromSearch(item)} className="p-4 flex justify-between items-center hover:bg-slate-50 cursor-pointer border-b border-slate-50 group">
+                            <span className="text-sm font-black text-slate-900">{item.name}</span>
+                            <div className="flex items-center gap-3">
+                               <span className="text-[10px] font-bold text-slate-400 group-hover:text-blue-500 transition-colors uppercase">{item.code}</span>
+                               <Check size={14} className="text-blue-500 opacity-0 group-hover:opacity-100" />
+                            </div>
+                         </div>
+                       ))}
+                    </div>
+                  )}
                </div>
 
+               <p className="text-[9px] font-bold text-slate-400 leading-relaxed italic uppercase opacity-50">
+                  * Tip: You can also enter "Ticker:Name" manually.
+               </p>
+
                <button className="w-full bg-slate-900 text-white font-black py-7 rounded-none uppercase tracking-[0.3em] text-xs hover:bg-blue-600 transition-all shadow-xl shadow-blue-100 active:scale-[0.98]">
-                  Asset Registration
+                  Commit Watchlist Node
                </button>
             </form>
           </div>

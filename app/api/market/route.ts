@@ -117,6 +117,27 @@ async function fetchStockIntegration(ticker: string) {
 }
 
 /**
+ * 네이버 종목 검색 API (자동완성)
+ */
+async function fetchStockSearch(query: string) {
+  try {
+    const url = `https://ac.stock.naver.com/ac?q=${encodeURIComponent(query)}&target=stock`;
+    const res = await fetch(url, { headers: REQUEST_HEADERS, next: { revalidate: 0 } });
+    const data = await res.json();
+    
+    // 네이버 자동완성 응답 형식: { items: [ [ [ '종목명', '종목코드', ... ], ... ] ] }
+    const items = data?.items?.[0] || [];
+    return items.map((item: any) => ({
+      name: item[0][0],
+      code: item[0][1]
+    }));
+  } catch (e) {
+    console.error(`Naver Search Error (${query}):`, e);
+    return [];
+  }
+}
+
+/**
  * 네이버 모바일 API 랭킹 리스트 조회
  */
 async function fetchRankingList(type: string) {
@@ -170,6 +191,7 @@ export async function GET(request: Request) {
   const type = searchParams.get('type');
   const tickersParam = searchParams.get('tickers');
   const ticker = searchParams.get('ticker');
+  const query = searchParams.get('q');
 
   // 1. 지수 데이터 조회 (Polling API)
   if (type === 'index') {
@@ -186,13 +208,19 @@ export async function GET(request: Request) {
     return NextResponse.json({ success: true, data: detail });
   }
 
-  // 3. 홈 화면 랭킹 리스트 조회
+  // 3. 종목 검색 (자동완성)
+  if (query) {
+    const results = await fetchStockSearch(query);
+    return NextResponse.json({ success: true, data: results });
+  }
+
+  // 4. 홈 화면 랭킹 리스트 조회
   if (type && type !== 'index' && !tickersParam && !ticker) {
     const ranks = await fetchRankingList(type);
     return NextResponse.json({ success: true, data: ranks });
   }
 
-  // 4. 다중 종목 실시간 시세 조회 (Polling API)
+  // 5. 다중 종목 실시간 시세 조회 (Polling API)
   if (tickersParam) {
     const tickers = tickersParam.split(',').filter(t => t.trim() !== '');
     const details = await Promise.all(tickers.map(t => fetchStockDetail(t.trim())));

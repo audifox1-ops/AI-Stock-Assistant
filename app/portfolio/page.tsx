@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Plus, TrendingUp, TrendingDown, Wallet, PieChart, ArrowUpRight, ArrowDownRight,
   Target, ShieldAlert, Bot, Sparkles, Loader2, X, Trash2, RefreshCcw, ChevronRight,
-  AlertCircle
+  AlertCircle, Search, Check
 } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
@@ -17,8 +17,8 @@ interface Holding {
   avgPrice: number;
   quantity: number;
   category: string; 
-  targetPrice: number;
-  stopLossPrice: number;
+  targetPrice?: number;
+  stopLossPrice?: number;
   currentPrice?: number;
   changeRate?: number;
   volume?: number;
@@ -41,6 +41,10 @@ export default function PortfolioPage() {
     stopLossPrice: ''
   });
 
+  // 종목 검색 상태
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+
   const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [isAnalysisModalOpen, setIsAnalysisModalOpen] = useState(false);
@@ -54,16 +58,13 @@ export default function PortfolioPage() {
       const data = await res.json();
       
       if (data.success && Array.isArray(data.data)) {
-        const rtData = data.data; // [{ ticker, price, changeRate, volume }, ...]
+        const rtData = data.data;
         
-        // 데이터 병합(Merge) 로직: 'String() 형변환 및 강제 매칭' 적용
         const merged = currentHoldings.map(local => {
-          // 서버 ticker와 로컬 itemCode를 String으로 강제 변환하여 매칭
           const rt = rtData.find((r: any) => String(r.ticker).trim() === String(local.itemCode).trim());
           if (rt && rt.price > 0) {
             return {
               ...local,
-              // 실시간 시세(rt.price)를 Number 타입으로 매칭된 항목에 주입
               currentPrice: Number(rt.price),
               changeRate: rt.changeRate !== undefined ? Number(rt.changeRate) : (local.changeRate || 0),
               volume: rt.volume !== undefined ? Number(rt.volume) : (local.volume || 0)
@@ -104,6 +105,38 @@ export default function PortfolioPage() {
     loadData();
   }, []);
 
+  // 종목 검색 디바운싱
+  useEffect(() => {
+    const timer = setTimeout(async () => {
+      if (formData.stockName.length >= 2) {
+        setIsSearching(true);
+        try {
+          const res = await fetch(`/api/market?q=${encodeURIComponent(formData.stockName)}`);
+          const data = await res.json();
+          if (data.success) {
+            setSearchResults(data.data);
+          }
+        } catch (e) {
+          console.error(e);
+        } finally {
+          setIsSearching(false);
+        }
+      } else {
+        setSearchResults([]);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [formData.stockName]);
+
+  const selectSearchResult = (item: any) => {
+    setFormData({
+      ...formData,
+      itemCode: item.code,
+      stockName: item.name
+    });
+    setSearchResults([]);
+  };
+
   const filteredHoldings = useMemo(() => {
     const list = Array.isArray(holdings) ? holdings : [];
     if (activeFilter === '전체') return list;
@@ -115,7 +148,6 @@ export default function PortfolioPage() {
     let totalValuation = 0;
 
     (filteredHoldings || []).forEach(h => {
-      // 계산 엔진: 실시간 현재가(currentPrice)가 있으면 최우선 적용하여 자산 평가
       const current = (h.currentPrice && h.currentPrice > 0) ? h.currentPrice : (h.avgPrice || 0);
       totalInvested += (h.avgPrice || 0) * (h.quantity || 0);
       totalValuation += current * (h.quantity || 0);
@@ -134,14 +166,20 @@ export default function PortfolioPage() {
 
   const handleAddHolding = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!formData.itemCode || !formData.stockName) {
+       alert("종목을 선택하거나 티커를 직접 입력해주세요.");
+       return;
+    }
+
     const newHolding: Holding = {
       itemCode: formData.itemCode.trim(),
       stockName: formData.stockName.trim(),
       avgPrice: Number(formData.avgPrice),
       quantity: Number(formData.quantity),
       category: formData.category,
-      targetPrice: Number(formData.targetPrice),
-      stopLossPrice: Number(formData.stopLossPrice),
+      // 선택적 입력 필드 처리: 값이 없을 경우 undefined/null 대신 0으로 저장
+      targetPrice: formData.targetPrice ? Number(formData.targetPrice) : 0,
+      stopLossPrice: formData.stopLossPrice ? Number(formData.stopLossPrice) : 0,
     };
 
     const currentList = Array.isArray(holdings) ? holdings : [];
@@ -150,6 +188,7 @@ export default function PortfolioPage() {
     localStorage.setItem(PORTFOLIO_STORAGE_KEY, JSON.stringify(updated));
     setIsAddModalOpen(false);
     setFormData({ itemCode: '', stockName: '', avgPrice: '', quantity: '', category: '스윙', targetPrice: '', stopLossPrice: '' });
+    setSearchResults([]);
     
     await fetchRealtimePrices(updated);
   };
@@ -168,10 +207,10 @@ export default function PortfolioPage() {
       const res = await fetch('/api/analyze-portfolio', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ holdings: filteredHoldings })
+        body: JSON.stringify({ portfolio: filteredHoldings })
       });
       const data = await res.json();
-      setAiAnalysis(data.analysis || data.error);
+      setAiAnalysis(data.diagnosis || data.error);
     } catch (e) {
       setAiAnalysis("분석 실패");
     } finally {
@@ -263,7 +302,6 @@ export default function PortfolioPage() {
             </div>
           ) : (
             (filteredHoldings || []).map((h, i) => {
-              // 리스트 렌더링 쐐기 로직: 실시간 현재가(h.currentPrice)가 0보다 크면 무조건 우선 적용
               const current = (h.currentPrice && h.currentPrice > 0) ? h.currentPrice : h.avgPrice;
               const profit = (current - h.avgPrice) * h.quantity;
               const rate = h.avgPrice > 0 ? ((current - h.avgPrice) / h.avgPrice) * 100 : 0;
@@ -302,7 +340,10 @@ export default function PortfolioPage() {
                          <span className={`text-[15px] font-black tabular-nums ${isPlus ? 'text-red-500' : 'text-blue-500'}`}>
                            {isPlus ? '+' : ''}{rate.toFixed(2)}% ({profit.toLocaleString()}원)
                          </span>
-                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Qty: {h.quantity}</span>
+                         <div className="flex flex-col text-right">
+                            {h.targetPrice && h.targetPrice > 0 && <span className="text-[8px] font-black text-blue-500 uppercase">Target: {h.targetPrice.toLocaleString()}</span>}
+                            {h.stopLossPrice && h.stopLossPrice > 0 && <span className="text-[8px] font-black text-red-500 uppercase">Stoploss: {h.stopLossPrice.toLocaleString()}</span>}
+                         </div>
                       </div>
                     </div>
                   </div>
@@ -313,31 +354,46 @@ export default function PortfolioPage() {
         </div>
       </main>
 
-      {/* 종목 추가 모달 - 가독성 전면 개선 */}
+      {/* 종목 추가 모달 - 검색 연동 및 선택적 필드 적용 */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center p-6 bg-slate-950/80 backdrop-blur-md">
           <div className="absolute inset-0" onClick={() => setIsAddModalOpen(false)}></div>
           <div className="relative bg-white w-full max-w-[450px] rounded-none p-12 border-t-8 border-slate-900 shadow-2xl">
             <h2 className="text-xl font-black text-slate-900 tracking-tighter uppercase mb-10 pb-6 border-b-2 border-slate-100">Asset Registration</h2>
             <form onSubmit={handleAddHolding} className="space-y-6">
-               <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                     <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Ticker</label>
-                     <input type="text" required placeholder="005930" 
-                        // 가독성을 위해 흰 배경, 검정 글자색, 테두리 강화
-                        className="w-full bg-white text-slate-900 border-2 border-slate-200 p-4 font-black outline-none focus:border-blue-500 placeholder:text-slate-400"
-                        value={formData.itemCode} onChange={e => setFormData({...formData, itemCode: e.target.value})} />
-                  </div>
-                  <div className="space-y-2">
-                     <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Name</label>
-                     <input type="text" required placeholder="삼성전자" 
-                        className="w-full bg-white text-slate-900 border-2 border-slate-200 p-4 font-black outline-none focus:border-blue-500 placeholder:text-slate-400"
+               <div className="space-y-2 relative">
+                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Stock Name / Search</label>
+                  <div className="relative">
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
+                    <input type="text" required placeholder="종목명 입력 (예: 삼성전자)" 
+                        className="w-full bg-white text-slate-900 border-2 border-slate-200 p-4 pl-12 font-black outline-none focus:border-blue-500 placeholder:text-slate-400 uppercase"
                         value={formData.stockName} onChange={e => setFormData({...formData, stockName: e.target.value})} />
                   </div>
+                  
+                  {/* 검색 결과 리스트 */}
+                  {(searchResults.length > 0 || isSearching) && (
+                    <div className="absolute top-full left-0 right-0 bg-white border-2 border-slate-900 z-[150] max-h-60 overflow-y-auto shadow-2xl">
+                       {isSearching && <div className="p-4 text-xs font-black text-slate-300 animate-pulse uppercase">Searching...</div>}
+                       {searchResults.map((item, idx) => (
+                         <div key={idx} onClick={() => selectSearchResult(item)} className="p-4 flex justify-between items-center hover:bg-slate-50 cursor-pointer border-b border-slate-50 group">
+                            <span className="text-sm font-black text-slate-900">{item.name}</span>
+                            <span className="text-[10px] font-bold text-slate-400 group-hover:text-blue-500 transition-colors uppercase">{item.code}</span>
+                         </div>
+                       ))}
+                    </div>
+                  )}
                </div>
+
+               <div className="space-y-2">
+                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Ticker Code (Auto-filled)</label>
+                  <input type="text" required placeholder="티커 자동 입력" readOnly
+                      className="w-full bg-slate-50 text-slate-400 border-2 border-slate-100 p-4 font-black outline-none"
+                      value={formData.itemCode} />
+               </div>
+
                <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                     <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Buying Price</label>
+                     <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Avg Price</label>
                      <input type="number" required placeholder="매수가" 
                         className="w-full bg-white text-slate-900 border-2 border-slate-200 p-4 font-black outline-none focus:border-blue-500 placeholder:text-slate-400"
                         value={formData.avgPrice} onChange={e => setFormData({...formData, avgPrice: e.target.value})} />
@@ -349,16 +405,17 @@ export default function PortfolioPage() {
                         value={formData.quantity} onChange={e => setFormData({...formData, quantity: e.target.value})} />
                   </div>
                </div>
+               
                <div className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-100">
                   <div className="space-y-2">
-                     <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest text-blue-500">Target Prc</label>
-                     <input type="number" required placeholder="목표가" 
+                     <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest text-blue-500">Target (Opt)</label>
+                     <input type="number" placeholder="없음" 
                         className="w-full bg-white text-slate-900 border-2 border-slate-200 p-4 font-black outline-none focus:border-blue-500 placeholder:text-slate-400"
                         value={formData.targetPrice} onChange={e => setFormData({...formData, targetPrice: e.target.value})} />
                   </div>
                   <div className="space-y-2">
-                     <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest text-red-500">Stop Loss</label>
-                     <input type="number" required placeholder="손절가" 
+                     <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest text-red-500">Stoploss (Opt)</label>
+                     <input type="number" placeholder="없음" 
                         className="w-full bg-white text-slate-900 border-2 border-slate-200 p-4 font-black outline-none focus:border-blue-500 placeholder:text-slate-400"
                         value={formData.stopLossPrice} onChange={e => setFormData({...formData, stopLossPrice: e.target.value})} />
                   </div>
@@ -387,12 +444,12 @@ export default function PortfolioPage() {
                       <p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.4em]">Processing Insights...</p>
                    </div>
                  ) : (
-                   <div className="text-[14px] font-bold text-slate-800 leading-relaxed whitespace-pre-wrap">
+                   <div className="text-[14px] font-bold text-slate-800 leading-relaxed whitespace-pre-wrap text-justify">
                       {aiAnalysis}
                    </div>
                  )}
               </div>
-              <button onClick={() => setIsAnalysisModalOpen(false)} className="w-full bg-slate-900 text-white font-black py-6 rounded-none mt-10 uppercase tracking-widest text-xs">Acknowledge</button>
+              <button onClick={() => setIsAnalysisModalOpen(false)} className="w-full bg-slate-900 text-white font-black py-6 rounded-none mt-10 uppercase tracking-widest text-xs">Acknowledge Insight</button>
            </div>
         </div>
       )}
