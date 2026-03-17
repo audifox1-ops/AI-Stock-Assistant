@@ -1,24 +1,24 @@
+import { auth } from "./auth";
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 // IP별 요청 횟수를 저장할 인메모리 Map (Vercel Edge Runtime용)
-// 실제 운영 환경에서는 더 정교한 Redis 도입을 권장하지만, 초기 방어벽으로 충분합니다.
 const rateLimitMap = new Map<string, { count: number; lastReset: number }>();
 
 // 제한 설정: 1분당 최대 10회
 const LIMIT = 10;
 const WINDOW_MS = 60 * 1000;
 
-export function middleware(request: NextRequest) {
-  // API 경로(/api/...)인 경우에만 Rate Limiting 적용
-  if (request.nextUrl.pathname.startsWith('/api')) {
-    // Vercel 환경에서 IP 식별 (x-forwarded-for 또는 request.ip)
-    const ip = request.headers.get('x-forwarded-for')?.split(',')[0] || request.ip || '127.0.0.1';
+export default auth((req) => {
+  const { nextUrl } = req;
+  
+  // 1. API 경로(/api/...)인 경우에만 Rate Limiting 적용
+  if (nextUrl.pathname.startsWith('/api')) {
+    const ip = req.headers.get('x-forwarded-for')?.split(',')[0] || req.ip || '127.0.0.1';
     const now = Date.now();
     
     const record = rateLimitMap.get(ip) || { count: 0, lastReset: now };
 
-    // 윈도우 시간(1분)이 지났으면 카운트 초기화
     if (now - record.lastReset > WINDOW_MS) {
       record.count = 0;
       record.lastReset = now;
@@ -27,7 +27,6 @@ export function middleware(request: NextRequest) {
     record.count += 1;
     rateLimitMap.set(ip, record);
 
-    // 제한 초과 시 429 응답 반환
     if (record.count > LIMIT) {
       return new NextResponse(
         JSON.stringify({ 
@@ -43,10 +42,11 @@ export function middleware(request: NextRequest) {
     }
   }
 
+  // 2. 인증 로직 및 기타 경로는 다음으로 진행 (auth.ts의 callbacks에서 제어됨)
   return NextResponse.next();
-}
+});
 
-// 미들웨어가 실행될 경로 설정
+// 미들웨어가 실행될 경로 설정: 정적 자산을 제외한 모든 경로
 export const config = {
-  matcher: '/api/:path*',
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|login|sw.js).*)"],
 };
