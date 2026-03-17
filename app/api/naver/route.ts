@@ -18,7 +18,6 @@ async function fetchStockList(type: string, category: string) {
   const res = await fetch(url, { cache: 'no-store' });
   const data = await res.json();
   
-  // api/stocks vs front-api/stock response structure difference handling
   if (type === 'marketValue') {
     return data.stocks || [];
   } else {
@@ -35,13 +34,12 @@ async function fetchIntegration(itemCode: string) {
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const type = searchParams.get('type') || 'marketValue'; // marketValue, search, volume
+  const type = searchParams.get('type') || 'marketValue'; 
   const category = searchParams.get('category') || 'KOSPI';
 
   try {
     const stocks = await fetchStockList(type, category);
 
-    // 30개 종목에 대해 병렬로 상세 데이터 패칭
     const detailedStocks = await Promise.all(stocks.map(async (stock: any) => {
       const code = stock.itemCode;
       const detail = await fetchIntegration(code);
@@ -50,7 +48,19 @@ export async function GET(request: Request) {
       const high52 = infos.find((i: any) => i.code === 'highPriceOf52Weeks')?.value || '-';
       const low52 = infos.find((i: any) => i.code === 'lowPriceOf52Weeks')?.value || '-';
       
-      const targetPrice = detail?.consensusInfo?.priceTargetMean || '-';
+      const targetPriceStr = detail?.consensusInfo?.priceTargetMean || '0';
+      const currentPriceStr = stock.closePrice || '0';
+      
+      // 상승 여력 계산 로직 (upsidePotential)
+      const targetPriceNum = parseFloat(targetPriceStr.toString().replace(/,/g, ''));
+      const currentPriceNum = parseFloat(currentPriceStr.toString().replace(/,/g, ''));
+      
+      let upsidePotential = '-';
+      if (targetPriceNum > 0 && currentPriceNum > 0) {
+        const potential = ((targetPriceNum - currentPriceNum) / currentPriceNum) * 100;
+        upsidePotential = potential.toFixed(1);
+      }
+
       const opinionMean = detail?.consensusInfo?.recommMean || null;
 
       return {
@@ -61,14 +71,15 @@ export async function GET(request: Request) {
         accumulatedTradingVolume: stock.accumulatedTradingVolume,
         high52,
         low52,
-        targetPrice,
+        targetPrice: targetPriceStr === '0' ? '-' : targetPriceStr,
+        upsidePotential,
         opinion: getOpinionText(opinionMean)
       };
     }));
 
     return NextResponse.json(detailedStocks);
   } catch (error) {
-    console.error('API Error:', error);
+    console.error('Naver API Error:', error);
     return NextResponse.json({ error: 'Failed to fetch stock data' }, { status: 500 });
   }
 }
