@@ -2,18 +2,32 @@ import { NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
 
-const BASE_URL = 'https://m.stock.naver.com/front-api/stock/domestic/stockList';
-const DETAIL_BASE_URL = 'https://m.stock.naver.com/api/stock';
+const SEARCH_VOLUME_URL = 'https://m.stock.naver.com/front-api/stock/domestic/stockList';
+const INTEGRATION_URL = 'https://m.stock.naver.com/api/stock';
 
-async function fetchNaverList(sortType: string, category: string = 'all') {
-  const url = `${BASE_URL}?sortType=${sortType}&category=${category}&pageSize=30&domesticStockExchangeType=NXT&page=1`;
+async function fetchStockList(type: string, category: string) {
+  let url = '';
+  if (type === 'marketValue') {
+    url = `https://m.stock.naver.com/api/stocks/marketValue/${category}?page=1&pageSize=30`;
+  } else if (type === 'search') {
+    url = `${SEARCH_VOLUME_URL}?sortType=searchTop&category=all&pageSize=30&domesticStockExchangeType=NXT&page=1`;
+  } else if (type === 'volume') {
+    url = `${SEARCH_VOLUME_URL}?sortType=quantTop&category=all&pageSize=30&domesticStockExchangeType=NXT&page=1`;
+  }
+
   const res = await fetch(url, { cache: 'no-store' });
   const data = await res.json();
-  return data?.result?.stocks || [];
+  
+  // api/stocks vs front-api/stock response structure difference handling
+  if (type === 'marketValue') {
+    return data.stocks || [];
+  } else {
+    return data?.result?.stocks || [];
+  }
 }
 
-async function fetchNaverDetail(itemCode: string) {
-  const url = `${DETAIL_BASE_URL}/${itemCode}/integration`;
+async function fetchIntegration(itemCode: string) {
+  const url = `${INTEGRATION_URL}/${itemCode}/integration`;
   const res = await fetch(url, { cache: 'no-store' });
   const data = await res.json();
   return data;
@@ -21,56 +35,49 @@ async function fetchNaverDetail(itemCode: string) {
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const type = searchParams.get('type') || 'marketValue';
+  const type = searchParams.get('type') || 'marketValue'; // marketValue, search, volume
   const category = searchParams.get('category') || 'KOSPI';
 
   try {
-    let sortType = 'marketValue';
-    if (type === 'search') sortType = 'searchTop';
-    else if (type === 'volume') sortType = 'quantTop';
+    const stocks = await fetchStockList(type, category);
 
-    const stocks = await fetchNaverList(sortType, category);
-
-    // 상세 데이터가 필요한 경우 (첫 5개 정도만 미리 가져오거나, 필요 지표만 추출)
-    // 여기서는 사용자가 요청한 모든 열값(현재가, 등락률, 거래량, 52주 고저, 목표주가, 투자의견)을 위해 
-    // 리스트 데이터에 없는 정보(52주 고저 등)를 보완해야 함.
-    // 성능상 전체 30개를 다 가져오기보다 기본 리스트 데이터를 반환하고,
-    // 클라이언트에서 개별 상세를 요청하거나 상위 몇 가지만 서버에서 병합 처리.
-    
-    // 상위 10개만 상세 지표 병합 처리 (성능 타협)
-    const processedStocks = await Promise.all(stocks.slice(0, 30).map(async (stock: any) => {
-      // 리스트 데이터에 기본적으로 있는 것: closePrice, fluctuationsRatio, accumulatedTradingVolume
-      const detail = await fetchNaverDetail(stock.itemCode);
+    // 30개 종목에 대해 병렬로 상세 데이터 패칭
+    const detailedStocks = await Promise.all(stocks.map(async (stock: any) => {
+      const code = stock.itemCode;
+      const detail = await fetchIntegration(code);
       
       const infos = detail?.totalInfos || [];
       const high52 = infos.find((i: any) => i.code === 'highPriceOf52Weeks')?.value || '-';
       const low52 = infos.find((i: any) => i.code === 'lowPriceOf52Weeks')?.value || '-';
+      
       const targetPrice = detail?.consensusInfo?.priceTargetMean || '-';
-      const opinion = detail?.consensusInfo?.recommMean || '-';
+      const opinionMean = detail?.consensusInfo?.recommMean || null;
 
       return {
-        symbol: stock.itemCode,
-        name: stock.stockName,
-        price: stock.closePrice,
-        changeRate: stock.fluctuationsRatio,
-        volume: stock.accumulatedTradingVolume,
+        itemCode: code,
+        stockName: stock.stockName,
+        closePrice: stock.closePrice,
+        fluctuationsRatio: stock.fluctuationsRatio,
+        accumulatedTradingVolume: stock.accumulatedTradingVolume,
         high52,
         low52,
         targetPrice,
-        opinion: getOpinionText(opinion)
+        opinion: getOpinionText(opinionMean)
       };
     }));
 
-    return NextResponse.json(processedStocks);
+    return NextResponse.json(detailedStocks);
   } catch (error) {
-    return NextResponse.json({ error: 'Failed to fetch Naver data' }, { status: 500 });
+    console.error('API Error:', error);
+    return NextResponse.json({ error: 'Failed to fetch stock data' }, { status: 500 });
   }
 }
 
 function getOpinionText(score: any) {
   const num = parseFloat(score);
-  if (isNaN(num)) return '-';
-  if (num >= 4.0) return '매수 (Strong Buy)';
-  if (num >= 3.0) return '중립 (Hold)';
-  return '매도 (Sell)';
+  if (isNaN(num) || score === null) return '-';
+  if (num >= 4.0) return '매수';
+  if (num >= 3.0) return '중립';
+  if (num > 0) return '매도';
+  return '-';
 }

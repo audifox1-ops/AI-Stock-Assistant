@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   RefreshCcw, Wallet, BarChart3, Bot, Sparkles, Loader2, HelpCircle, 
   Info, ChevronRight, X, Plus, TrendingUp, Search, AlertCircle, TrendingDown,
-  Target, Activity, Zap, Star
+  Target, Activity, Zap, Star, LayoutGrid, List as ListIcon
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
@@ -24,15 +24,23 @@ const stockTickerMap: Record<string, string> = {
 };
 
 interface NaverStock {
-  symbol: string;
-  name: string;
-  price: string;
-  changeRate: string;
-  volume: string;
+  itemCode: string;
+  stockName: string;
+  closePrice: string;
+  fluctuationsRatio: string;
+  accumulatedTradingVolume: string;
   high52: string;
   low52: string;
   targetPrice: string | number;
   opinion: string;
+}
+
+interface IndexData {
+  name: string;
+  price: string;
+  changePrice: string;
+  changeRate: string;
+  isUp: boolean;
 }
 
 interface Stock {
@@ -45,23 +53,15 @@ interface Stock {
   changePercent?: number;
 }
 
-interface MarketIndex {
-  name: string;
-  symbol: string;
-  price: number;
-  changePercent: number;
-}
-
 export default function PortfolioPage() {
   // --- 상태 관리 ---
   const [stocks, setStocks] = useState<Stock[]>([]);
-  const [marketIndices, setMarketIndices] = useState<MarketIndex[]>([]);
+  const [marketIndices, setMarketIndices] = useState<IndexData[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
   const [selectedStock, setSelectedStock] = useState<Stock | null>(null);
   const [showBanner, setShowBanner] = useState(true);
-  const [activeTooltip, setActiveTooltip] = useState<string | null>(null);
   
   // 네이버 랭킹 상태
   const [rankingType, setRankingType] = useState('marketValue'); // marketValue, search, volume
@@ -160,13 +160,9 @@ export default function PortfolioPage() {
     
     setIsSubmitting(true);
     try {
-      const input = newStock.nameOrSymbol.trim();
-      const mappedTicker = stockTickerMap[input] || input;
-      const stockName = stockTickerMap[input] ? input : input;
-
       const { error } = await supabase.from('portfolio_stocks').insert([{
-        stock_code: mappedTicker.toUpperCase(),
-        stock_name: stockName,
+        stock_code: (stockTickerMap[newStock.nameOrSymbol.trim()] || newStock.nameOrSymbol).toUpperCase(),
+        stock_name: newStock.nameOrSymbol.trim(),
         avg_buy_price: parseFloat(newStock.avgPrice),
         quantity: parseFloat(newStock.quantity)
       }]);
@@ -205,7 +201,7 @@ export default function PortfolioPage() {
   const totalRate = totalBuy > 0 ? ((totalCurrent / totalBuy - 1) * 100).toFixed(2) : '0.00';
 
   return (
-    <div className="w-full pb-20 relative min-h-screen bg-slate-50 font-sans">
+    <div className="w-full pb-24 relative min-h-screen bg-slate-50 font-sans">
       <header className="px-5 py-6 bg-white flex justify-between items-center border-b border-gray-100 z-40 sticky top-0">
         <h1 className="text-xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
           <BarChart3 className="text-blue-600" size={24} /> AI-Stock
@@ -221,7 +217,36 @@ export default function PortfolioPage() {
       </header>
 
       <div className="px-5 mt-4 space-y-6">
-        {/* Banner */}
+        {/* Market Board (지수 카드) */}
+        <section className="grid grid-cols-2 gap-3">
+           {marketIndices.length === 0 ? (
+             [1,2].map(i => (
+               <div key={i} className="bg-white h-24 rounded-2xl border border-gray-100 animate-pulse"></div>
+             ))
+           ) : marketIndices.map(m => (
+             <div key={m.name} className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-between h-28">
+                <div className="flex justify-between items-start">
+                   <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest">{m.name} Index</p>
+                   <Activity size={12} className={m.isUp ? 'text-red-400' : 'text-blue-400'} />
+                </div>
+                <div>
+                   <h2 className={`text-2xl font-bold tabular-nums tracking-tighter ${m.isUp ? 'text-red-500' : 'text-blue-500'}`}>
+                      {m.price}
+                   </h2>
+                   <div className="flex items-center gap-1.5 mt-0.5">
+                      <span className={`text-[10px] font-black ${m.isUp ? 'text-red-400' : 'text-blue-400'}`}>
+                         {m.isUp ? '▲' : '▼'} {m.changePrice}
+                      </span>
+                      <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-md ${m.isUp ? 'bg-red-50 text-red-500' : 'bg-blue-50 text-blue-500'}`}>
+                         {m.changeRate}%
+                      </span>
+                   </div>
+                </div>
+             </div>
+           ))}
+        </section>
+
+        {/* Home Banner */}
         {showBanner && (
           <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl p-5 text-white shadow-lg relative overflow-hidden animate-in fade-in slide-in-from-top-4 duration-500">
              <button onClick={() => setShowBanner(false)} className="absolute top-3 right-3 opacity-60 hover:opacity-100">
@@ -231,106 +256,123 @@ export default function PortfolioPage() {
                 <div className="bg-white/20 p-2 rounded-lg backdrop-blur-md">
                    <Sparkles size={20} />
                 </div>
-                <h4 className="font-bold text-base">스마트한 투자 시작</h4>
+                <h4 className="font-bold text-base">실시간 시장 인사이트</h4>
              </div>
              <p className="text-sm text-blue-50 font-medium leading-snug mb-4">
-                보유 종목을 추가하고 실시간 AI 전략과 정밀 리포트를 받아보세요!
+                네이버증권 TOP 30 종목의 상세 분석 리포트를 즉시 받아보세요.
              </p>
              <button onClick={() => setIsAddModalOpen(true)} className="inline-flex items-center gap-1.5 bg-white text-blue-600 px-4 py-2 rounded-xl text-xs font-black hover:bg-blue-50 transition-colors">
-                지금 종목 추가하기 <Plus size={14} />
+                종목 추가 및 관리 <ChevronRight size={14} />
              </button>
           </div>
         )}
 
-        {/* Market Indices */}
-        <section className="grid grid-cols-2 gap-3">
-           {marketIndices.map(m => (
-             <div key={m.symbol} className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-between h-24">
-                <p className="text-[11px] font-bold text-slate-400 mb-1 flex items-center gap-1">
-                   {m.name}
-                </p>
-                <div className="flex justify-between items-end">
-                   <h2 className={`text-xl font-bold ${m.changePercent >= 0 ? 'text-red-500' : 'text-blue-500'}`}>{m.price.toLocaleString()}</h2>
-                   <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-md ${m.changePercent >= 0 ? 'bg-red-50 text-red-500' : 'bg-blue-50 text-blue-600'}`}>
-                      {m.changePercent >= 0 ? '+' : ''}{m.changePercent.toFixed(1)}%
-                   </span>
-                </div>
-             </div>
-           ))}
-        </section>
-
-        {/* Native News Tab - Naver TOP 30 Rankings */}
-        <section className="bg-white rounded-[2rem] border border-gray-100 shadow-sm overflow-hidden">
+        {/* 실시간 시장 랭킹 (TOP 30) */}
+        <section className="bg-white rounded-[2rem] border border-gray-100 shadow-sm overflow-hidden flex flex-col">
            <div className="p-6 border-b border-gray-50 flex justify-between items-center bg-slate-50/50">
               <h3 className="text-sm font-black text-slate-900 uppercase tracking-tighter flex items-center gap-2">
-                 <TrendingUp size={16} className="text-red-500" /> Naver Market Top 30
+                 <TrendingUp size={16} className="text-red-500" /> Real-time Rankings
               </h3>
-              <div className="flex gap-1">
-                 <button onClick={() => setRankingCategory('KOSPI')} className={`px-2 py-1 rounded-md text-[9px] font-black ${rankingCategory === 'KOSPI' ? 'bg-slate-900 text-white' : 'bg-white text-slate-400 border border-gray-100'}`}>KOSPI</button>
-                 <button onClick={() => setRankingCategory('KOSDAQ')} className={`px-2 py-1 rounded-md text-[9px] font-black ${rankingCategory === 'KOSDAQ' ? 'bg-slate-900 text-white' : 'bg-white text-slate-400 border border-gray-100'}`}>KOSDAQ</button>
+              <div className="flex gap-1.5 p-1 bg-white rounded-xl border border-gray-200">
+                 <button onClick={() => setRankingCategory('KOSPI')} className={`px-2.5 py-1 rounded-lg text-[10px] font-black transition-all ${rankingCategory === 'KOSPI' ? 'bg-slate-900 text-white' : 'bg-transparent text-slate-400'}`}>KOSPI</button>
+                 <button onClick={() => setRankingCategory('KOSDAQ')} className={`px-2.5 py-1 rounded-lg text-[10px] font-black transition-all ${rankingCategory === 'KOSDAQ' ? 'bg-slate-900 text-white' : 'bg-transparent text-slate-400'}`}>KOSDAQ</button>
               </div>
            </div>
            
-           <div className="flex px-4 py-3 gap-2 overflow-x-auto no-scrollbar bg-white">
-              <button onClick={() => setRankingType('marketValue')} className={`flex-shrink-0 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${rankingType === 'marketValue' ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-50 text-slate-400'}`}>시총상위</button>
-              <button onClick={() => setRankingType('search')} className={`flex-shrink-0 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${rankingType === 'search' ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-50 text-slate-400'}`}>검색상위</button>
-              <button onClick={() => setRankingType('volume')} className={`flex-shrink-0 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${rankingType === 'volume' ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-50 text-slate-400'}`}>거래량상위</button>
+           <div className="flex px-5 py-4 gap-2 overflow-x-auto no-scrollbar bg-white border-b border-gray-50">
+              <button onClick={() => setRankingType('marketValue')} className={`flex-shrink-0 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${rankingType === 'marketValue' ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-50 text-slate-400 hover:bg-slate-100'}`}>시총상위</button>
+              <button onClick={() => setRankingType('search')} className={`flex-shrink-0 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${rankingType === 'search' ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-50 text-slate-400 hover:bg-slate-100'}`}>인기검색</button>
+              <button onClick={() => setRankingType('volume')} className={`flex-shrink-0 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${rankingType === 'volume' ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-50 text-slate-400 hover:bg-slate-100'}`}>거래량상위</button>
            </div>
 
-           <div className="max-h-[400px] overflow-y-auto p-4 space-y-3">
-              {isRankingLoading ? (
-                 <div className="py-20 text-center flex flex-col items-center gap-3">
-                    <Loader2 className="animate-spin text-blue-500" size={32} />
-                    <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Loading Market Data...</p>
-                 </div>
-              ) : rankingStocks.map((rs, idx) => {
-                 const isUp = rs.changeRate.startsWith('+') || parseFloat(rs.changeRate) > 0;
-                 return (
-                    <div key={rs.symbol} className="p-4 bg-slate-50/50 rounded-2xl border border-white hover:border-blue-100 transition-all group">
-                       <div className="flex justify-between items-start mb-2">
-                          <div className="flex items-center gap-2">
-                             <span className="text-[10px] font-black text-blue-600 w-4">{idx + 1}</span>
-                             <h4 className="text-sm font-bold text-slate-800">{rs.name}</h4>
-                             <span className="text-[9px] font-bold text-slate-300 uppercase">{rs.symbol}</span>
-                          </div>
-                          <div className="text-right">
-                             <p className="text-sm font-black text-slate-900 leading-none">{rs.price}</p>
-                             <p className={`text-[10px] font-black ${isUp ? 'text-red-500' : 'text-blue-500'}`}>{rs.changeRate}%</p>
-                          </div>
-                       </div>
-                       <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-white/50">
-                          <div className="space-y-1">
-                             <p className="text-[8px] font-black text-slate-300 uppercase flex items-center gap-1"><Activity size={8} /> Volume: <span className="text-slate-500">{rs.volume}</span></p>
-                             <p className="text-[8px] font-black text-slate-300 uppercase flex items-center gap-1"><TrendingUp size={8} className="text-red-400" /> 52W High: <span className="text-slate-500">{rs.high52}</span></p>
-                             <p className="text-[8px] font-black text-slate-300 uppercase flex items-center gap-1"><TrendingDown size={8} className="text-blue-400" /> 52W Low: <span className="text-slate-500">{rs.low52}</span></p>
-                          </div>
-                          <div className="space-y-1 text-right">
-                             <p className="text-[8px] font-black text-slate-300 uppercase flex items-center justify-end gap-1"><Target size={8} className="text-blue-500" /> Target: <span className="text-blue-600 font-bold">{rs.targetPrice}</span></p>
-                             <p className="text-[8px] font-black text-slate-300 uppercase">Opinion: <span className="bg-blue-100 text-blue-600 px-1 rounded-sm text-[7px] font-black">{rs.opinion}</span></p>
-                          </div>
-                       </div>
-                    </div>
-                 );
-              })}
+           <div className="overflow-x-auto no-scrollbar">
+              <table className="w-full text-left border-collapse">
+                 <thead>
+                    <tr className="bg-slate-50/50 border-b border-gray-100">
+                       <th className="px-5 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">종목명</th>
+                       <th className="px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right whitespace-nowrap">현재가</th>
+                       <th className="px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right whitespace-nowrap">등락률</th>
+                       <th className="px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right whitespace-nowrap">거래량</th>
+                       <th className="px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right whitespace-nowrap">52주 고/저</th>
+                       <th className="px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right whitespace-nowrap">목표가</th>
+                       <th className="px-5 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center whitespace-nowrap">의견</th>
+                    </tr>
+                 </thead>
+                 <tbody className="divide-y divide-gray-50 bg-white">
+                    {isRankingLoading ? (
+                       <tr>
+                          <td colSpan={7} className="py-24 text-center">
+                             <div className="flex flex-col items-center gap-4">
+                                <Loader2 className="animate-spin text-blue-500" size={32} />
+                                <p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.2em]">Synchronizing Data...</p>
+                             </div>
+                          </td>
+                       </tr>
+                    ) : rankingStocks.map((rs, idx) => {
+                       const isUp = rs.fluctuationsRatio.startsWith('+') || parseFloat(rs.fluctuationsRatio) > 0;
+                       return (
+                          <tr key={rs.itemCode} className="hover:bg-slate-50/80 transition-colors group cursor-default">
+                             <td className="px-5 py-5 whitespace-nowrap">
+                                <div className="flex items-center gap-3">
+                                   <span className="text-[10px] font-black text-blue-600/30 w-4">{idx + 1}</span>
+                                   <div>
+                                      <p className="text-sm font-bold text-slate-900 group-hover:text-blue-600 transition-colors">{rs.stockName}</p>
+                                      <p className="text-[9px] font-bold text-slate-300 uppercase tracking-tight">{rs.itemCode}</p>
+                                   </div>
+                                </div>
+                             </td>
+                             <td className="px-4 py-5 font-black text-sm text-slate-900 text-right tabular-nums whitespace-nowrap">{rs.closePrice}</td>
+                             <td className={`px-4 py-5 font-black text-xs text-right whitespace-nowrap ${isUp ? 'text-red-500' : 'text-blue-500'}`}>
+                                {isUp ? '+' : ''}{rs.fluctuationsRatio}%
+                             </td>
+                             <td className="px-4 py-5 text-[11px] font-bold text-slate-400 text-right whitespace-nowrap">{rs.accumulatedTradingVolume}</td>
+                             <td className="px-4 py-5 text-right whitespace-nowrap">
+                                <div className="flex flex-col items-end gap-0.5">
+                                   <p className="text-[10px] font-bold text-red-400 leading-none">{rs.high52}</p>
+                                   <p className="text-[10px] font-bold text-blue-400 leading-none">{rs.low52}</p>
+                                </div>
+                             </td>
+                             <td className="px-4 py-5 text-[11px] font-black text-slate-900 text-right whitespace-nowrap">{rs.targetPrice}</td>
+                             <td className="px-5 py-5 text-center">
+                                <span className={`px-2 py-1 rounded-lg text-[10px] font-black ${
+                                   rs.opinion === '매수' ? 'bg-red-50 text-red-500' : 
+                                   rs.opinion === '중립' ? 'bg-gray-100 text-gray-500' : 'bg-slate-50 text-slate-400'
+                                }`}>
+                                   {rs.opinion}
+                                </span>
+                             </td>
+                          </tr>
+                       );
+                    })}
+                 </tbody>
+              </table>
            </div>
+           
+           {!isRankingLoading && rankingStocks.length === 0 && (
+             <div className="py-20 text-center bg-white flex flex-col items-center gap-3">
+                <AlertCircle className="text-slate-200" size={40} />
+                <p className="text-sm font-bold text-slate-300 tracking-tight">현재 데이터를 불러올 수 없습니다.<br/>새로고침을 눌러주세요.</p>
+             </div>
+           )}
         </section>
 
         {/* Portfolio Stats */}
-        <section className="bg-white p-7 rounded-[2rem] border border-gray-100 shadow-sm">
-           <div className="flex items-center justify-between mb-4">
+        <section className="bg-white p-7 rounded-[2rem] border border-gray-100 shadow-sm relative overflow-hidden">
+           <div className="absolute top-0 right-0 w-32 h-32 bg-blue-50/50 rounded-full -mr-16 -mt-16 blur-3xl"></div>
+           <div className="flex items-center justify-between mb-4 relative z-10">
               <div className="flex items-center gap-1.5 text-slate-400 opacity-80">
                  <Wallet size={14} />
-                 <span className="text-[10px] font-black uppercase tracking-widest leading-none">Total Assets</span>
+                 <span className="text-[10px] font-black uppercase tracking-widest leading-none">My Assets Overview</span>
               </div>
               <Info size={14} className="text-slate-200 cursor-pointer" />
            </div>
-           <div className="flex items-baseline gap-3 mb-6">
+           <div className="flex items-baseline gap-3 mb-6 relative z-10">
               <h2 className="text-3xl font-bold text-slate-900 tabular-nums tracking-tight">{totalCurrent.toLocaleString()}원</h2>
               <p className={`text-sm font-bold px-2 py-0.5 rounded-lg ${parseFloat(totalRate) >= 0 ? 'bg-red-50 text-red-500' : 'bg-blue-50 text-blue-500'}`}>
                 {parseFloat(totalRate) >= 0 ? '+' : ''}{totalRate}%
               </p>
            </div>
-           <div className="grid grid-cols-2 gap-4 pt-6 border-t border-slate-50">
+           <div className="grid grid-cols-2 gap-4 pt-6 border-t border-slate-50 relative z-10">
               <div>
                  <p className="text-[10px] font-bold text-slate-300 uppercase mb-0.5 opacity-70">실시간 손익</p>
                  <p className={`text-base font-bold ${totalCurrent - totalBuy >= 0 ? 'text-red-500' : 'text-blue-500'}`}>
@@ -348,41 +390,51 @@ export default function PortfolioPage() {
         <section className="space-y-4">
            <div className="flex items-center justify-between px-1">
               <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                <Sparkles className="text-blue-600" size={20} /> AI 투자 인사이트
+                <Sparkles className="text-blue-600" size={20} /> AI 투자 리서치
               </h3>
            </div>
-           <div className="bg-blue-50 rounded-[2rem] p-6 text-gray-800 shadow-sm border border-blue-100 flex flex-col justify-center min-h-[180px] relative overflow-hidden group">
+           <div className="bg-blue-600 rounded-[2rem] p-8 text-white shadow-xl shadow-blue-100 flex flex-col justify-center min-h-[200px] relative overflow-hidden decoration-none group transition-all">
+              {/* Background Glow */}
+              <div className="absolute -top-20 -left-20 w-64 h-64 bg-white/20 rounded-full blur-[80px] pointer-events-none animate-pulse"></div>
+              
               {isAiLoading ? (
-                <div className="text-center flex flex-col items-center gap-3">
-                   <Loader2 className="animate-spin text-blue-400" size={32} />
-                   <p className="text-[10px] font-bold text-blue-300 tracking-widest uppercase">Deep Analyzing...</p>
+                <div className="text-center flex flex-col items-center gap-4 relative z-10">
+                   <div className="p-3 bg-white/20 rounded-2xl backdrop-blur-md">
+                      <Loader2 className="animate-spin text-white" size={32} />
+                   </div>
+                   <p className="text-[11px] font-black text-blue-100 tracking-[0.25em] uppercase">Deep Neural Learning...</p>
                 </div>
               ) : aiAnalysis ? (
-                <div className="animate-in fade-in duration-700">
-                   <div className="flex justify-between items-center mb-4">
-                      <div className="px-2 py-0.5 bg-blue-500 text-white rounded-md text-[9px] font-black uppercase tracking-widest">{selectedStock?.name} Report</div>
-                      <Link href="/chart" className="text-[9px] font-bold text-blue-500 flex items-center gap-0.5">상세 차트 <ChevronRight size={10} /></Link>
+                <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 relative z-10">
+                   <div className="flex justify-between items-center mb-5">
+                      <div className="flex items-center gap-2">
+                         <div className="px-3 py-1 bg-white/20 backdrop-blur-md text-white rounded-xl text-[10px] font-black uppercase tracking-widest">{selectedStock?.name}</div>
+                         <div className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse"></div>
+                      </div>
                    </div>
-                   <p className="text-[15px] font-bold leading-relaxed text-slate-700 whitespace-pre-wrap opacity-90">
+                   <p className="text-[16px] font-bold leading-[1.7] text-white/95 whitespace-pre-wrap">
                       {aiAnalysis}
                    </p>
                 </div>
               ) : (
-                <div className="text-center py-6">
-                   <Bot size={44} className="mx-auto mb-4 text-blue-100" />
-                   <p className="text-sm font-bold text-slate-400">내 주식 리스트에서 분석할 종목을<br/>터치하여 전략을 받아보세요.</p>
+                <div className="text-center py-6 relative z-10">
+                   <Bot size={56} className="mx-auto mb-5 text-blue-200/40" />
+                   <p className="text-sm font-bold text-blue-100/80 leading-relaxed">
+                      내 주식 리스트를 터치하면<br/>
+                      <span className="text-white">Gemini 2.5 Flash</span>가 실시간 분석을 시작합니다.
+                   </p>
                 </div>
               )}
            </div>
         </section>
 
-        {/* Portfolio List */}
+        {/* My Stock List */}
         <section className="space-y-4 pb-12">
            <div className="flex justify-between items-center px-1">
               <h3 className="text-lg font-bold text-slate-900">내 주식</h3>
               <button 
                 onClick={() => setIsAddModalOpen(true)}
-                className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white rounded-xl text-xs font-bold shadow-md active:scale-[0.95] transition-all"
+                className="flex items-center gap-1.5 px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-black shadow-lg shadow-slate-200 hover:bg-slate-800 transition-all active:scale-95"
               >
                 <Plus size={14} /> 종목 추가
               </button>
@@ -390,12 +442,12 @@ export default function PortfolioPage() {
            
            <div className="space-y-3">
               {stocks.length === 0 ? (
-                <div className="bg-white border border-dashed border-slate-200 rounded-2xl p-10 text-center flex flex-col items-center gap-3">
-                   <div className="p-3 bg-slate-50 rounded-full">
-                      <Search size={24} className="text-slate-300" />
+                <div className="bg-white border border-dashed border-slate-200 rounded-[2rem] p-12 text-center flex flex-col items-center gap-4">
+                   <div className="p-4 bg-slate-50 rounded-full">
+                      <LayoutGrid size={28} className="text-slate-300" />
                    </div>
                    <p className="text-sm font-bold text-slate-400 leading-relaxed">
-                      아직 등록된 주식이 없습니다.<br/>위의 + 버튼을 눌러 추가해 보세요.
+                      관리 중인 자산이 없습니다.<br/>새 종목을 추가하여 실황을 확인하세요.
                    </p>
                 </div>
               ) : (
@@ -408,26 +460,28 @@ export default function PortfolioPage() {
                     <div 
                       key={s.id} 
                       onClick={() => runAnalysis(s)} 
-                      className={`w-full flex justify-between items-center p-5 rounded-2xl border transition-all active:scale-[0.98] cursor-pointer shadow-sm
-                        ${isSelected ? 'bg-blue-600 border-blue-600 shadow-blue-100' : 'bg-white border-gray-100 hover:bg-slate-50'}
+                      className={`w-full flex justify-between items-center p-6 rounded-[1.75rem] border transition-all active:scale-[0.98] cursor-pointer
+                        ${isSelected ? 'bg-blue-600 border-blue-600 shadow-xl shadow-blue-100' : 'bg-white border-gray-100 hover:bg-slate-50 shadow-sm'}
                       `}
                     >
-                       <div className="flex flex-col gap-0.5">
-                          <h4 className={`text-lg font-bold ${isSelected ? 'text-white' : 'text-slate-900'}`}>{s.name}</h4>
-                          <span className={`text-[10px] font-bold uppercase tracking-widest leading-none ${isSelected ? 'text-blue-100' : 'text-slate-300'}`}>
-                             {s.symbol} · {s.quantity}주
-                          </span>
+                       <div className="flex flex-col gap-1">
+                          <h4 className={`text-lg font-black tracking-tight ${isSelected ? 'text-white' : 'text-slate-900'}`}>{s.name}</h4>
+                          <div className={`flex items-center gap-2 ${isSelected ? 'text-blue-100' : 'text-slate-400'}`}>
+                             <span className="text-[10px] font-black uppercase tracking-wider">{s.symbol}</span>
+                             <span className="w-1 h-1 bg-current rounded-full opacity-30"></span>
+                             <span className="text-[10px] font-bold">{s.quantity}주</span>
+                          </div>
                        </div>
-                       <div className="text-right flex flex-col items-end gap-1.5">
-                          <p className={`text-xl font-bold tabular-nums leading-none tracking-tight ${isSelected ? 'text-white' : 'text-slate-900'}`}>
+                       <div className="text-right flex flex-col items-end gap-2">
+                          <p className={`text-xl font-black tabular-nums leading-none tracking-tighter ${isSelected ? 'text-white' : 'text-slate-900'}`}>
                              {(s.currentPrice || s.avgPrice).toLocaleString()}
                           </p>
-                          <span className={`text-[10px] font-black px-2 py-0.5 rounded-md ${
+                          <span className={`text-[10px] font-black px-2 py-0.5 rounded-lg ${
                             isSelected 
                               ? 'bg-white/20 text-white' 
                               : (isProfit ? 'bg-red-50 text-red-500' : 'bg-blue-50 text-blue-500')
                           }`}>
-                             {isProfit ? '+' : ''}{profitRate}%
+                             {isProfit ? '▲' : '▼'} {profitRate}%
                           </span>
                        </div>
                     </div>
@@ -441,53 +495,54 @@ export default function PortfolioPage() {
       {/* Add Stock Modal */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center px-5">
-           <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setIsAddModalOpen(false)}></div>
-           <div className="relative bg-white w-full max-w-[380px] rounded-[2rem] p-8 shadow-2xl animate-in zoom-in-95 duration-200">
-              <div className="flex justify-between items-center mb-6">
-                 <h2 className="text-xl font-bold text-slate-900">새 종목 추가</h2>
-                 <button onClick={() => setIsAddModalOpen(false)} className="p-1 bg-slate-50 rounded-lg text-slate-400"><X size={20} /></button>
+           <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-md" onClick={() => setIsAddModalOpen(false)}></div>
+           <div className="relative bg-white w-full max-w-[380px] rounded-[2.5rem] p-10 shadow-2xl animate-in zoom-in-95 duration-200">
+              <div className="flex justify-between items-center mb-8">
+                 <h2 className="text-2xl font-black text-slate-900 tracking-tight">Add Asset</h2>
+                 <button onClick={() => setIsAddModalOpen(false)} className="p-2 bg-slate-50 rounded-xl text-slate-400 hover:text-slate-900 transition-all"><X size={20} /></button>
               </div>
               
-              <form onSubmit={handleAddStock} className="space-y-5">
-                 <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-slate-700 ml-1">종목명 입력</label>
+              <form onSubmit={handleAddStock} className="space-y-6">
+                 <div className="space-y-2">
+                    <label className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1">Asset Name</label>
                     <input 
-                      type="text" required placeholder="종목명 입력 (예: 태웅, 삼성전자)"
-                      className="w-full border border-gray-300 bg-white text-slate-900 placeholder-gray-400 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none font-bold"
+                      type="text" required placeholder="예: 삼성전자, 태웅"
+                      className="w-full border border-gray-200 bg-slate-50/50 text-slate-900 placeholder-gray-400 p-4 rounded-2xl focus:ring-2 focus:ring-blue-600 focus:outline-none font-bold transition-all border-transparent focus:bg-white"
                       value={newStock.nameOrSymbol} onChange={e => setNewStock({...newStock, nameOrSymbol: e.target.value})}
                     />
-                    <p className="text-[10px] text-blue-500 font-bold ml-1 tracking-tight">💡 이름을 입력하면 코드가 자동 매핑됩니다.</p>
                  </div>
 
                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                       <label className="text-xs font-bold text-slate-700 ml-1">매수 평단가</label>
+                    <div className="space-y-2">
+                       <label className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1">Avg. Price</label>
                        <input 
-                         type="number" required placeholder="단가"
-                         className="w-full border border-gray-300 bg-white text-slate-900 placeholder-gray-400 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none font-bold"
+                         type="number" required placeholder="0"
+                         className="w-full border border-gray-200 bg-slate-50/50 text-slate-900 placeholder-gray-400 p-4 rounded-2xl focus:ring-2 focus:ring-blue-600 focus:outline-none font-bold transition-all border-transparent focus:bg-white"
                          value={newStock.avgPrice} onChange={e => setNewStock({...newStock, avgPrice: e.target.value})}
                        />
                     </div>
-                    <div className="space-y-1.5">
-                       <label className="text-xs font-bold text-slate-700 ml-1">보유 수량</label>
+                    <div className="space-y-2">
+                       <label className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1">Quantity</label>
                        <input 
-                         type="number" required placeholder="수량"
-                         className="w-full border border-gray-300 bg-white text-slate-900 placeholder-gray-400 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none font-bold"
+                         type="number" required placeholder="0"
+                         className="w-full border border-gray-200 bg-slate-50/50 text-slate-900 placeholder-gray-400 p-4 rounded-2xl focus:ring-2 focus:ring-blue-600 focus:outline-none font-bold transition-all border-transparent focus:bg-white"
                          value={newStock.quantity} onChange={e => setNewStock({...newStock, quantity: e.target.value})}
                        />
                     </div>
                  </div>
                  
                  <div className="pt-2 flex items-center gap-2">
-                    <AlertCircle size={14} className="text-blue-500 flex-shrink-0" />
-                    <p className="text-[10px] font-bold text-slate-400">데이터는 암호화되어 안전하게 보관됩니다.</p>
+                    <div className="p-1 bg-blue-50 rounded-md">
+                       <AlertCircle size={12} className="text-blue-500" />
+                    </div>
+                    <p className="text-[11px] font-bold text-slate-400">네트워크 보안을 위해 코드가 자동 매핑됩니다.</p>
                  </div>
 
                  <button 
                    disabled={isSubmitting}
-                   className="w-full bg-blue-600 text-white font-bold py-4 rounded-2xl shadow-lg shadow-blue-100 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                   className="w-full bg-slate-900 text-white font-black py-5 rounded-[1.5rem] shadow-xl shadow-slate-200 active:scale-[0.98] transition-all flex items-center justify-center gap-2 mt-4"
                  >
-                    {isSubmitting ? <Loader2 className="animate-spin" size={20} /> : '종목 저장하기'}
+                    {isSubmitting ? <Loader2 className="animate-spin" size={20} /> : 'Asset Save Now'}
                  </button>
               </form>
            </div>
