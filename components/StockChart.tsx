@@ -11,7 +11,8 @@ import {
   SeriesMarker,
   CandlestickSeries,
   HistogramSeries,
-  LineSeries
+  LineSeries,
+  createSeriesMarkers
 } from 'lightweight-charts';
 
 interface StockChartProps {
@@ -138,8 +139,8 @@ const StockChart: React.FC<StockChartProps> = ({ data, isMinute }) => {
         text: `MIN: ${candleData[lowIdx].low.toLocaleString()}`,
       }
     ];
-    // [v5.1 Fix]: setMarkers 대신 createSeriesMarkers API 사용
-    candleSeries.createSeriesMarkers(markers);
+    // [v5.1 Fix]: setMarkers/createSeriesMarkers는 메서드가 아닌 독립 함수로 호출해야 함
+    createSeriesMarkers(candleSeries, markers);
 
     // 반응형 처리
     const handleResize = () => {
