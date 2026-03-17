@@ -32,12 +32,28 @@ async function fetchIntegration(itemCode: string) {
   return data;
 }
 
+// [14차 추가] 네이버 차트 데이터 프록시
+async function fetchChartData(itemCode: string) {
+  const url = `https://m.stock.naver.com/api/stock/${itemCode}/chart/day?range=1month`;
+  const res = await fetch(url, { cache: 'no-store' });
+  const data = await res.json();
+  return data;
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const type = searchParams.get('type') || 'marketValue'; 
   const category = searchParams.get('category') || 'KOSPI';
+  const itemCode = searchParams.get('itemCode');
+  const mode = searchParams.get('mode'); // 'chart' 모드 추가
 
   try {
+    // 차트 데이터 요청인 경우 처리
+    if (mode === 'chart' && itemCode) {
+      const chartData = await fetchChartData(itemCode);
+      return NextResponse.json(chartData);
+    }
+
     const stocks = await fetchStockList(type, category);
 
     const detailedStocks = await Promise.all(stocks.map(async (stock: any) => {
@@ -51,7 +67,6 @@ export async function GET(request: Request) {
       const targetPriceStr = detail?.consensusInfo?.priceTargetMean || '0';
       const currentPriceStr = stock.closePrice || '0';
       
-      // 상승 여력 계산 로직 (upsidePotential)
       const targetPriceNum = parseFloat(targetPriceStr.toString().replace(/,/g, ''));
       const currentPriceNum = parseFloat(currentPriceStr.toString().replace(/,/g, ''));
       
