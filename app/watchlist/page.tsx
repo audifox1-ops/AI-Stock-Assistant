@@ -111,8 +111,8 @@ export default function WatchlistPage() {
            </Link>
            <h1 className="text-xl font-bold tracking-tight text-slate-900">관심 종목</h1>
         </div>
-        <div className="p-2 bg-slate-50 rounded-xl text-slate-200">
-           <RefreshCcw size={18} title="오프라인 모드" />
+        <div className="p-2 bg-slate-50 rounded-xl text-slate-200" title="오프라인 모드">
+           <RefreshCcw size={18} />
         </div>
       </header>
 
@@ -127,7 +127,7 @@ export default function WatchlistPage() {
                  className="bg-transparent border-none outline-none font-bold text-base text-slate-900 w-full placeholder:text-gray-400"
                  value={searchQuery}
                  onChange={e => setSearchQuery(e.target.value)}
-                 onKeyPress={e => e.key === 'Enter' && handleAddStock()}
+                 onKeyDown={e => e.key === 'Enter' && handleAddStock()}
                />
             </div>
             <button 
@@ -171,7 +171,7 @@ export default function WatchlistPage() {
                       <button 
                         onClick={() => removeInterest(s.id)} 
                         className="p-2 text-slate-200 hover:text-red-400 transition-colors"
-                      >
+                       >
                          <Trash2 size={18} />
                       </button>
                    </div>
