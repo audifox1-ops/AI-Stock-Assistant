@@ -26,7 +26,7 @@ const parseNumber = (val: any) => {
 };
 
 /**
- * 네이버 모바일 API 지수 데이터 조회
+ * 네이버 모바일 API 지수 데이터 조회 (정확한 KOSPI/KOSDAQ 지수 수집)
  */
 async function fetchIndexData(type: 'KOSPI' | 'KOSDAQ') {
   try {
@@ -49,7 +49,7 @@ async function fetchIndexData(type: 'KOSPI' | 'KOSDAQ') {
 }
 
 /**
- * 네이버 모바일 API 개별 종목 시세 조회 (basic 엔드포인트로 변경하여 안정성 확보)
+ * 네이버 모바일 API 개별 종목 시세 조회 (관심/보유종목용)
  */
 async function fetchStockDetail(ticker: string) {
   try {
@@ -58,8 +58,6 @@ async function fetchStockDetail(ticker: string) {
       next: { revalidate: 0 }
     });
     const data = await res.json();
-    
-    // basic 응답 구조에 맞게 직접 매핑
     return {
       ticker: ticker,
       price: parseNumber(data.closePrice || '0'),
@@ -69,8 +67,52 @@ async function fetchStockDetail(ticker: string) {
     };
   } catch (e) {
     console.error(`Naver Stock Fetch Error (${ticker}):`, e);
-    // 에러 시 0을 반환하여 프론트엔드에서 방어 로직이 작동하도록 함
     return { ticker, price: 0, changeRate: 0, volume: 0, status: 'SAME' };
+  }
+}
+
+/**
+ * 네이버 모바일 API 랭킹 리스트 조회 (홈 화면용)
+ */
+async function fetchRankingList(type: string) {
+  let url = '';
+  // 네이버 모바일 API 엔드포인트 세팅
+  switch (type) {
+    case 'kospi_market_cap':
+      url = 'https://m.stock.naver.com/api/stocks/marketValue/KOSPI?page=1&pageSize=30';
+      break;
+    case 'kosdaq_market_cap':
+      url = 'https://m.stock.naver.com/api/stocks/marketValue/KOSDAQ?page=1&pageSize=30';
+      break;
+    case 'volume':
+      url = 'https://m.stock.naver.com/api/stocks/volume/KOSPI?page=1&pageSize=30';
+      break;
+    case 'foreign_buy':
+      url = 'https://m.stock.naver.com/api/stocks/investorBuy/KOSPI/FOREIGNER?page=1&pageSize=30';
+      break;
+    case 'institution_buy':
+      url = 'https://m.stock.naver.com/api/stocks/investorBuy/KOSPI/INSTITUTION?page=1&pageSize=30';
+      break;
+    default:
+      url = 'https://m.stock.naver.com/api/stocks/marketValue/KOSPI?page=1&pageSize=30';
+  }
+
+  try {
+    const res = await fetch(url, { headers: NAVER_HEADERS, next: { revalidate: 0 } });
+    const data = await res.json();
+    const stocks = data.stocks || [];
+    
+    return stocks.map((s: any) => ({
+      itemCode: s.itemCode || s.code,
+      stockName: s.stockName || s.name,
+      closePrice: parseNumber(s.closePrice),
+      fluctuationsRatio: s.fluctuationsRatio || '0.00',
+      volume: parseNumber(s.accumulatedTradingVolume || s.volume),
+      fluctuationType: s.fluctuationType || 'STABLE'
+    }));
+  } catch (e) {
+    console.error(`Ranking Fetch Error (${type}):`, e);
+    return [];
   }
 }
 
@@ -84,7 +126,7 @@ export async function GET(request: Request) {
   const type = searchParams.get('type');
   const tickersParam = searchParams.get('tickers');
 
-  // 1. 지수 데이터 상세 조회
+  // 1. 지수 데이터 조회 (?type=index)
   if (type === 'index') {
     const indices = await Promise.all([
       fetchIndexData('KOSPI'),
@@ -93,7 +135,13 @@ export async function GET(request: Request) {
     return NextResponse.json({ success: true, data: indices });
   }
 
-  // 2. 다중 종목 실시간 시세 조회 (관심/보유종목용)
+  // 2. 랭킹 리스트 조회 (홈 화면용 분기)
+  if (type && type !== 'index' && !tickersParam) {
+    const ranks = await fetchRankingList(type);
+    return NextResponse.json({ success: true, data: ranks });
+  }
+
+  // 3. 다중 종목 실시간 시세 조회 (?tickers=005930,...)
   if (tickersParam) {
     const tickers = tickersParam.split(',').filter(t => t.trim() !== '');
     const details = await Promise.all(tickers.map(t => fetchStockDetail(t.trim())));

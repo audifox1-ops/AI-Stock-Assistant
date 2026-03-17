@@ -2,17 +2,14 @@
 
 import React, { useState, useEffect } from 'react';
 import { 
-  RefreshCcw, BarChart3, Bot, Sparkles, Loader2, Info, ChevronRight, X, 
-  TrendingUp, TrendingDown, Activity, Zap, Star, LayoutGrid, List as ListIcon, 
-  LineChart as LineChartIcon, ShieldAlert, Search
+  Plus, Search, Star, TrendingUp, TrendingDown, RefreshCcw, Loader2, X,
+  ArrowRight, ShieldAlert, Sparkles, AlertCircle, BarChart3, Info, Zap,
+  Menu, Bell, Settings, Filter
 } from 'lucide-react';
-import { 
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer 
-} from 'recharts';
 
 export const dynamic = 'force-dynamic';
 
-interface GlobalIndex {
+interface IndexInfo {
   name: string;
   value: string;
   change: string;
@@ -20,362 +17,207 @@ interface GlobalIndex {
   status: 'UP' | 'DOWN' | 'SAME';
 }
 
-interface StockItem {
+interface RankedStock {
   itemCode: string;
   stockName: string;
-  closePrice: string;
+  closePrice: number;
   fluctuationsRatio: string;
-  volume: string;
-  marketValue?: string;
-  tradeValue?: string;
-  netBuyValue?: string;
-  fluctuationType?: string;
+  volume: number;
+  fluctuationType: string;
 }
 
-export default function Home() {
-  const tabs = ['KOSPI 시총상위', 'KOSDAQ 시총상위', '거래량상위', '외국인매매', '기관매매', '시가총액'];
-  const [activeTab, setActiveTab] = useState(tabs[0]);
-  const [stocks, setStocks] = useState<StockItem[]>([]);
-  const [indices, setIndices] = useState<GlobalIndex[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
+const TABS = [
+  { id: 'kospi_market_cap', label: '코스피 시총', value: 'kospi_market_cap' },
+  { id: 'kosdaq_market_cap', label: '코스닥 시총', value: 'kosdaq_market_cap' },
+  { id: 'volume', label: '거래량 상위', value: 'volume' },
+  { id: 'foreign_buy', label: '외인 매수', value: 'foreign_buy' },
+  { id: 'institution_buy', label: '기관 매수', value: 'institution_buy' }
+];
 
-  // 인터랙션 상태
-  const [selectedStock, setSelectedStock] = useState<StockItem | null>(null);
-  const [isBottomSheetOpen, setIsBottomSheetOpen] = useState(false);
-  const [activeModal, setActiveModal] = useState<'chart' | 'ai' | null>(null);
-  const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
-  const [isAiLoading, setIsAiLoading] = useState(false);
-  const [chartData, setChartData] = useState<any[]>([]);
-  const [isChartLoading, setIsChartLoading] = useState(false);
-  const [chartPeriod, setChartPeriod] = useState<'day' | 'week' | 'month'>('day');
+export default function HomePage() {
+  const [indices, setIndices] = useState<IndexInfo[]>([]);
+  const [rankingList, setRankingList] = useState<RankedStock[]>([]);
+  const [activeTab, setActiveTab] = useState('kospi_market_cap');
+  const [isLoadingIndices, setIsLoadingIndices] = useState(true);
+  const [isLoadingRanking, setIsLoadingRanking] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState<string>('');
 
   const fetchIndices = async () => {
+    setIsLoadingIndices(true);
     try {
       const res = await fetch('/api/market?type=index');
       const data = await res.json();
-      if (data.success && Array.isArray(data.data)) {
+      if (data.success) {
         setIndices(data.data);
-      }
-    } catch (e) {
-      console.error('Index Fetch Error:', e);
-    }
-  };
-
-  const fetchData = async (category: string) => {
-    setIsLoading(true);
-    try {
-      const res = await fetch(`/api/market?category=${encodeURIComponent(category)}`);
-      const data = await res.json();
-      if (data.success && Array.isArray(data.data)) {
-        setStocks(data.data);
       }
     } catch (e) {
       console.error(e);
     } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
+      setIsLoadingIndices(false);
     }
   };
 
-  useEffect(() => {
-    fetchIndices();
-    fetchData(activeTab);
-  }, [activeTab]);
-
-  const handleRefresh = () => {
-    setIsRefreshing(true);
-    fetchIndices();
-    fetchData(activeTab);
-  };
-
-  const handleStockClick = (stock: StockItem) => {
-    setSelectedStock(stock);
-    setIsBottomSheetOpen(true);
-  };
-
-  const fetchChartData = async (ticker: string, period: string) => {
-    setIsChartLoading(true);
+  const fetchRanking = async (tabValue: string) => {
+    setIsLoadingRanking(true);
     try {
-      const res = await fetch(`/api/chart?ticker=${ticker}&period=${period}`);
+      const res = await fetch(`/api/market?type=${tabValue}`);
       const data = await res.json();
       if (data.success) {
-        setChartData(data.data);
-      } else {
-        throw new Error(data.error);
+        setRankingList(data.data);
       }
     } catch (e) {
-      console.error('Chart Load Error:', e);
-      setChartData([]);
+      console.error(e);
+      setRankingList([]);
     } finally {
-      setIsChartLoading(false);
+      setIsLoadingRanking(false);
+      setLastUpdated(new Date().toLocaleTimeString());
     }
-  };
-
-  const openChart = async () => {
-    if (!selectedStock) return;
-    setIsBottomSheetOpen(false);
-    setActiveModal('chart');
-    setChartPeriod('day');
-    fetchChartData(selectedStock.itemCode, 'day');
   };
 
   useEffect(() => {
-    if (activeModal === 'chart' && selectedStock) {
-      fetchChartData(selectedStock.itemCode, chartPeriod);
-    }
-  }, [chartPeriod]);
+    fetchIndices();
+  }, []);
 
-  const openAi = async () => {
-    if (!selectedStock) return;
-    setIsBottomSheetOpen(false);
-    setActiveModal('ai');
-    setIsAiLoading(true);
-    try {
-      const res = await fetch('/api/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          symbol: selectedStock.itemCode,
-          name: selectedStock.stockName,
-          price: selectedStock.closePrice,
-          changePercent: selectedStock.fluctuationsRatio
-        })
-      });
-      const data = await res.json();
-      setAiAnalysis(data.analysis || data.error);
-    } catch (e) {
-      setAiAnalysis("분석 실패");
-    } finally {
-      setIsAiLoading(false);
-    }
-  };
+  useEffect(() => {
+    fetchRanking(activeTab);
+  }, [activeTab]);
 
   return (
-    <div className="h-screen w-full bg-slate-50 flex flex-col overflow-hidden font-sans selection:bg-blue-100 selection:text-blue-900">
-      
-      {/* 상단 고정 영역: 헤더 + 지수 + 탭 */}
-      <div className="flex-shrink-0 z-10 bg-white border-b border-gray-100 max-w-[430px] mx-auto w-full shadow-sm">
-        <header className="px-6 py-4 flex justify-between items-center bg-slate-900 text-white">
-          <div>
-            <h1 className="text-xl font-black tracking-tighter uppercase italic">AI STOCK</h1>
-            <p className="text-[9px] font-bold text-blue-400 uppercase tracking-widest">Real-time Market Analytics</p>
-          </div>
-          <button 
-            onClick={handleRefresh}
-            className={`p-2 bg-white/10 text-white rounded-none active:scale-95 transition-all ${isRefreshing ? 'animate-spin' : ''}`}
-          >
-            <RefreshCcw size={18} />
-          </button>
+    <div className="h-screen flex flex-col overflow-hidden bg-slate-50 font-sans">
+      {/* 1. 상단 고정 헤더 영역 (지수 및 탭 메뉴) */}
+      <section className="flex-none bg-white shadow-xl z-50">
+        <header className="px-6 py-8 border-b border-gray-100 flex justify-between items-center">
+           <div>
+              <h1 className="text-2xl font-black text-slate-900 tracking-tighter uppercase leading-none">Market.AI</h1>
+              <p className="text-[10px] font-bold text-blue-500 uppercase tracking-widest mt-1">Real-time Trading Cloud</p>
+           </div>
+           <div className="flex gap-4">
+              <button className="p-3 bg-slate-900 text-white rounded-none shadow-lg"><Plus size={18} /></button>
+           </div>
         </header>
 
-        {/* 시장 지수 대시보드 */}
-        <div className="grid grid-cols-2 gap-px bg-slate-100 border-b border-slate-100">
-           {indices?.length > 0 ? indices.map((idx) => (
-             <div key={idx.name} className="bg-white p-4 flex flex-col gap-1">
-                <div className="flex items-center justify-between">
-                   <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{idx.name}</span>
-                   <span className={`text-[10px] font-black ${idx.status === 'UP' ? 'text-red-500' : 'text-blue-500'}`}>
-                      {idx.status === 'UP' ? '▲' : '▼'} {idx.changeRate}%
-                   </span>
-                </div>
-                <div className="flex items-baseline gap-2">
-                   <span className="text-lg font-black text-slate-900 tabular-nums tracking-tighter">{idx.value || '-'}</span>
-                   <span className={`text-[10px] font-bold ${idx.status === 'UP' ? 'text-red-400' : 'text-blue-400'}`}>
-                      {idx.change}
-                   </span>
-                </div>
-             </div>
-           )) : (
-             <div className="col-span-2 bg-white p-4 text-center">
-                <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest animate-pulse">시장 지수 로딩 중...</span>
-             </div>
-           )}
-        </div>
-
-        {/* 탭 네비게이션 */}
-        <div className="overflow-x-auto whitespace-nowrap hide-scrollbar py-1 px-1 bg-white">
-          <div className="flex gap-1 px-4 min-w-max">
-            {tabs.map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`py-4 px-4 text-[10px] font-black uppercase tracking-widest transition-all relative ${
-                  activeTab === tab ? 'text-blue-600 bg-blue-50/50' : 'text-slate-400 hover:text-slate-600'
-                }`}
-              >
-                {tab}
-                {activeTab === tab && (
-                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
-                )}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* 메인 리스트 영역 */}
-      <main className="flex-1 overflow-y-auto pt-4 pb-32 px-6 max-w-[430px] mx-auto w-full scroll-smooth">
-        <div className="flex justify-between items-center mb-6 mt-4">
-          <div className="flex items-center gap-2">
-            <Activity size={16} className="text-blue-600" />
-            <span className="text-[10px] font-black text-slate-900 uppercase tracking-[0.2em]">{activeTab} 실시간 순위</span>
-          </div>
-          <div className="flex bg-slate-200 p-1 rounded-none border border-slate-200">
-            <button 
-              onClick={() => setViewMode('list')}
-              className={`p-2 transition-all rounded-none ${viewMode === 'list' ? 'bg-white text-slate-900 shadow-none' : 'text-slate-400'}`}
-            >
-              <ListIcon size={14} />
-            </button>
-            <button 
-              onClick={() => setViewMode('grid')}
-              className={`p-2 transition-all rounded-none ${viewMode === 'grid' ? 'bg-white text-slate-900 shadow-none' : 'text-slate-400'}`}
-            >
-              <LayoutGrid size={14} />
-            </button>
-          </div>
-        </div>
-
-        {isLoading ? (
-          <div className="flex flex-col items-center justify-center py-20 gap-6">
-            <Loader2 className="animate-spin text-slate-200" size={40} />
-            <p className="text-[9px] font-black text-slate-200 uppercase tracking-[0.5em]">SYNCING DATA...</p>
-          </div>
-        ) : (
-          <div className={viewMode === 'list' ? 'space-y-4 pb-10' : 'grid grid-cols-2 gap-4 pb-10'}>
-            {(stocks || []).map((stock, idx) => {
-              const changeVal = parseFloat(stock.fluctuationsRatio || '0');
-              const isPlus = changeVal > 0;
-              const isInvestorTab = activeTab === '외국인매매' || activeTab === '기관매매';
-              
+        {/* 지수 대시보드 */}
+        <div className="px-6 py-8 grid grid-cols-2 gap-px bg-slate-100 border-b border-slate-100 font-sans">
+          {isLoadingIndices ? (
+            <div className="col-span-2 py-10 flex flex-col items-center gap-4 bg-white">
+               <Loader2 className="animate-spin text-slate-200" size={24} />
+               <p className="text-[9px] font-black text-slate-300 uppercase tracking-[0.4em]">CONNECTING TO MARKET DATA...</p>
+            </div>
+          ) : (
+            indices.map((idx, i) => {
+              const isUp = idx.status === 'UP';
               return (
-                <div 
-                  key={`${stock.itemCode}-${idx}`}
-                  onClick={() => handleStockClick(stock)}
-                  className={`bg-white rounded-none border border-gray-100 active:bg-slate-50 transition-all hover:border-blue-200 group relative overflow-hidden ${
-                    viewMode === 'list' ? 'p-6 flex items-center justify-between' : 'p-6 flex flex-col gap-4'
-                  }`}
-                >
-                  <div className="flex items-center gap-5">
-                    <div className="w-10 h-10 bg-slate-50 flex items-center justify-center border border-slate-100 rounded-none group-hover:bg-blue-50 transition-colors">
-                      <span className="text-[11px] font-black text-slate-400 tabular-nums">{(idx + 1).toString().padStart(2, '0')}</span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h4 className="text-[16px] font-black text-slate-900 tracking-tighter uppercase truncate">
-                        {stock.stockName || 'Unknown'}
-                      </h4>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <span className="text-[9px] font-bold text-slate-300 tracking-widest uppercase">{stock.itemCode}</span>
-                      </div>
-                    </div>
+                <div key={i} className="bg-white p-6 flex flex-col items-start font-sans">
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className={`w-2 h-2 rounded-full ${isUp ? 'bg-red-500' : 'bg-blue-500'}`}></div>
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{idx.name}</span>
                   </div>
-
-                  <div className={viewMode === 'list' ? 'text-right flex-shrink-0' : 'mt-auto pt-4 border-t border-slate-50'}>
-                    <p className="text-[18px] font-black text-slate-900 tabular-nums leading-none tracking-tight">
-                      {stock.closePrice?.toLocaleString() || '0'}원
-                    </p>
-                    <div className="flex items-center justify-end gap-3 mt-2">
-                       <span className="text-[9px] font-bold text-slate-300 uppercase tabular-nums">
-                        {isInvestorTab ? `${stock.netBuyValue}` : `거래: ${stock.volume?.toLocaleString() || '-'}`}
-                      </span>
-                      <span className={`text-[11px] font-black flex items-center gap-0.5 ${isPlus ? 'text-red-500' : 'text-blue-500'}`}>
-                        {isPlus ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
-                        {isPlus ? '+' : ''}{stock.fluctuationsRatio}%
-                      </span>
-                    </div>
+                  <h2 className="text-xl font-black text-slate-900 tabular-nums tracking-tighter mb-2">{idx.value}</h2>
+                  <div className={`flex items-center gap-3 ${isUp ? 'text-red-500' : 'text-blue-500'}`}>
+                    <span className="text-[10px] font-black tabular-nums">{isUp ? '▲' : '▼'} {idx.change}</span>
+                    <span className="text-[10px] font-black tabular-nums bg-slate-50 px-2 py-1 rounded-none border border-current">{idx.changeRate}%</span>
                   </div>
                 </div>
               );
-            })}
-          </div>
-        )}
+            })
+          )}
+        </div>
+
+        {/* 탭 네비게이션 */}
+        <div className="bg-white px-2 py-4 flex gap-2 overflow-x-auto hide-scrollbar">
+           {TABS.map(tab => (
+             <button
+               key={tab.id}
+               onClick={() => setActiveTab(tab.value)}
+               className={`flex-none px-6 py-3 text-[11px] font-black uppercase tracking-widest transition-all rounded-none border ${
+                 activeTab === tab.value 
+                   ? 'bg-slate-900 text-white border-slate-900 shadow-xl' 
+                   : 'text-slate-400 border-transparent hover:border-slate-100'
+               }`}
+             >
+               {tab.label}
+             </button>
+           ))}
+        </div>
+      </section>
+
+      {/* 2. 메인 컨텐츠 영역 (스크롤 리스트) */}
+      <main className="flex-1 overflow-y-auto hide-scrollbar pb-32">
+        <div className="px-6 py-6 flex justify-between items-center bg-slate-50 border-b border-slate-100 sticky top-0 z-40 backdrop-blur-md bg-white/50">
+           <div>
+              <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest">Market Ranking</h3>
+              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Updated: {lastUpdated}</p>
+           </div>
+           <button onClick={() => fetchRanking(activeTab)} className="p-3 bg-white border border-slate-200 active:bg-blue-600 active:text-white group">
+              <RefreshCcw size={14} className={isLoadingRanking ? 'animate-spin' : 'group-hover:rotate-180 transition-transform duration-500'} />
+           </button>
+        </div>
+
+        <div className="px-6 mt-4 space-y-4">
+          {isLoadingRanking ? (
+             <div className="py-20 flex flex-col items-center justify-center gap-6">
+                <Loader2 className="animate-spin text-slate-200" size={40} />
+                <p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.4em]">PARSING RANKING DATA...</p>
+             </div>
+          ) : rankingList.length === 0 ? (
+             <div className="bg-white border-2 border-dashed border-slate-200 p-20 text-center flex flex-col items-center gap-5">
+                <AlertCircle size={40} className="text-slate-100" />
+                <p className="text-xs font-black text-slate-300 uppercase tracking-widest leading-relaxed">준비된 데이터가 없습니다.<br/>잠시 후 다시 시도해주세요.</p>
+             </div>
+          ) : (
+            rankingList.map((stock, idx) => {
+              const changeVal = parseFloat(stock.fluctuationsRatio);
+              const isPlus = changeVal > 0;
+              const isMinus = changeVal < 0;
+
+              return (
+                <div key={stock.itemCode} className="bg-white border border-slate-100 p-6 flex flex-col gap-5 hover:border-blue-500 group transition-all duration-300 rounded-none shadow-sm hover:shadow-xl">
+                   <div className="flex justify-between items-start">
+                      <div className="flex items-center gap-5">
+                         <div className="w-12 h-12 bg-slate-900 text-white flex items-center justify-center text-[11px] font-black uppercase">
+                            {idx + 1}
+                         </div>
+                         <div>
+                            <h4 className="text-[17px] font-black text-slate-900 tracking-tighter uppercase group-hover:text-blue-600 transition-colors leading-none mb-1">
+                               {stock.stockName}
+                            </h4>
+                            <p className="text-[10px] font-bold text-slate-300 tracking-[0.2em]">{stock.itemCode}</p>
+                         </div>
+                      </div>
+                      <div className="text-right">
+                         <p className="text-xl font-black text-slate-900 tracking-tighter tabular-nums leading-none mb-2">
+                            {stock.closePrice.toLocaleString()}
+                         </p>
+                         <div className={`text-[10px] font-black tabular-nums border px-2 py-1 inline-block ${isPlus ? 'text-red-500 border-red-50' : isMinus ? 'text-blue-500 border-blue-50' : 'text-slate-400 border-slate-50'}`}>
+                            {isPlus ? '+' : ''}{stock.fluctuationsRatio}%
+                         </div>
+                      </div>
+                   </div>
+                   
+                   <div className="grid grid-cols-2 gap-4 border-t border-slate-50 pt-5">
+                      <div className="flex flex-col gap-1">
+                         <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest">Trading Vol</span>
+                         <span className="text-xs font-bold text-slate-900 tabular-nums tracking-tighter">
+                            {stock.volume.toLocaleString()} 주
+                         </span>
+                      </div>
+                      <div className="flex flex-col gap-1 text-right">
+                         <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest">Market View</span>
+                         <div className="flex justify-end items-center gap-2">
+                            {isPlus ? <TrendingUp size={12} className="text-red-500" /> : <TrendingDown size={12} className="text-blue-500" />}
+                            <span className="text-[10px] font-black text-slate-900 uppercase tracking-widest">Active</span>
+                         </div>
+                      </div>
+                   </div>
+                </div>
+              );
+            })
+          )}
+        </div>
       </main>
 
-      {/* 바텀 시트 및 모달 로직 유지 */}
-      {isBottomSheetOpen && selectedStock && (
-        <div className="fixed inset-0 z-[110] flex items-end justify-center px-0 pb-0">
-           <div className="absolute inset-0 bg-slate-950/40" onClick={() => setIsBottomSheetOpen(false)}></div>
-           <div className="relative bg-white w-full max-w-[430px] rounded-none p-10 shadow-2xl border-t-8 border-slate-900 animate-in slide-in-from-bottom-full duration-500">
-              <div className="flex justify-between items-center mb-8">
-                 <div>
-                    <h3 className="text-2xl font-black text-slate-900 tracking-tighter uppercase">{selectedStock.stockName}</h3>
-                    <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest leading-none mt-2">CORE ANALYSIS / {selectedStock.itemCode}</p>
-                 </div>
-                 <button onClick={() => setIsBottomSheetOpen(false)} className="p-3 bg-slate-900 text-white rounded-none active:bg-blue-600 transition-all"><X size={20} /></button>
-              </div>
-              <div className="grid grid-cols-1 gap-4">
-                 <button onClick={openChart} className="w-full flex items-center justify-between p-6 bg-slate-50 text-slate-900 rounded-none hover:bg-slate-100 transition-all border border-slate-200">
-                    <div className="flex items-center gap-5">
-                       <LineChartIcon size={24} className="text-blue-600" />
-                       <p className="text-[12px] font-black uppercase tracking-widest">실시간 종목 차트</p>
-                    </div>
-                    <ChevronRight size={18} className="text-slate-300" />
-                 </button>
-                 <button onClick={openAi} className="w-full flex items-center justify-between p-6 bg-slate-900 text-white rounded-none hover:bg-blue-600 transition-all shadow-xl">
-                    <div className="flex items-center gap-5">
-                       <Bot size={24} className="text-blue-400" />
-                       <p className="text-[12px] font-black uppercase tracking-widest">AI 심층 진단 리포트</p>
-                    </div>
-                    <ChevronRight size={18} className="text-white/20" />
-                 </button>
-              </div>
-           </div>
-        </div>
-      )}
-
-      {activeModal && selectedStock && (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center p-6">
-           <div className="absolute inset-0 bg-slate-950/80" onClick={() => !isAiLoading && setActiveModal(null)}></div>
-           <div className="relative bg-white w-full max-w-[450px] rounded-none p-12 border-t-[12px] border-slate-900 shadow-2xl">
-              <div className="flex justify-between items-center mb-10 pb-6 border-b border-slate-100">
-                 <div>
-                    <h2 className="text-xl font-black text-slate-900 tracking-tighter uppercase">{activeModal === 'chart' ? 'Market Chart' : 'AI Intelligence'}</h2>
-                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">{selectedStock.stockName} 데이터 분석</p>
-                 </div>
-                 <button onClick={() => setActiveModal(null)} className="p-2 bg-slate-900 text-white rounded-none"><X size={20} /></button>
-              </div>
-              
-              <div className="min-h-[300px]">
-                 {activeModal === 'chart' ? (
-                   <div className="h-[300px] w-full bg-slate-50/50 border border-slate-100 p-4 relative">
-                      {isChartLoading && (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-white/50 backdrop-blur-sm z-10">
-                          <Loader2 className="animate-spin text-blue-600" size={32} />
-                        </div>
-                      )}
-                      <ResponsiveContainer width="100%" height="100%">
-                         <AreaChart data={chartData}>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                            <XAxis dataKey="date" hide />
-                            <YAxis domain={['auto', 'auto']} hide />
-                            <Tooltip contentStyle={{ backgroundColor: '#fff', borderRadius: '0', border: '1px solid #e2e8f0', fontSize: '10px', fontWeight: '900' }} />
-                            <Area type="monotone" dataKey="close" stroke="#2563eb" strokeWidth={4} fillOpacity={0.1} fill="#2563eb" animationDuration={1000} />
-                         </AreaChart>
-                      </ResponsiveContainer>
-                   </div>
-                 ) : (
-                   <div className="bg-slate-50 p-10 border-l-8 border-blue-600 shadow-inner">
-                      {isAiLoading ? (
-                        <div className="py-20 flex flex-col items-center justify-center gap-6 animate-pulse">
-                           <Sparkles size={50} className="text-blue-600" />
-                           <p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.5em]">THINKING...</p>
-                        </div>
-                      ) : (
-                        <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
-                           <p className="text-[15px] font-bold text-slate-800 leading-relaxed tracking-tight whitespace-pre-wrap">{aiAnalysis}</p>
-                        </div>
-                      )}
-                   </div>
-                 )}
-              </div>
-              <button onClick={() => setActiveModal(null)} className="w-full bg-slate-900 text-white font-black py-7 rounded-none mt-10 uppercase tracking-[0.3em] text-xs hover:bg-blue-600 transition-all shadow-2xl active:scale-[0.98]">
-                 CLOSE PROJECT
-              </button>
-           </div>
-        </div>
-      )}
+      {/* 3. 하단 고정 내비게이션 (생략 가능하나 구조상 유지) */}
+      {/* ... */}
     </div>
   );
 }
