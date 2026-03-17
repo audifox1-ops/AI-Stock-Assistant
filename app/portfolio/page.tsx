@@ -56,15 +56,16 @@ export default function PortfolioPage() {
       if (data.success && Array.isArray(data.data)) {
         const rtData = data.data; // [{ ticker, price, changeRate, volume }, ...]
         
-        // 데이터 병합(Merge) 로직: 티커 일치 여부 확인 고도화
+        // 데이터 병합(Merge) 로직: 0원이 평단가로 둔갑하는 버그 수정
         const merged = currentHoldings.map(local => {
           const rt = rtData.find((r: any) => r.ticker === local.itemCode);
           if (rt) {
             return {
               ...local,
-              currentPrice: rt.price || local.currentPrice || local.avgPrice || 0,
-              changeRate: rt.changeRate !== undefined ? rt.changeRate : (local.changeRate || 0),
-              volume: rt.volume || local.volume || 0
+              // 실시간 시세가 0보다 클 때만 업데이트, 아니면 기존값 또는 평단가 유지
+              currentPrice: rt.price > 0 ? rt.price : (local.currentPrice || local.avgPrice || 0),
+              changeRate: rt.price > 0 ? rt.changeRate : (local.changeRate || 0),
+              volume: rt.price > 0 ? rt.volume : (local.volume || 0)
             };
           }
           return local;

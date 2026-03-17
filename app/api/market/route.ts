@@ -49,28 +49,27 @@ async function fetchIndexData(type: 'KOSPI' | 'KOSDAQ') {
 }
 
 /**
- * 네이버 모바일 API 개별 종목 시세 조회
+ * 네이버 모바일 API 개별 종목 시세 조회 (basic 엔드포인트로 변경하여 안정성 확보)
  */
 async function fetchStockDetail(ticker: string) {
   try {
-    // integration API는 많은 정보를 포함하므로 시세 데이터 확보에 유리
-    const res = await fetch(`https://m.stock.naver.com/api/stock/${ticker}/integration`, {
+    const res = await fetch(`https://m.stock.naver.com/api/stock/${ticker}/basic`, {
       headers: NAVER_HEADERS,
       next: { revalidate: 0 }
     });
     const data = await res.json();
-    const stock = data.totalInfos?.[0] || {};
     
+    // basic 응답 구조에 맞게 직접 매핑
     return {
       ticker: ticker,
-      price: parseNumber(stock.currentPrice || stock.closePrice),
-      changeRate: parseFloat(stock.fluctuationsRatio || '0.00'),
-      volume: parseNumber(stock.accumulatedTradingVolume),
-      status: parseFloat(stock.fluctuationsRatio || '0') > 0 ? 'UP' : (parseFloat(stock.fluctuationsRatio || '0') < 0 ? 'DOWN' : 'SAME')
+      price: parseNumber(data.closePrice || '0'),
+      changeRate: parseFloat(data.fluctuationsRatio || '0.00'),
+      volume: parseNumber(data.accumulatedTradingVolume || '0'),
+      status: parseFloat(data.fluctuationsRatio || '0') > 0 ? 'UP' : (parseFloat(data.fluctuationsRatio || '0') < 0 ? 'DOWN' : 'SAME')
     };
   } catch (e) {
     console.error(`Naver Stock Fetch Error (${ticker}):`, e);
-    // 롤백 요청에 따라 가짜 데이터(50000원 등)를 사용하지 않고 0을 리턴
+    // 에러 시 0을 반환하여 프론트엔드에서 방어 로직이 작동하도록 함
     return { ticker, price: 0, changeRate: 0, volume: 0, status: 'SAME' };
   }
 }

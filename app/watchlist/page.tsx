@@ -39,15 +39,16 @@ export default function WatchlistPage() {
       if (data.success && Array.isArray(data.data)) {
         const rtData = data.data; // [{ ticker, price, changeRate, volume }, ...]
         
-        // 데이터 병합(Merge) 로직: 서버 데이터가 없어도 로컬 데이터 보존
+        // 데이터 병합(Merge) 로직: 0원이 평단가로 둔갑하는 버그 수정
         const merged = currentItems.map(local => {
           const rt = rtData.find((r: any) => r.ticker === local.itemCode);
           if (rt) {
             return {
               ...local,
-              closePrice: rt.price || local.closePrice || 0,
-              fluctuationsRatio: rt.changeRate !== undefined ? rt.changeRate : (local.fluctuationsRatio || '0.00'),
-              volume: rt.volume || local.volume || 0
+              // 실시간 시세가 0보다 클 때만 업데이트, 아니면 로컬 데이터 유지
+              closePrice: rt.price > 0 ? rt.price : (local.closePrice || 0),
+              fluctuationsRatio: rt.price > 0 ? rt.changeRate : (local.fluctuationsRatio || '0.00'),
+              volume: rt.price > 0 ? rt.volume : (local.volume || 0)
             };
           }
           return local;
