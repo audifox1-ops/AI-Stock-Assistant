@@ -33,11 +33,9 @@ interface StockItem {
 }
 
 export default function Home() {
-  // [22차] 실전 매매 최적화 탭 구성
   const tabs = ['KOSPI 시총상위', 'KOSDAQ 시총상위', '거래량상위', '외국인매매', '기관매매', '시가총액'];
   const [activeTab, setActiveTab] = useState(tabs[0]);
   const [stocks, setStocks] = useState<StockItem[]>([]);
-  const [indices, setIndices] = useState<GlobalIndex[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
@@ -82,7 +80,6 @@ export default function Home() {
     setIsBottomSheetOpen(true);
   };
 
-  // 차트 데이터 페칭 함수 분리
   const fetchChartData = async (ticker: string, period: string) => {
     setIsChartLoading(true);
     try {
@@ -95,7 +92,6 @@ export default function Home() {
       }
     } catch (e) {
       console.error('Chart Load Error:', e);
-      // fallback mock data
       setChartData([
         { date: '01', close: 50000 },
         { date: '02', close: 51200 },
@@ -107,16 +103,14 @@ export default function Home() {
     }
   };
 
-  // 모달 오픈 시 차트 데이터 초기 페칭
   const openChart = async () => {
     if (!selectedStock) return;
     setIsBottomSheetOpen(false);
     setActiveModal('chart');
-    setChartPeriod('day'); // 기본값 일봉
+    setChartPeriod('day');
     fetchChartData(selectedStock.itemCode, 'day');
   };
 
-  // 기간 변경 시 데이터 리로드
   useEffect(() => {
     if (activeModal === 'chart' && selectedStock) {
       fetchChartData(selectedStock.itemCode, chartPeriod);
@@ -149,10 +143,10 @@ export default function Home() {
   };
 
   return (
-    <div className="w-full bg-slate-50 min-h-screen pb-32 font-sans selection:bg-blue-100 selection:text-blue-900">
-      {/* 고정 영역: 헤더 + 탭 */}
-      <div className="fixed top-0 left-0 right-0 z-50 bg-white border-b border-gray-100 max-w-[430px] mx-auto">
-        <header className="px-6 py-8 flex justify-between items-center bg-white">
+    <div className="w-full bg-slate-50 min-h-screen pb-32 font-sans selection:bg-blue-100 selection:text-blue-900 overflow-x-hidden">
+      {/* 고정 영역: 헤더 + 탭 (그림자 및 z-index 강화) */}
+      <div className="fixed top-0 left-0 right-0 z-[100] bg-white border-b border-gray-100 max-w-[430px] mx-auto shadow-sm">
+        <header className="px-6 py-6 flex justify-between items-center bg-white">
           <div>
             <h1 className="text-2xl font-black text-slate-900 tracking-tighter uppercase italic">AI STOCK</h1>
             <p className="text-[10px] font-bold text-blue-500 uppercase tracking-widest mt-1">실시간 스마트 랭킹 30</p>
@@ -167,20 +161,20 @@ export default function Home() {
           </div>
         </header>
 
-        {/* 탭 네비게이션 - [23차] 가독성 개선 가이드라인 적용 */}
-        <div className="overflow-x-auto whitespace-nowrap hide-scrollbar py-2 px-1 bg-white border-t border-gray-50">
-          <div className="flex gap-4 px-6 min-w-max">
+        {/* 탭 네비게이션 */}
+        <div className="overflow-x-auto whitespace-nowrap hide-scrollbar py-1 px-1 bg-white border-t border-gray-50">
+          <div className="flex gap-2 px-4 min-w-max">
             {tabs.map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`py-5 px-5 text-sm md:text-base uppercase tracking-widest transition-all relative ${
-                  activeTab === tab ? 'text-blue-600 font-bold' : 'text-slate-400 hover:text-slate-600 font-medium'
+                className={`py-4 px-4 text-xs uppercase tracking-widest transition-all relative ${
+                  activeTab === tab ? 'text-blue-600 font-black' : 'text-slate-400 hover:text-slate-600 font-bold'
                 }`}
               >
                 {tab}
                 {activeTab === tab && (
-                  <div className="absolute bottom-0 left-0 right-0 h-1 bg-blue-600 animate-in fade-in slide-in-from-bottom-1" />
+                  <div className="absolute bottom-0 left-0 right-0 h-1 bg-blue-600" />
                 )}
               </button>
             ))}
@@ -188,8 +182,9 @@ export default function Home() {
         </div>
       </div>
 
-      {/* 메인 리스트 - 여백 추가를 통한 겹침 해결 (헤더+탭 높이 고려) */}
-      <main className="px-6 pt-[220px]">
+      {/* 메인 리스트: 1위 종목 가려짐 현상을 해결하기 위한 정확한 상단 여백 설정 */}
+      {/* 고정 헤더(약 88px) + 탭 영역(약 60px) 고려하여 pt-[160px] 및 mt-6 적용 */}
+      <main className="px-6 pt-[168px] mt-4">
         {/* 리스트 컨트롤 */}
         <div className="flex justify-between items-center mb-6">
           <div className="flex items-center gap-2">
@@ -221,7 +216,8 @@ export default function Home() {
         ) : (
           <div className={viewMode === 'list' ? 'space-y-4' : 'grid grid-cols-2 gap-4'}>
             {stocks.map((stock, idx) => {
-              const isPlus = parseFloat(stock.fluctuationsRatio) > 0;
+              const changeVal = parseFloat(stock.fluctuationsRatio);
+              const isPlus = changeVal > 0;
               const isInvestorTab = activeTab === '외국인매매' || activeTab === '기관매매';
               
               return (
@@ -237,13 +233,13 @@ export default function Home() {
                       <span className="text-[11px] font-black text-slate-400 tabular-nums">{(idx + 1).toString().padStart(2, '0')}</span>
                     </div>
                     <div>
-                      <h4 className="text-[17px] font-black text-slate-900 tracking-tighter uppercase truncate max-w-[120px]">
+                      <h4 className="text-[16px] font-black text-slate-900 tracking-tighter uppercase truncate max-w-[120px]">
                         {stock.stockName}
                       </h4>
                       <div className="flex items-center gap-2 mt-0.5">
-                        <span className="text-[10px] font-bold text-slate-300 tracking-widest uppercase">{stock.itemCode}</span>
+                        <span className="text-[9px] font-bold text-slate-300 tracking-widest uppercase">{stock.itemCode}</span>
                         {isInvestorTab && (
-                          <span className="text-[9px] font-black text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded-none border border-blue-100 uppercase">수급집계</span>
+                          <span className="text-[8px] font-black text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded-none border border-blue-100 uppercase">수급집계</span>
                         )}
                       </div>
                     </div>
@@ -254,8 +250,8 @@ export default function Home() {
                       {stock.closePrice}원
                     </p>
                     <div className="flex items-center justify-end gap-3 mt-2">
-                       <span className="text-[10px] font-bold text-slate-300 uppercase tabular-nums">
-                        {isInvestorTab ? `순매수 ${stock.netBuyValue}` : `거래 ${stock.volume?.toLocaleString()}주`}
+                       <span className="text-[9px] font-bold text-slate-300 uppercase tabular-nums">
+                        {isInvestorTab ? `${stock.netBuyValue}` : `거래 ${stock.volume?.toLocaleString()}`}
                       </span>
                       <span className={`text-[11px] font-black flex items-center gap-0.5 ${isPlus ? 'text-red-500' : 'text-blue-500'}`}>
                         {isPlus ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
@@ -323,24 +319,15 @@ export default function Home() {
 
               {activeModal === 'chart' && (
                 <div className="flex mb-6 bg-slate-100 p-1 border border-slate-200">
-                  <button 
-                    onClick={() => setChartPeriod('day')}
-                    className={`flex-1 py-3 text-xs font-black uppercase tracking-widest transition-all ${chartPeriod === 'day' ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-200'}`}
-                  >
-                    일봉
-                  </button>
-                  <button 
-                    onClick={() => setChartPeriod('week')}
-                    className={`flex-1 py-3 text-xs font-black uppercase tracking-widest transition-all ${chartPeriod === 'week' ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-200'}`}
-                  >
-                    주봉
-                  </button>
-                  <button 
-                    onClick={() => setChartPeriod('month')}
-                    className={`flex-1 py-3 text-xs font-black uppercase tracking-widest transition-all ${chartPeriod === 'month' ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-200'}`}
-                  >
-                    월봉
-                  </button>
+                  {['day', 'week', 'month'].map((p) => (
+                    <button 
+                      key={p}
+                      onClick={() => setChartPeriod(p as any)}
+                      className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest transition-all ${chartPeriod === p ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-200'}`}
+                    >
+                      {p === 'day' ? '일봉' : p === 'week' ? '주봉' : '월봉'}
+                    </button>
+                  ))}
                 </div>
               )}
 
@@ -362,18 +349,9 @@ export default function Home() {
                                  </linearGradient>
                               </defs>
                               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                              <XAxis 
-                                dataKey="date" 
-                                hide 
-                              />
-                              <YAxis 
-                                domain={['auto', 'auto']} 
-                                hide 
-                              />
-                              <Tooltip 
-                                contentStyle={{ backgroundColor: '#fff', borderRadius: '0', border: '1px solid #e2e8f0', fontSize: '12px', fontWeight: 'bold' }}
-                                labelFormatter={(label) => `날짜: ${label}`}
-                              />
+                              <XAxis dataKey="date" hide />
+                              <YAxis domain={['auto', 'auto']} hide />
+                              <Tooltip contentStyle={{ backgroundColor: '#fff', borderRadius: '0', border: '1px solid #e2e8f0', fontSize: '12px', fontWeight: 'bold' }} />
                               <Area type="monotone" dataKey="close" stroke="#2563eb" strokeWidth={3} fill="url(#colorPrice)" animationDuration={500} />
                            </AreaChart>
                         </ResponsiveContainer>
@@ -397,10 +375,7 @@ export default function Home() {
                    </div>
                  )}
               </div>
-              <button 
-                onClick={() => setActiveModal(null)} 
-                className="w-full bg-slate-900 text-white font-black py-6 rounded-none mt-10 uppercase tracking-widest text-xs hover:bg-blue-600 transition-all shadow-none font-sans"
-              >
+              <button onClick={() => setActiveModal(null)} className="w-full bg-slate-900 text-white font-black py-6 rounded-none mt-10 uppercase tracking-widest text-xs hover:bg-blue-600 transition-all shadow-none">
                  확인 및 종료
               </button>
            </div>

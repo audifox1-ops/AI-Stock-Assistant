@@ -4,7 +4,6 @@ const nextConfig = {
   compiler: {
     removeConsole: process.env.NODE_ENV === 'production' ? { exclude: ['error'] } : false,
   },
-  // API 및 이미지 관련 추가 설정이 필요한 경우 여기에 작성
 };
 
 export default nextConfig;
