@@ -7,11 +7,23 @@ const ALLOWED_ORIGINS = [
   'https://ai-stock-assistant-nine.vercel.app'
 ];
 
-const REQUEST_HEADERS = {
-  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+/**
+ * 429 차단 우회를 위한 동적 User-Agent 풀
+ */
+const USER_AGENTS = [
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0'
+];
+
+const getHeaders = () => ({
+  'User-Agent': USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)],
   'Referer': 'https://m.stock.naver.com/',
-  'Accept': 'application/json, text/plain, */*'
-};
+  'Accept': 'application/json, text/plain, */*',
+  'Origin': 'https://m.stock.naver.com'
+});
 
 /**
  * 네이버 API 데이터 파싱 헬퍼 (단위 및 특수문자 정밀 정제)
@@ -27,10 +39,10 @@ const cleanNumber = (val: any): number => {
     const parts = str.split('조');
     const jo = parseFloat(parts[0] || '0');
     const eok = parts[1] ? parseFloat(parts[1].replace(/억/g, '') || '0') : 0;
-    return (jo * 10000) + eok; // 억 단위로 변환 반환 (시총용)
+    return (jo * 10000) + eok; 
   }
   
-  // 단순 숫자 추출 (배, %, 억 등 제거)
+  // 단순 숫자 추출
   const match = str.match(/[-?0-9.]+/);
   if (match) {
     return parseFloat(match[0]);
@@ -45,7 +57,10 @@ const cleanNumber = (val: any): number => {
 async function fetchIndexData(type: 'KOSPI' | 'KOSDAQ') {
   try {
     const url = `https://polling.finance.naver.com/api/realtime?query=SERVICE_INDEX:${type}`;
-    const res = await fetch(url, { headers: REQUEST_HEADERS, next: { revalidate: 0 } });
+    const res = await fetch(url, { headers: getHeaders(), next: { revalidate: 0 } });
+    
+    if (res.status === 429) throw new Error('RATE_LIMIT');
+
     const data = await res.json();
     const item = data?.result?.areas?.[0]?.datas?.[0];
 
@@ -56,9 +71,9 @@ async function fetchIndexData(type: 'KOSPI' | 'KOSDAQ') {
       changeRate: item?.cr ? item.cr.toString() : '0.00',
       status: Number(item?.cr || 0) > 0 ? 'UP' : (Number(item?.cr || 0) < 0 ? 'DOWN' : 'SAME')
     };
-  } catch (e) {
-    console.error(`Index Polling Error (${type}):`, e);
-    return { name: type === 'KOSPI' ? '코스피' : '코스닥', value: '-', change: '0', changeRate: '0.00', status: 'SAME' };
+  } catch (e: any) {
+    console.error(`Index Polling Error (${type}):`, e.message);
+    return { name: type === 'KOSPI' ? '코스피' : '코스닥', value: '-', change: '0', changeRate: '0.00', status: 'SAME', error: e.message === 'RATE_LIMIT' ? '429' : null };
   }
 }
 
@@ -68,7 +83,10 @@ async function fetchIndexData(type: 'KOSPI' | 'KOSDAQ') {
 async function fetchStockDetail(ticker: string) {
   try {
     const url = `https://polling.finance.naver.com/api/realtime?query=SERVICE_ITEM:${ticker}`;
-    const res = await fetch(url, { headers: REQUEST_HEADERS, next: { revalidate: 0 } });
+    const res = await fetch(url, { headers: getHeaders(), next: { revalidate: 0 } });
+    
+    if (res.status === 429) throw new Error('RATE_LIMIT');
+
     const data = await res.json();
     const item = data?.result?.areas?.[0]?.datas?.[0];
 
@@ -79,19 +97,22 @@ async function fetchStockDetail(ticker: string) {
       volume: item?.aq ? Number(item.aq) : 0,
       status: Number(item?.cr || 0) > 0 ? 'UP' : (Number(item?.cr || 0) < 0 ? 'DOWN' : 'SAME')
     };
-  } catch (e) {
-    console.error(`Stock Polling Error (${ticker}):`, e);
-    return { ticker: ticker.trim(), price: 0, changeRate: 0, volume: 0, status: 'SAME' };
+  } catch (e: any) {
+    console.error(`Stock Polling Error (${ticker}):`, e.message);
+    return { ticker: ticker.trim(), price: 0, changeRate: 0, volume: 0, status: 'SAME', error: e.message === 'RATE_LIMIT' ? '429' : null };
   }
 }
 
 /**
- * 네이버 Integration API 종목 상세 정보 조회 (배열 순회 방식으로 필드 매핑 보완)
+ * 네이버 Integration API 종목 상세 정보 조회
  */
 async function fetchStockIntegration(ticker: string) {
   try {
     const url = `https://m.stock.naver.com/api/stock/${ticker}/integration`;
-    const res = await fetch(url, { headers: REQUEST_HEADERS, next: { revalidate: 0 } });
+    const res = await fetch(url, { headers: getHeaders(), next: { revalidate: 0 } });
+    
+    if (res.status === 429) throw new Error('RATE_LIMIT');
+
     const data = await res.json();
     
     const totalInfos = data?.totalInfos || [];
@@ -103,19 +124,14 @@ async function fetchStockIntegration(ticker: string) {
       return found ? found.value : null;
     };
 
-    // 현재가 (dealTrendInfos[0].closePrice가 가장 정확)
     const currentPrice = cleanNumber(dealTrendInfo.closePrice || data.closePrice || data.now);
-    
-    // 시가총액 (totalInfos 배열 내 marketValue) - 억 단위로 변환됨 (cleanNumber 조/억 처리 로직에 의해)
     const marketCap = cleanNumber(findVal('marketValue'));
     
-    // 수치 매핑
     return {
       ticker: ticker,
       stockName: data.stockName || data.itemName || '',
       price: currentPrice,
       changeRate: data.fluctuationsRatio || dealTrendInfo.fluctuationsRatio || '0.00',
-      
       high52w: cleanNumber(findVal('highPriceOf52Weeks')),
       low52w: cleanNumber(findVal('lowPriceOf52Weeks')),
       targetPrice: cleanNumber(consensusInfo.priceTargetMean),
@@ -127,18 +143,18 @@ async function fetchStockIntegration(ticker: string) {
       dividendYield: findVal('dividendYield') || '0.00',
       industryName: data.itemType || ''
     };
-  } catch (e) {
-    console.error(`Integration Error (${ticker}):`, e);
+  } catch (e: any) {
+    console.error(`Integration Error (${ticker}):`, e.message);
     return null;
   }
 }
 
 /**
- * 네이버 모바일 API 랭킹 리스트 조회 (구조적 계층 및 필드명 보정)
+ * 네이버 모바일 API 랭킹 리스트 조회 (홈 화면 복구)
  */
 async function fetchRankingList(type: string) {
   let url = '';
-  let dataPath = 'stocks'; // 기본
+  let dataPath = 'stocks'; 
   let itemNameKey = 'stockName';
 
   switch (type) {
@@ -168,10 +184,11 @@ async function fetchRankingList(type: string) {
   }
 
   try {
-    const res = await fetch(url, { headers: REQUEST_HEADERS, next: { revalidate: 0 } });
+    const res = await fetch(url, { headers: getHeaders(), next: { revalidate: 0 } });
+    if (res.status === 429) throw new Error('RATE_LIMIT');
+
     const json = await res.json();
     
-    // 데이터 경로 접근
     let stocks = [];
     if (dataPath === 'stocks') {
       stocks = json.stocks || [];
@@ -187,8 +204,8 @@ async function fetchRankingList(type: string) {
       volume: cleanNumber(s.accumulatedTradingVolume || s.volume),
       fluctuationType: s.fluctuationType || 'STABLE'
     }));
-  } catch (e) {
-    console.error(`Ranking Fetch Error (${type}):`, e);
+  } catch (e: any) {
+    console.error(`Ranking Fetch Error (${type}):`, e.message);
     return [];
   }
 }
@@ -200,23 +217,26 @@ export async function GET(request: Request) {
   const ticker = searchParams.get('ticker');
   const query = searchParams.get('q');
 
-  // 1. 지수 데이터
-  if (type === 'index') {
-    const indices = await Promise.all([fetchIndexData('KOSPI'), fetchIndexData('KOSDAQ')]);
-    return NextResponse.json({ success: true, data: indices });
-  }
+  try {
+    // 1. 지수 데이터
+    if (type === 'index') {
+      const indices = await Promise.all([fetchIndexData('KOSPI'), fetchIndexData('KOSDAQ')]);
+      const hasLimit = indices.some((i: any) => i.error === '429');
+      return NextResponse.json({ success: !hasLimit, data: indices, error: hasLimit ? 'RATE_LIMIT' : null });
+    }
 
-  // 2. 종목 상세 지표
-  if (type === 'detail' && ticker) {
-    const detail = await fetchStockIntegration(ticker);
-    return NextResponse.json({ success: true, data: detail });
-  }
+    // 2. 종목 상세 지표
+    if (type === 'detail' && ticker) {
+      const detail = await fetchStockIntegration(ticker);
+      return NextResponse.json({ success: !!detail, data: detail });
+    }
 
-  // 3. 종목 검색
-  if (query) {
-    try {
+    // 3. 종목 검색
+    if (query) {
       const url = `https://ac.stock.naver.com/ac?q=${encodeURIComponent(query)}&target=stock`;
-      const res = await fetch(url, { headers: REQUEST_HEADERS, next: { revalidate: 0 } });
+      const res = await fetch(url, { headers: getHeaders(), next: { revalidate: 0 } });
+      if (res.status === 429) return NextResponse.json({ success: false, error: 'RATE_LIMIT' });
+      
       const data = await res.json();
       const items = data?.items?.[0] || [];
       const results = items.map((item: any) => ({
@@ -224,25 +244,27 @@ export async function GET(request: Request) {
         code: item[0][1]
       }));
       return NextResponse.json({ success: true, data: results });
-    } catch (e) {
-      return NextResponse.json({ success: false, data: [] });
     }
-  }
 
-  // 4. 랭킹 리스트
-  if (type && !tickersParam && !ticker) {
-    const ranks = await fetchRankingList(type);
-    return NextResponse.json({ success: true, data: ranks });
-  }
+    // 4. 랭킹 리스트 (홈 화면 데이터)
+    if (type && !tickersParam && !ticker) {
+      const ranks = await fetchRankingList(type);
+      return NextResponse.json({ success: ranks.length > 0, data: ranks, error: ranks.length === 0 ? 'EMPTY_OR_LIMIT' : null });
+    }
 
-  // 5. 다중 종목 실시간 시세
-  if (tickersParam) {
-    const tickers = tickersParam.split(',').filter(t => t.trim() !== '');
-    const details = await Promise.all(tickers.map(t => fetchStockDetail(t.trim())));
-    return NextResponse.json({ success: true, data: details });
-  }
+    // 5. 다중 종목 실시간 시세 (관심종목용)
+    if (tickersParam) {
+      const tickers = tickersParam.split(',').filter(t => t.trim() !== '');
+      const details = await Promise.all(tickers.map(t => fetchStockDetail(t.trim())));
+      const hasLimit = details.some((d: any) => d.error === '429');
+      return NextResponse.json({ success: !hasLimit, data: details, error: hasLimit ? 'RATE_LIMIT' : null });
+    }
 
-  return NextResponse.json({ success: false, error: 'Invalid parameters' }, { status: 400 });
+    return NextResponse.json({ success: false, error: 'Invalid parameters' }, { status: 400 });
+  } catch (err: any) {
+    console.error('Critical API Route Error:', err);
+    return NextResponse.json({ success: false, error: 'INTERNAL_ERROR' }, { status: 500 });
+  }
 }
 
 export async function OPTIONS() {

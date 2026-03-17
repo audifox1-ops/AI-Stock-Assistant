@@ -127,7 +127,7 @@ export default function WatchlistPage() {
     }
   };
 
-  // 초기화 및 실시간 동기화 타이머 설정 (10초 주기)
+  // 초기화 및 실시간 동기화 타이머 설정 (60초 주기로 변경하여 429 방어)
   useEffect(() => {
     initializeWatchlist();
 
@@ -139,7 +139,7 @@ export default function WatchlistPage() {
         }
         return current;
       });
-    }, 10000);
+    }, 60000); // 60초 주기
 
     return () => {
       if (syncTimerRef.current) clearInterval(syncTimerRef.current);
@@ -208,7 +208,7 @@ export default function WatchlistPage() {
   };
 
   /**
-   * 수동 직접 추가 (Ticker:Name)
+   * 수동 직접 추가 (Ticker:Name) - 6자리 숫자 정규식 검증 강화
    */
   const handleManualAdd = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -219,6 +219,13 @@ export default function WatchlistPage() {
     const name = parts[1] ? parts[1].trim() : '직접입력';
 
     if (!ticker) return;
+
+    // [검증 절대 규칙]: 6자리 숫자 형태여야 함
+    const tickerRegex = /^\d{6}$/;
+    if (!tickerRegex.test(ticker)) {
+      alert('정확한 6자리 종목코드를 입력하거나, 아래 검색 자동완성 결과를 클릭해주세요.');
+      return;
+    }
 
     if (watchlist.some(item => String(item.ticker || item.itemCode || '').trim() === ticker)) {
       alert('이미 등록된 종목입니다.');
@@ -281,7 +288,7 @@ export default function WatchlistPage() {
             <Star size={14} className="text-blue-400" /> Watchlist Portfolio
           </div>
           <div className="flex items-center gap-2 px-5 py-3 bg-white text-slate-400 text-[11px] font-black uppercase tracking-widest whitespace-nowrap border border-slate-100 italic rounded-lg">
-            Live Updates Every 10s
+            Live Updates Every 60s
           </div>
         </div>
       </header>
