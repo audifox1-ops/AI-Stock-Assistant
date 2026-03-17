@@ -11,7 +11,7 @@ export const dynamic = 'force-dynamic';
 const WATCHLIST_STORAGE_KEY = 'myWatchlist';
 
 interface WatchlistItem {
-  itemCode: string;
+  itemCode: string; // Ticker
   stockName: string;
   closePrice?: number;
   fluctuationsRatio?: string | number;
@@ -32,26 +32,41 @@ export default function WatchlistPage() {
   // 수급 레이더 알림 상태
   const [radarStocks, setRadarStocks] = useState<string[]>([]);
 
+  /**
+   * 실시간 시세 동기화 (티커 강제 매칭 로직 강화)
+   */
   const fetchRealtimePrices = async (currentItems: WatchlistItem[]) => {
-    if (!currentItems || currentItems.length === 0) return;
+    if (!currentItems || currentItems.length === 0) {
+      setIsSyncing(false);
+      return;
+    }
     setIsSyncing(true);
-    const codes = currentItems.map(item => String(item.itemCode).trim()).join(',');
+    
+    const codes = currentItems.map(item => String(item.itemCode).trim()).filter(c => c !== '').join(',');
+    if (!codes) {
+      setIsSyncing(false);
+      return;
+    }
+
     try {
       const res = await fetch(`/api/market?tickers=${codes}`);
       const data = await res.json();
       
       if (data.success && Array.isArray(data.data)) {
-        const rtData = data.data;
+        const rtData = data.data; // [{ticker, price, changeRate, volume, status}, ...]
         
-        // 데이터 병합(Merge) 로직 강화: 'String().trim() 형변환 및 강제 매칭' 적용
+        // 데이터 병합: String().trim() 강제 매칭 적용
         const merged = currentItems.map(local => {
-          const rt = rtData.find((r: any) => String(r.ticker).trim() === String(local.itemCode).trim());
-          if (rt && rt.price > 0) {
+          const rt = rtData.find((r: any) => 
+            String(r.ticker).trim() === String(local.itemCode).trim()
+          );
+          
+          if (rt) {
             return {
               ...local,
-              closePrice: Number(rt.price),
-              fluctuationsRatio: rt.changeRate !== undefined ? Number(rt.changeRate) : (local.fluctuationsRatio || 0),
-              volume: rt.volume !== undefined ? Number(rt.volume) : (local.volume || 0)
+              closePrice: rt.price !== undefined ? Number(rt.price) : local.closePrice,
+              fluctuationsRatio: rt.changeRate !== undefined ? String(rt.changeRate) : local.fluctuationsRatio,
+              volume: rt.volume !== undefined ? Number(rt.volume) : local.volume
             };
           }
           return local;
@@ -67,6 +82,9 @@ export default function WatchlistPage() {
     }
   };
 
+  /**
+   * 수급 레이더 체크
+   */
   const checkSupplyRadar = async (items: WatchlistItem[]) => {
     if (!items || items.length === 0) return;
     try {
@@ -81,25 +99,34 @@ export default function WatchlistPage() {
         setRadarStocks(data.radarStocks);
       }
     } catch (e) {
-      console.error(e);
+      console.error('Supply Radar Error:', e);
     }
   };
 
+  /**
+   * 저장된 관심종목 로드 및 초기 동기화
+   */
   const loadWatchlist = async () => {
+    setIsLoading(true);
     try {
       const saved = localStorage.getItem(WATCHLIST_STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
+        if (Array.isArray(parsed) && parsed.length > 0) {
           setWatchlist(parsed);
-          await Promise.all([
+          // 실시간 시세 및 수급 레이더 동시 실행
+          await Promise.allSettled([
             fetchRealtimePrices(parsed),
             checkSupplyRadar(parsed)
           ]);
+        } else {
+          setWatchlist([]);
         }
+      } else {
+        setWatchlist([]);
       }
     } catch (e) {
-      console.error(e);
+      console.error('Load Watchlist Error:', e);
       setWatchlist([]);
     } finally {
       setIsLoading(false);
@@ -110,7 +137,9 @@ export default function WatchlistPage() {
     loadWatchlist();
   }, []);
 
-  // 종목 검색 디바운싱
+  /**
+   * 종목 검색 (디바운싱 적용)
+   */
   useEffect(() => {
     const timer = setTimeout(async () => {
       if (searchQuery.length >= 2) {
@@ -122,7 +151,7 @@ export default function WatchlistPage() {
             setSearchResults(data.data);
           }
         } catch (e) {
-          console.error(e);
+          console.error('Search Error:', e);
         } finally {
           setIsSearching(false);
         }
@@ -133,15 +162,20 @@ export default function WatchlistPage() {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
+  /**
+   * 종목 추가
+   */
   const addStockFromSearch = async (item: any) => {
-    const currentList = Array.isArray(watchlist) ? watchlist : [];
-    if (currentList.some(w => String(w.itemCode).trim() === String(item.code).trim())) {
+    const currentList = Array.isArray(watchlist) ? [...watchlist] : [];
+    const ticker = String(item.code).trim();
+    
+    if (currentList.some(w => String(w.itemCode).trim() === ticker)) {
       alert('이미 등록된 종목입니다.');
       return;
     }
 
     const newItem: WatchlistItem = {
-      itemCode: item.code,
+      itemCode: ticker,
       stockName: item.name
     };
 
@@ -159,20 +193,19 @@ export default function WatchlistPage() {
     e.preventDefault();
     if (!searchQuery) return;
 
-    // "티커:종목명" 또는 "티커" 직접 입력 처리
     const parts = searchQuery.split(':');
-    const code = parts[0].trim();
-    const name = parts[1] ? parts[1].trim() : '신규종목';
+    const ticker = parts[0].trim();
+    const name = parts[1] ? parts[1].trim() : '직접입력';
 
-    if (!code) return;
+    if (!ticker) return;
 
     const newItem: WatchlistItem = {
-      itemCode: code,
+      itemCode: ticker,
       stockName: name
     };
 
-    const currentList = Array.isArray(watchlist) ? watchlist : [];
-    if (currentList.some(item => String(item.itemCode).trim() === String(newItem.itemCode).trim())) {
+    const currentList = Array.isArray(watchlist) ? [...watchlist] : [];
+    if (currentList.some(item => String(item.itemCode).trim() === ticker)) {
       alert('이미 등록된 종목입니다.');
       return;
     }
@@ -186,8 +219,11 @@ export default function WatchlistPage() {
     await fetchRealtimePrices(updated);
   };
 
+  /**
+   * 종목 제거
+   */
   const removeItem = (itemCode: string) => {
-    const currentList = Array.isArray(watchlist) ? watchlist : [];
+    const currentList = Array.isArray(watchlist) ? [...watchlist] : [];
     const updated = currentList.filter(item => String(item.itemCode).trim() !== String(itemCode).trim());
     setWatchlist(updated);
     localStorage.setItem(WATCHLIST_STORAGE_KEY, JSON.stringify(updated));
@@ -244,7 +280,7 @@ export default function WatchlistPage() {
         </div>
       )}
 
-      <main className="px-6 mt-8 space-y-4">
+      <main className="px-6 mt-8 space-y-4 font-sans">
         {isLoading ? (
           <div className="py-20 flex flex-col items-center justify-center gap-6">
             <Loader2 className="animate-spin text-slate-200" size={40} />
@@ -254,16 +290,16 @@ export default function WatchlistPage() {
           <div className="bg-white border-2 border-dashed border-slate-200 p-20 text-center flex flex-col items-center gap-6">
             <AlertCircle size={32} className="text-slate-100" />
             <div>
-               <p className="text-xs font-black text-slate-300 uppercase tracking-widest">와치리스트가 비어있습니다</p>
+               <p className="text-xs font-black text-slate-300 uppercase tracking-widest">관심종목이 비어있습니다</p>
             </div>
           </div>
         ) : (
-          (watchlist || []).map((item, idx) => {
+          watchlist.map((item, idx) => {
             const isRadar = (radarStocks || []).includes(item.stockName);
             const currentPrice = (item.closePrice && item.closePrice > 0) ? item.closePrice : 0;
-            const changeRate = item.fluctuationsRatio || 0;
-            const isPlus = Number(changeRate) > 0;
-            const isMinus = Number(changeRate) < 0;
+            const changeRate = item.fluctuationsRatio || '0.00';
+            const isPlus = parseFloat(String(changeRate)) > 0;
+            const isMinus = parseFloat(String(changeRate)) < 0;
 
             return (
               <div key={`${item.itemCode}-${idx}`} className={`bg-white border rounded-none group transition-all duration-300 ${isRadar ? 'border-red-500 shadow-lg' : 'border-slate-100 hover:border-blue-200 shadow-sm'}`}>
@@ -309,7 +345,7 @@ export default function WatchlistPage() {
         )}
       </main>
 
-      {/* 관심종목 추가 모달 - 검색 연동 및 가독성 최적화 */}
+      {/* 관심종목 추가 모달 */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center p-6 bg-slate-950/80 backdrop-blur-md">
           <div className="absolute inset-0" onClick={() => setIsAddModalOpen(false)}></div>
@@ -329,7 +365,7 @@ export default function WatchlistPage() {
                     <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300" size={20} />
                     <input 
                       type="text" 
-                      placeholder="삼성전자, SK하이닉스 등 입력"
+                      placeholder="종목명 또는 심볼 입력"
                       className="w-full bg-white text-slate-900 border-2 border-slate-200 p-6 pl-14 rounded-none font-black outline-none focus:border-blue-500 placeholder:text-slate-400 transition-all text-sm uppercase tracking-widest"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
@@ -354,10 +390,10 @@ export default function WatchlistPage() {
                </div>
 
                <p className="text-[9px] font-bold text-slate-400 leading-relaxed italic uppercase opacity-50">
-                  * Tip: You can also enter "Ticker:Name" manually.
+                  * Tip: "Ticker:Name" 형태로 직접 추가도 가능합니다.
                </p>
 
-               <button className="w-full bg-slate-900 text-white font-black py-7 rounded-none uppercase tracking-[0.3em] text-xs hover:bg-blue-600 transition-all shadow-xl shadow-blue-100 active:scale-[0.98]">
+               <button className="w-full bg-slate-900 text-white font-black py-7 rounded-none uppercase tracking-[0.3em] text-xs hover:bg-blue-600 transition-all shadow-xl active:scale-[0.98]">
                   Commit Watchlist Node
                </button>
             </form>

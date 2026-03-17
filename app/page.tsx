@@ -36,7 +36,7 @@ interface StockDetail {
   high52w: number;
   low52w: number;
   targetPrice: number;
-  marketCap: number;
+  marketCap: number; // 백엔드에서 억 단위로 전달됨
   per: number;
   pbr: number;
   eps: number;
@@ -137,7 +137,7 @@ export default function HomePage() {
     setAiAnalysis(null);
     setDetailData(null);
     setChartData([]);
-    setSelectedTimeframe('day'); // 리셋
+    setSelectedTimeframe('day'); 
 
     try {
       // 1. 상세 지표 데이터 페칭
@@ -183,7 +183,7 @@ export default function HomePage() {
 
   return (
     <div className="h-screen flex flex-col overflow-hidden bg-slate-50 font-sans">
-      {/* 1. 상단 고정 헤더 영역 (지수 및 탭 메뉴) */}
+      {/* 1. 상단 고정 헤더 영역 */}
       <section className="flex-none bg-white shadow-xl z-50">
         <header className="px-6 py-8 border-b border-gray-100 flex justify-between items-center">
            <div>
@@ -240,7 +240,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* 2. 메인 컨텐츠 영역 (스크롤 리스트) */}
+      {/* 2. 메인 컨텐츠 영역 */}
       <main className="flex-1 overflow-y-auto hide-scrollbar pb-32">
         <div className="px-6 py-6 flex justify-between items-center bg-slate-50 border-b border-slate-100 sticky top-0 z-40 backdrop-blur-md bg-white/50">
            <div>
@@ -261,7 +261,7 @@ export default function HomePage() {
           ) : rankingList.length === 0 ? (
              <div className="bg-white border-2 border-dashed border-slate-200 p-20 text-center flex flex-col items-center gap-5">
                 <AlertCircle size={40} className="text-slate-100" />
-                <p className="text-xs font-black text-slate-300 uppercase tracking-widest leading-relaxed">준비된 데이터가 없습니다.<br/>잠시 후 다시 시도해주세요.</p>
+                <p className="text-xs font-black text-slate-300 uppercase tracking-widest leading-relaxed">데이터를 불러올 수 없습니다.<br/>서버 연결 상태를 확인해주세요.</p>
              </div>
           ) : (
             rankingList.map((stock, idx) => {
@@ -319,7 +319,7 @@ export default function HomePage() {
         </div>
       </main>
 
-      {/* 3. 종목 상세 모달 (캔들 차트 도입 버전) */}
+      {/* 3. 종목 상세 모달 */}
       {isModalOpen && (
         <div className="fixed inset-0 z-[1000] flex items-center justify-center p-6 bg-slate-950/90 backdrop-blur-xl">
           <div className="absolute inset-0" onClick={() => setIsModalOpen(false)}></div>
@@ -366,14 +366,13 @@ export default function HomePage() {
                    </div>
                 </div>
 
-                {/* 차트 영역 및 주기 선택 */}
+                {/* 차트 영역 */}
                 <div className="mb-10 bg-white border border-slate-100 p-6 overflow-hidden">
                    <div className="flex justify-between items-center mb-6">
                       <div className="flex items-center gap-2">
                          <CandlestickChart size={18} className="text-slate-900" />
                          <span className="text-[11px] font-black text-slate-900 uppercase tracking-widest">Professional Chart</span>
                       </div>
-                      {/* 주기 선택 버튼 그룹 */}
                       <div className="flex gap-1 bg-slate-50 p-1">
                          {TIMEFRAMES.map(tf => (
                            <button
@@ -421,9 +420,7 @@ export default function HomePage() {
                    <div className="bg-white p-5 flex flex-col gap-1">
                       <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Market Cap (시총)</span>
                       <span className="text-xs font-black text-slate-900 tracking-tighter">
-                         {detailData.marketCap > 100000000 
-                            ? (detailData.marketCap / 100000000).toLocaleString(undefined, { maximumFractionDigits: 1 }) + '억원'
-                            : detailData.marketCap.toLocaleString() + '원'}
+                         {detailData.marketCap.toLocaleString()} 억원
                       </span>
                    </div>
                    <div className="bg-white p-5 flex flex-col gap-1">
@@ -439,13 +436,13 @@ export default function HomePage() {
                    </div>
                 </div>
 
-                {/* AI 분석 리포트 영역 */}
+                {/* AI 분석 리포트 */}
                 <div className="border-t-4 border-slate-900 pt-10">
                    <div className="flex items-center gap-3 mb-8">
                       <div className="w-10 h-10 bg-blue-600 flex items-center justify-center rounded-none shadow-lg">
                          <Bot size={20} className="text-white" />
                       </div>
-                      <h4 className="text-lg font-black text-slate-900 tracking-tighter uppercase leading-none">🤖 AI 인텔리전스 투자 리포트</h4>
+                      <h4 className="text-lg font-black text-slate-900 tracking-tighter uppercase leading-none">🤖 AI 인텔리전스 투자 리포부</h4>
                    </div>
 
                    <div className="bg-slate-50 p-8 border-l-4 border-blue-600 min-h-[150px] font-sans">
