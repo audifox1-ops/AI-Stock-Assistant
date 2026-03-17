@@ -31,7 +31,7 @@ export default function WatchlistPage() {
   const fetchRealtimePrices = async (currentItems: WatchlistItem[]) => {
     if (!currentItems || currentItems.length === 0) return;
     setIsSyncing(true);
-    const codes = currentItems.map(item => item.itemCode.trim()).join(',');
+    const codes = currentItems.map(item => String(item.itemCode).trim()).join(',');
     try {
       const res = await fetch(`/api/market?tickers=${codes}`);
       const data = await res.json();
@@ -39,15 +39,15 @@ export default function WatchlistPage() {
       if (data.success && Array.isArray(data.data)) {
         const rtData = data.data; // [{ ticker, price, changeRate, volume }, ...]
         
-        // 데이터 병합(Merge) 로직: 티커 공백 제거 매칭 및 강제 업데이트 적용
+        // 데이터 병합(Merge) 로직: '형변환 및 공백 제거' 강제 적용
         const merged = currentItems.map(local => {
-          // r.ticker와 local.itemCode 모두 trim() 처리하여 엄격하게 비교
-          const rt = rtData.find((r: any) => r.ticker.trim() === local.itemCode.trim());
-          if (rt) {
+          // rtData의 ticker와 local의 itemCode를 String()으로 변환 후 trim()하여 엄격하게 매칭
+          const rt = rtData.find((r: any) => String(r.ticker).trim() === String(local.itemCode).trim());
+          if (rt && rt.price > 0) {
             return {
               ...local,
-              // 서버 데이터(rt)가 있다면 무조건 실시간 가격으로 업데이트
-              closePrice: rt.price ? Number(rt.price) : (local.closePrice || 0),
+              // 실시간 가격(rt.price)이 존재하면 로컬 데이터를 무시하고 강제로 업데이트
+              closePrice: Number(rt.price),
               fluctuationsRatio: rt.changeRate !== undefined ? Number(rt.changeRate) : (local.fluctuationsRatio || 0),
               volume: rt.volume !== undefined ? Number(rt.volume) : (local.volume || 0)
             };
@@ -56,6 +56,7 @@ export default function WatchlistPage() {
         });
         
         setWatchlist(merged);
+        // 상태 업데이트 직후 LocalStorage에도 즉시 동기화하여 데이터 유실 방지
         localStorage.setItem(WATCHLIST_STORAGE_KEY, JSON.stringify(merged));
       }
     } catch (e) {
@@ -68,7 +69,7 @@ export default function WatchlistPage() {
   const checkSupplyRadar = async (items: WatchlistItem[]) => {
     if (!items || items.length === 0) return;
     try {
-      const codes = items.map(i => i.itemCode.trim());
+      const codes = items.map(i => String(i.itemCode).trim());
       const res = await fetch('/api/supply-radar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -90,7 +91,7 @@ export default function WatchlistPage() {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
           setWatchlist(parsed);
-          // 데이터 로드 즉시 실시간 시세 동기화 실행
+          // 로드 즉시 시세 동기화 실행
           await Promise.all([
             fetchRealtimePrices(parsed),
             checkSupplyRadar(parsed)
@@ -122,7 +123,7 @@ export default function WatchlistPage() {
     };
 
     const currentList = Array.isArray(watchlist) ? watchlist : [];
-    if (currentList.some(item => item.itemCode.trim() === newItem.itemCode.trim())) {
+    if (currentList.some(item => String(item.itemCode).trim() === String(newItem.itemCode).trim())) {
       alert('이미 등록된 종목입니다.');
       return;
     }
@@ -138,7 +139,7 @@ export default function WatchlistPage() {
 
   const removeItem = (itemCode: string) => {
     const currentList = Array.isArray(watchlist) ? watchlist : [];
-    const updated = currentList.filter(item => item.itemCode.trim() !== itemCode.trim());
+    const updated = currentList.filter(item => String(item.itemCode).trim() !== String(itemCode).trim());
     setWatchlist(updated);
     localStorage.setItem(WATCHLIST_STORAGE_KEY, JSON.stringify(updated));
   };
@@ -213,7 +214,7 @@ export default function WatchlistPage() {
         ) : (
           (watchlist || []).map((item, idx) => {
             const isRadar = (radarStocks || []).includes(item.stockName);
-            // 병합된 실시간 가격을 최우선 출력
+            // 렌더링 시 실시간 현재가(closePrice)가 0보다 크면 무조건 최우선 출력
             const currentPrice = (item.closePrice && item.closePrice > 0) ? item.closePrice : 0;
             const changeRate = item.fluctuationsRatio || 0;
             const isPlus = Number(changeRate) > 0;

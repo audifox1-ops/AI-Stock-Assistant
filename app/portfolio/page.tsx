@@ -48,7 +48,7 @@ export default function PortfolioPage() {
   const fetchRealtimePrices = async (currentHoldings: Holding[]) => {
     if (!currentHoldings || currentHoldings.length === 0) return;
     setIsSyncing(true);
-    const codes = currentHoldings.map(h => h.itemCode.trim()).join(',');
+    const codes = currentHoldings.map(h => String(h.itemCode).trim()).join(',');
     try {
       const res = await fetch(`/api/market?tickers=${codes}`);
       const data = await res.json();
@@ -56,15 +56,15 @@ export default function PortfolioPage() {
       if (data.success && Array.isArray(data.data)) {
         const rtData = data.data; // [{ ticker, price, changeRate, volume }, ...]
         
-        // 데이터 병합(Merge) 로직: 티커 공백 제거 매칭 및 강제 업데이트 적용
+        // 데이터 병합(Merge) 로직: '형변환 및 공백 제거' 강제 적용
         const merged = currentHoldings.map(local => {
-          // r.ticker와 local.itemCode 모두 trim() 처리하여 엄격하게 비교
-          const rt = rtData.find((r: any) => r.ticker.trim() === local.itemCode.trim());
-          if (rt) {
+          // rtData의 ticker와 local의 itemCode를 String() 변환 후 trim() 처리하여 엄격하게 매칭
+          const rt = rtData.find((r: any) => String(r.ticker).trim() === String(local.itemCode).trim());
+          if (rt && rt.price > 0) {
             return {
               ...local,
-              // 서버 데이터(rt)가 있다면 무조건 실시간 가격으로 업데이트
-              currentPrice: rt.price ? Number(rt.price) : (local.currentPrice || local.avgPrice || 0),
+              // 실시간 시세(rt.price)가 존재하면 평단가(avgPrice)를 무시하고 무조건 업데이트
+              currentPrice: Number(rt.price),
               changeRate: rt.changeRate !== undefined ? Number(rt.changeRate) : (local.changeRate || 0),
               volume: rt.volume !== undefined ? Number(rt.volume) : (local.volume || 0)
             };
@@ -73,6 +73,7 @@ export default function PortfolioPage() {
         });
         
         setHoldings(merged);
+        // 상태 업데이트 직후 LocalStorage에도 즉시 동기화하여 데이터 일관성 유지
         localStorage.setItem(PORTFOLIO_STORAGE_KEY, JSON.stringify(merged));
       }
     } catch (e) {
@@ -89,7 +90,7 @@ export default function PortfolioPage() {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
           setHoldings(parsed);
-          // 즉시 동기화 실행
+          // 데이터 로드와 동시에 실시간 시세 동기화
           await fetchRealtimePrices(parsed);
         }
       }
@@ -116,7 +117,7 @@ export default function PortfolioPage() {
     let totalValuation = 0;
 
     (filteredHoldings || []).forEach(h => {
-      // 렌더링/계산 시 실시간 현재가를 최우선 적용
+      // 계산 시 실시간 현재가(currentPrice)가 0보다 크면 최우선 적용, 부재 시 평단가(avgPrice) 사용
       const current = (h.currentPrice && h.currentPrice > 0) ? h.currentPrice : (h.avgPrice || 0);
       totalInvested += (h.avgPrice || 0) * (h.quantity || 0);
       totalValuation += current * (h.quantity || 0);
@@ -157,7 +158,7 @@ export default function PortfolioPage() {
 
   const removeHolding = (itemCode: string) => {
     const currentList = Array.isArray(holdings) ? holdings : [];
-    const updated = currentList.filter(h => h.itemCode.trim() !== itemCode.trim());
+    const updated = currentList.filter(h => String(h.itemCode).trim() !== String(itemCode).trim());
     setHoldings(updated);
     localStorage.setItem(PORTFOLIO_STORAGE_KEY, JSON.stringify(updated));
   };
@@ -265,8 +266,8 @@ export default function PortfolioPage() {
             </div>
           ) : (
             (filteredHoldings || []).map((h, i) => {
-              // 렌더링 시 실시간 현재가를 1순위로 최우선 출력
-              const current = (h.currentPrice && h.currentPrice > 0) ? h.currentPrice : (h.avgPrice || 0);
+              // UI 출력 시 실시간 현재가(h.currentPrice)가 0보다 크면 무조건 최우선 적용
+              const current = (h.currentPrice && h.currentPrice > 0) ? h.currentPrice : h.avgPrice;
               const profit = (current - h.avgPrice) * h.quantity;
               const rate = h.avgPrice > 0 ? ((current - h.avgPrice) / h.avgPrice) * 100 : 0;
               const isPlus = profit >= 0;
