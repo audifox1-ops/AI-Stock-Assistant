@@ -58,13 +58,13 @@ const StockChart: React.FC<StockChartProps> = ({ data, isMinute }) => {
         mode: 1, // Magnet mode
         vertLine: {
           color: '#64748b',
-          width: 0.5,
+          width: 1, // Fixed: LineWidth must be an integer (1, 2, 3...)
           style: 1,
           labelBackgroundColor: '#1e293b',
         },
         horzLine: {
           color: '#64748b',
-          width: 0.5,
+          width: 1, // Fixed: LineWidth must be an integer (1, 2, 3...)
           style: 1,
           labelBackgroundColor: '#1e293b',
         },

@@ -30,7 +30,6 @@ function parseNaverXml(xml: string, isMinute: boolean) {
       const hour = parseInt(rawTime.substring(8, 10));
       const min = parseInt(rawTime.substring(10, 12));
       
-      // KST (UTC+9) 보정 없이 브라우저/라이브러리가 로컬 시간으로 해석하도록 함
       const date = new Date(year, month, day, hour, min);
       time = Math.floor(date.getTime() / 1000);
     } else {
@@ -61,14 +60,13 @@ export async function GET(request: Request) {
   }
 
   // timeframe 매핑
-  // Naver fchart API: day, week, month, 1, 3, 5, 10, 30, 60
   let tf = timeframe;
   if (timeframe === '1m') tf = '1';
   if (timeframe === '3m') tf = '3';
   if (timeframe === '5m') tf = '5';
 
   const isMinute = ['1', '3', '5', '10', '30', '60'].includes(tf);
-  const count = 500; // 충분한 데이터 확보
+  const count = 500; 
 
   const url = `https://fchart.stock.naver.com/sise.nhn?symbol=${ticker}&timeframe=${tf}&count=${count}&requestType=0`;
 
