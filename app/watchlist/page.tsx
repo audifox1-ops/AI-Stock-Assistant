@@ -42,13 +42,43 @@ export default function WatchlistPage() {
   const [chartData, setChartData] = useState<any[]>([]);
   const [isChartLoading, setIsChartLoading] = useState(false);
 
+  // 실시간 시세 로드 로직
+  const fetchRealtimePrices = async (stocks: Stock[]) => {
+    if (stocks.length === 0) return;
+    const codes = stocks.map(s => s.itemCode).join(',');
+    try {
+      const res = await fetch(`/api/prices?codes=${codes}`);
+      const data = await res.json();
+      if (data.success) {
+        const updatedWatchlist = stocks.map(s => {
+          const live = data.data[s.itemCode];
+          if (live) {
+            return {
+              ...s,
+              closePrice: live.closePrice,
+              fluctuationsRatio: live.fluctuationsRatio,
+              volume: live.volume
+            };
+          }
+          return s;
+        });
+        setWatchlist(updatedWatchlist);
+      }
+    } catch (e) {
+      console.error('Failed to fetch realtime prices:', e);
+    }
+  };
+
   // 로컬 스토리지 데이터 로드
-  const loadWatchlist = () => {
+  const loadWatchlist = async () => {
     setIsRefreshing(true);
     try {
       const saved = localStorage.getItem(WATCHLIST_STORAGE_KEY);
       if (saved) {
-        setWatchlist(JSON.parse(saved));
+        const parsedStocks = JSON.parse(saved);
+        setWatchlist(parsedStocks);
+        // 즉시 실시간 시세 업데이트 시도
+        await fetchRealtimePrices(parsedStocks);
       }
     } catch (e) {
       console.error(e);
@@ -73,9 +103,10 @@ export default function WatchlistPage() {
     if (!searchQuery) return;
     
     // 심플 추가: 종목명/코드를 기반으로 기본 객체 생성
+    const isCode = /^\d{6}$/.test(searchQuery);
     const newStock: Stock = {
-      itemCode: searchQuery.match(/\d{6}/) ? searchQuery : '000000',
-      stockName: searchQuery,
+      itemCode: isCode ? searchQuery : '000000',
+      stockName: isCode ? '검색된 종목' : searchQuery,
       closePrice: '0',
       fluctuationsRatio: '0.00',
       volume: '0',
@@ -91,6 +122,9 @@ export default function WatchlistPage() {
     localStorage.setItem(WATCHLIST_STORAGE_KEY, JSON.stringify(updated));
     setSearchQuery('');
     setIsAddModalOpen(false);
+    
+    // 추가 후 시세 업데이트
+    fetchRealtimePrices(updated);
   };
 
   const handleStockClick = (stock: Stock) => {
@@ -98,35 +132,26 @@ export default function WatchlistPage() {
     setIsBottomSheetOpen(true);
   };
 
-  // 차트/AI 기능 - [21차] 방어 로직 강화 및 한글화
+  // 차트/AI 기능
   const openChart = async () => {
     if (!selectedStock) return;
     setIsBottomSheetOpen(false);
     setActiveModal('chart');
     setIsChartLoading(true);
 
-    const mockData = [
-      { time: '09:00', price: 50000 },
-      { time: '11:00', price: 51200 },
-      { time: '13:00', price: 50800 },
-      { time: '15:30', price: 52000 },
-    ];
-
     try {
-      const res = await fetch(`/api/naver?mode=chart&itemCode=${selectedStock.itemCode}`);
+      // 23차 개편된 통합 차트 API 사용
+      const res = await fetch(`/api/chart?ticker=${selectedStock.itemCode}&period=day`);
       const data = await res.json();
-      if (data.price && data.price.length > 0) {
-        setChartData(data.price.map((p: any) => ({
-          time: p.localDate.substring(4, 8),
-          price: p.closePrice
+      if (data.success) {
+        setChartData(data.data.map((d: any) => ({
+          date: d.date,
+          price: d.close
         })));
-      } else {
-        setChartData(mockData);
       }
     } catch (e) {
-      setChartData(mockData);
-    }
-    finally { setIsChartLoading(false); }
+      console.error('Chart Load Error:', e);
+    } finally { setIsChartLoading(false); }
   };
 
   const openAi = async () => {
@@ -153,34 +178,52 @@ export default function WatchlistPage() {
     } finally { setIsAiLoading(false); }
   };
 
-  if (isLoading) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen">
-        <Loader2 className="animate-spin text-blue-600 mb-4" size={40} />
-        <p className="text-[10px] font-black text-slate-300 tracking-[0.3em] uppercase">관심 리스트를 불러오고 있습니다...</p>
+  // 스켈레톤 UI 컴포넌트
+  const SkeletonItem = () => (
+    <div className="bg-white p-7 rounded-none border border-slate-100 flex justify-between items-center animate-pulse">
+      <div className="flex items-center gap-5">
+        <div className="w-10 h-10 bg-slate-100 rounded-none"></div>
+        <div className="space-y-2">
+          <div className="h-4 w-24 bg-slate-100"></div>
+          <div className="h-3 w-16 bg-slate-50"></div>
+        </div>
       </div>
-    );
-  }
+      <div className="text-right space-y-2">
+        <div className="h-5 w-20 bg-slate-100 ml-auto"></div>
+        <div className="h-3 w-12 bg-slate-50 ml-auto"></div>
+      </div>
+    </div>
+  );
 
   return (
     <div className="w-full bg-slate-50 min-h-screen pb-32">
-      {/* 헤더 - [21차] 한글화 */}
       <header className="px-6 py-8 bg-white border-b border-gray-100 flex justify-between items-center sticky top-0 z-50 rounded-none">
         <div>
           <h1 className="text-2xl font-black text-slate-900 tracking-tighter uppercase">관심 종목</h1>
-          <p className="text-[10px] font-bold text-blue-500 uppercase tracking-widest mt-1">나만의 전략 자산 허브</p>
+          <p className="text-[10px] font-bold text-blue-500 uppercase tracking-widest mt-1">실시간 시세 연동 모드</p>
         </div>
-        <button 
-          onClick={() => setIsAddModalOpen(true)}
-          className="bg-slate-900 text-white p-3 rounded-none active:bg-blue-600 transition-all border border-slate-900"
-        >
-          <Plus size={24} />
-        </button>
+        <div className="flex gap-2">
+          <button 
+            onClick={loadWatchlist}
+            className={`p-3 bg-slate-100 text-slate-900 rounded-none active:scale-95 transition-all ${isRefreshing ? 'animate-spin' : ''}`}
+          >
+            <RefreshCcw size={20} />
+          </button>
+          <button 
+            onClick={() => setIsAddModalOpen(true)}
+            className="bg-slate-900 text-white p-3 rounded-none active:bg-blue-600 transition-all border border-slate-900"
+          >
+            <Plus size={24} />
+          </button>
+        </div>
       </header>
 
       <div className="px-6 mt-6">
-        {/* 리스트 - [21차] 한글화 */}
-        {watchlist.length === 0 ? (
+        {isLoading ? (
+          <div className="space-y-4">
+            {[1, 2, 3, 4, 5].map(i => <SkeletonItem key={i} />)}
+          </div>
+        ) : watchlist.length === 0 ? (
           <div className="bg-white border-2 border-dashed border-slate-200 rounded-none p-20 text-center flex flex-col items-center gap-5">
             <Star size={48} className="text-slate-100" />
             <p className="text-xs font-black text-slate-300 uppercase tracking-widest">등록된 관심 종목이 없습니다</p>
@@ -188,28 +231,35 @@ export default function WatchlistPage() {
         ) : (
           <div className="space-y-4">
             {watchlist.map((stock) => {
-              const isUp = parseFloat(stock.fluctuationsRatio) > 0;
+              const changeVal = parseFloat(stock.fluctuationsRatio || '0');
+              const isUp = changeVal > 0;
+              const isDown = changeVal < 0;
+              
               return (
-                <div key={stock.itemCode} className="bg-white p-7 rounded-none border border-slate-100 flex justify-between items-center active:bg-slate-50 transition-all" onClick={() => handleStockClick(stock)}>
+                <div key={stock.itemCode} className="bg-white p-7 rounded-none border border-slate-100 flex justify-between items-center active:bg-slate-50 transition-all group" onClick={() => handleStockClick(stock)}>
                   <div className="flex items-center gap-5">
-                    <div className="w-10 h-10 bg-slate-50 flex items-center justify-center rounded-none border border-slate-100">
-                      <Star size={18} className="text-blue-500" fill="#3b82f6" />
+                    <div className="w-10 h-10 bg-slate-50 flex items-center justify-center rounded-none border border-slate-100 group-hover:border-blue-200 transition-all">
+                      <Star size={18} className={isUp ? 'text-red-500' : isDown ? 'text-blue-500' : 'text-slate-300'} fill="currentColor" fillOpacity={0.1} />
                     </div>
                     <div>
                       <h4 className="text-[17px] font-black text-slate-900 tracking-tighter uppercase">{stock.stockName}</h4>
-                      <p className="text-[10px] font-bold text-slate-300 tracking-widest uppercase">{stock.itemCode}</p>
+                      <p className="text-[10px] font-bold text-slate-300 tracking-widest uppercase">
+                        {stock.itemCode} <span className="mx-1 text-slate-200">|</span> 거래량 {stock.volume || '0'}
+                      </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-8">
                     <div className="text-right">
-                      <p className="text-[18px] font-black text-slate-900 tabular-nums">{stock.closePrice === '0' ? '대기 중' : stock.closePrice}</p>
-                      <span className={`text-[10px] font-black px-2 py-0.5 rounded-none ${isUp ? 'bg-red-50 text-red-500' : 'bg-blue-50 text-blue-500'} border border-current/10`}>
+                      <p className={`text-[18px] font-black tabular-nums ${isUp ? 'text-red-500' : isDown ? 'text-blue-500' : 'text-slate-900'}`}>
+                        {stock.closePrice === '0' ? '---' : `${stock.closePrice}원`}
+                      </p>
+                      <span className={`text-[10px] font-black px-2 py-0.5 rounded-none ${isUp ? 'bg-red-50 text-red-500' : isDown ? 'bg-blue-50 text-blue-500' : 'bg-slate-50 text-slate-400'} border border-current/10`}>
                         {isUp ? '+' : ''}{stock.fluctuationsRatio}%
                       </span>
                     </div>
                     <button 
                       onClick={(e) => { e.stopPropagation(); handleRemove(stock.itemCode); }}
-                      className="p-3 bg-slate-50 text-slate-300 hover:text-red-500 rounded-none border border-slate-100 transition-colors"
+                      className="p-3 bg-slate-50 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-none border border-slate-100 transition-colors"
                     >
                       <Trash2 size={18} />
                     </button>
@@ -221,7 +271,7 @@ export default function WatchlistPage() {
         )}
       </div>
 
-      {/* 모달 - [21차] 한글화 */}
+      {/* 등록 모달 */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center px-0">
           <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-none" onClick={() => setIsAddModalOpen(false)}></div>
@@ -247,7 +297,7 @@ export default function WatchlistPage() {
         </div>
       )}
 
-      {/* 바텀 시트 - [21차] 한글화 */}
+      {/* 바텀 시트 */}
       {isBottomSheetOpen && selectedStock && (
         <div className="fixed inset-0 z-[110] flex items-end justify-center px-0 pb-0">
            <div className="absolute inset-0 bg-slate-950/40 backdrop-blur-none" onClick={() => setIsBottomSheetOpen(false)}></div>
@@ -286,7 +336,7 @@ export default function WatchlistPage() {
         </div>
       )}
 
-      {/* 전용 모달 - [21차] 차트 높이 고정 및 한글화 */}
+      {/* 전용 모달 */}
       {activeModal && selectedStock && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center px-0">
            <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-none" onClick={() => !isAiLoading && setActiveModal(null)}></div>
@@ -302,11 +352,14 @@ export default function WatchlistPage() {
                  {activeModal === 'chart' ? (
                    <div className="h-[300px] w-full bg-slate-50/50 border border-slate-100 p-2">
                       {isChartLoading ? (
-                        <div className="h-full flex flex-col items-center justify-center gap-5 uppercase text-[10px] font-black text-slate-200 tracking-widest">분석 데이터 구성 중...</div>
+                        <div className="h-full flex flex-col items-center justify-center gap-5">
+                          <Loader2 className="animate-spin text-blue-600" size={32} />
+                          <p className="uppercase text-[10px] font-black text-slate-300 tracking-widest">분석 데이터 구성 중...</p>
+                        </div>
                       ) : (
                         <ResponsiveContainer width="100%" height="100%">
                            <AreaChart data={chartData}>
-                              <Area type="step" dataKey="price" stroke="#2563eb" strokeWidth={3} fill="#3b82f6" fillOpacity={0.1} animationDuration={500} />
+                              <Area type="monotone" dataKey="price" stroke="#2563eb" strokeWidth={3} fill="#3b82f6" fillOpacity={0.1} animationDuration={500} />
                            </AreaChart>
                         </ResponsiveContainer>
                       )}
@@ -316,7 +369,7 @@ export default function WatchlistPage() {
                       {isAiLoading ? (
                         <div className="py-20 flex justify-center uppercase text-[10px] font-black text-slate-300 tracking-[0.4em]">통찰력 도출 중...</div>
                       ) : (
-                        <p className="text-[14px] font-bold text-slate-800 uppercase leading-relaxed tracking-tight">{aiAnalysis}</p>
+                        <p className="text-[14px] font-bold text-slate-800 uppercase leading-relaxed tracking-tight whitespace-pre-wrap">{aiAnalysis}</p>
                       )}
                    </div>
                  )}

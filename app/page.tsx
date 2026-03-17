@@ -50,6 +50,7 @@ export default function Home() {
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [chartData, setChartData] = useState<any[]>([]);
   const [isChartLoading, setIsChartLoading] = useState(false);
+  const [chartPeriod, setChartPeriod] = useState<'day' | 'week' | 'month'>('day');
 
   const fetchData = async (category: string) => {
     setIsLoading(true);
@@ -81,38 +82,46 @@ export default function Home() {
     setIsBottomSheetOpen(true);
   };
 
-  // 차트/AI 기능 - [21차] 방어 로직 강화: 높이 고정 및 Mock 데이터
-  const openChart = async () => {
-    if (!selectedStock) return;
-    setIsBottomSheetOpen(false);
-    setActiveModal('chart');
+  // 차트 데이터 페칭 함수 분리
+  const fetchChartData = async (ticker: string, period: string) => {
     setIsChartLoading(true);
-
-    // [21차] 차트 데이터 API 연동 시도 및 실패 시 Mock 데이터 주입
-    const mockData = [
-      { time: '09:00', price: 50000 },
-      { time: '11:00', price: 51200 },
-      { time: '13:00', price: 50800 },
-      { time: '15:30', price: 52000 },
-    ];
-
     try {
-      const res = await fetch(`/api/naver?mode=chart&itemCode=${selectedStock.itemCode}`);
+      const res = await fetch(`/api/chart?ticker=${ticker}&period=${period}`);
       const data = await res.json();
-      if (data.price && data.price.length > 0) {
-        setChartData(data.price.map((p: any) => ({
-          time: p.localDate.substring(4, 8),
-          price: p.closePrice
-        })));
+      if (data.success) {
+        setChartData(data.data);
       } else {
-        setChartData(mockData);
+        throw new Error(data.error);
       }
     } catch (e) {
-      setChartData(mockData);
+      console.error('Chart Load Error:', e);
+      // fallback mock data
+      setChartData([
+        { date: '01', close: 50000 },
+        { date: '02', close: 51200 },
+        { date: '03', close: 50800 },
+        { date: '04', close: 52000 },
+      ]);
     } finally {
       setIsChartLoading(false);
     }
   };
+
+  // 모달 오픈 시 차트 데이터 초기 페칭
+  const openChart = async () => {
+    if (!selectedStock) return;
+    setIsBottomSheetOpen(false);
+    setActiveModal('chart');
+    setChartPeriod('day'); // 기본값 일봉
+    fetchChartData(selectedStock.itemCode, 'day');
+  };
+
+  // 기간 변경 시 데이터 리로드
+  useEffect(() => {
+    if (activeModal === 'chart' && selectedStock) {
+      fetchChartData(selectedStock.itemCode, chartPeriod);
+    }
+  }, [chartPeriod]);
 
   const openAi = async () => {
     if (!selectedStock) return;
@@ -157,15 +166,15 @@ export default function Home() {
         </div>
       </header>
 
-      {/* 탭 네비게이션 - [22차] 스크롤 가능한 6개 탭 */}
-      <div className="bg-white border-b border-gray-100 sticky top-[97px] z-40 overflow-x-auto no-scrollbar rounded-none">
-        <div className="flex px-6 whitespace-nowrap min-w-max">
+      {/* 탭 네비게이션 - [23차] 가독성 개선 가이드라인 적용 */}
+      <div className="bg-white border-b border-gray-100 sticky top-[97px] z-40 overflow-x-auto whitespace-nowrap hide-scrollbar py-2 px-1 rounded-none">
+        <div className="flex gap-4 px-6 min-w-max">
           {tabs.map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`py-5 px-5 text-[11px] font-black uppercase tracking-widest transition-all relative ${
-                activeTab === tab ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'
+              className={`py-5 px-5 text-sm md:text-base uppercase tracking-widest transition-all relative ${
+                activeTab === tab ? 'text-blue-600 font-bold' : 'text-slate-400 hover:text-slate-600 font-medium'
               }`}
             >
               {tab}
@@ -298,23 +307,49 @@ export default function Home() {
         </div>
       )}
 
-      {/* 전용 모달 (Chart/AI) - [21차] 높이 고정 최적화 */}
+      {/* 전용 모달 (Chart/AI) - [23차] 일/주/월봉 연동형 멀티 차트 */}
       {activeModal && selectedStock && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center px-0">
            <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-none" onClick={() => !isAiLoading && setActiveModal(null)}></div>
            <div className="relative bg-white w-full max-w-[400px] rounded-none p-12 shadow-none border-4 border-slate-900">
-              <div className="flex justify-between items-center mb-10 pb-6 border-b-2 border-slate-100">
+              <div className="flex justify-between items-center mb-6 pb-4 border-b-2 border-slate-100">
                  <h2 className="text-xl font-black text-slate-900 tracking-tighter uppercase">
                     {activeModal === 'chart' ? '실시간 차트' : 'AI 분석 리포트'}
                  </h2>
                  <button onClick={() => setActiveModal(null)} className="p-2 bg-slate-900 text-white rounded-none"><X size={20} /></button>
               </div>
 
+              {activeModal === 'chart' && (
+                <div className="flex mb-6 bg-slate-100 p-1 border border-slate-200">
+                  <button 
+                    onClick={() => setChartPeriod('day')}
+                    className={`flex-1 py-3 text-xs font-black uppercase tracking-widest transition-all ${chartPeriod === 'day' ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-200'}`}
+                  >
+                    일봉
+                  </button>
+                  <button 
+                    onClick={() => setChartPeriod('week')}
+                    className={`flex-1 py-3 text-xs font-black uppercase tracking-widest transition-all ${chartPeriod === 'week' ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-200'}`}
+                  >
+                    주봉
+                  </button>
+                  <button 
+                    onClick={() => setChartPeriod('month')}
+                    className={`flex-1 py-3 text-xs font-black uppercase tracking-widest transition-all ${chartPeriod === 'month' ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-200'}`}
+                  >
+                    월봉
+                  </button>
+                </div>
+              )}
+
               <div className="min-h-[300px]">
                  {activeModal === 'chart' ? (
                    <div className="h-[300px] w-full bg-slate-50/50 border border-slate-100 p-2">
                       {isChartLoading ? (
-                        <div className="h-full flex flex-col items-center justify-center gap-5 uppercase text-[10px] font-black text-slate-200 tracking-widest">분석 데이터 구성 중...</div>
+                        <div className="h-full flex flex-col items-center justify-center gap-5">
+                          <Loader2 className="animate-spin text-blue-600" size={32} />
+                          <p className="uppercase text-[10px] font-black text-slate-300 tracking-widest">분석 데이터 구성 중...</p>
+                        </div>
                       ) : (
                         <ResponsiveContainer width="100%" height="100%">
                            <AreaChart data={chartData}>
@@ -324,7 +359,20 @@ export default function Home() {
                                     <stop offset="95%" stopColor="#2563eb" stopOpacity={0}/>
                                  </linearGradient>
                               </defs>
-                              <Area type="step" dataKey="price" stroke="#2563eb" strokeWidth={3} fill="url(#colorPrice)" animationDuration={500} />
+                              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                              <XAxis 
+                                dataKey="date" 
+                                hide 
+                              />
+                              <YAxis 
+                                domain={['auto', 'auto']} 
+                                hide 
+                              />
+                              <Tooltip 
+                                contentStyle={{ backgroundColor: '#fff', borderRadius: '0', border: '1px solid #e2e8f0', fontSize: '12px', fontWeight: 'bold' }}
+                                labelFormatter={(label) => `날짜: ${label}`}
+                              />
+                              <Area type="monotone" dataKey="close" stroke="#2563eb" strokeWidth={3} fill="url(#colorPrice)" animationDuration={500} />
                            </AreaChart>
                         </ResponsiveContainer>
                       )}
