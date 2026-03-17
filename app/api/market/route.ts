@@ -7,45 +7,53 @@ const ALLOWED_ORIGINS = [
   'https://ai-stock-assistant-nine.vercel.app'
 ];
 
-const NAVER_FRONT_API = 'https://m.stock.naver.com/front-api';
+/**
+ * 네이버 모바일 API 엔드포인트
+ * 지수: https://m.stock.naver.com/api/index/KOSPI/basic
+ * 종목상세: https://m.stock.naver.com/api/stock/${ticker}/integration
+ */
 
-function normalizeStockData(stock: any, type: 'list' | 'trend' | 'index') {
+async function fetchIndexData(type: 'KOSPI' | 'KOSDAQ') {
   try {
-    if (type === 'index') {
-      return {
-        name: stock.itemCode === 'KOSPI' ? '코스피' : '코스닥',
-        value: stock.closePrice || '0',
-        change: stock.compareToPreviousClosePrice || '0',
-        changeRate: stock.fluctuationsRatio || '0.00',
-        status: (parseFloat(stock.fluctuationsRatio) > 0) ? 'UP' : (parseFloat(stock.fluctuationsRatio) < 0 ? 'DOWN' : 'SAME')
-      };
-    }
-
-    if (type === 'list') {
-      return {
-        itemCode: stock.itemCode || stock.code,
-        stockName: stock.stockName || stock.name,
-        closePrice: stock.closePrice || '0',
-        fluctuationsRatio: stock.fluctuationsRatio || '0.00',
-        volume: stock.accumulatedTradingVolume || '0',
-        marketValue: stock.marketValueHangeul || '-',
-        tradeValue: stock.accumulatedTradingValueKrwHangeul || '-',
-        fluctuationType: stock.compareToPreviousPrice?.name || 'STABLE'
-      };
-    } else {
-      return {
-        itemCode: stock.itemCode || stock.code,
-        stockName: stock.itemName || stock.name,
-        closePrice: stock.closePrice || '0',
-        fluctuationsRatio: stock.fluctuationsRatio || '0.00',
-        volume: stock.accumulatedTradingVolume || '0',
-        netBuyValue: stock.accumulatedTradingValueKrwHangeul || '-',
-        rank: stock.ranking,
-        fluctuationType: stock.fluctuationType || 'STABLE'
-      };
-    }
+    const res = await fetch(`https://m.stock.naver.com/api/index/${type}/basic`, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0.3 Mobile/15E148 Safari/604.1'
+      },
+      next: { revalidate: 0 }
+    });
+    const data = await res.json();
+    return {
+      name: type === 'KOSPI' ? '코스피' : '코스닥',
+      value: data.closePrice || '0',
+      change: data.compareToPreviousClosePrice || '0',
+      changeRate: data.fluctuationsRatio || '0.00',
+      status: parseFloat(data.fluctuationsRatio) > 0 ? 'UP' : (parseFloat(data.fluctuationsRatio) < 0 ? 'DOWN' : 'SAME')
+    };
   } catch (e) {
-    return null;
+    return { name: type === 'KOSPI' ? '코스피' : '코스닥', value: '-', change: '0', changeRate: '0.00', status: 'SAME' };
+  }
+}
+
+async function fetchTickerDetail(ticker: string) {
+  try {
+    const res = await fetch(`https://m.stock.naver.com/api/stock/${ticker}/integration`, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0.3 Mobile/15E148 Safari/604.1'
+      },
+      next: { revalidate: 0 }
+    });
+    const data = await res.json();
+    // totalInfos[0] 또는 관련 필드에서 데이터 추출 (네이버 API 구조에 따름)
+    const stock = data.totalInfos?.[0] || {};
+    return {
+      ticker: ticker,
+      price: stock.currentPrice || stock.closePrice || 0,
+      changeRate: stock.fluctuationsRatio || '0.00',
+      volume: stock.accumulatedTradingVolume || 0,
+      status: parseFloat(stock.fluctuationsRatio) > 0 ? 'UP' : (parseFloat(stock.fluctuationsRatio) < 0 ? 'DOWN' : 'SAME')
+    };
+  } catch (e) {
+    return { ticker, price: 0, changeRate: '0.00', volume: 0, status: 'SAME' };
   }
 }
 
@@ -56,119 +64,70 @@ export async function GET(request: Request) {
   }
 
   const { searchParams } = new URL(request.url);
-  const category = decodeURIComponent(searchParams.get('category') || 'KOSPI 시총상위');
-  const tickers = searchParams.get('tickers');
+  const type = searchParams.get('type');
+  const tickersParam = searchParams.get('tickers');
+  const category = decodeURIComponent(searchParams.get('category') || '');
 
-  // 1. 다중 종목 실시간 시세 조회 (tickers 파라미터가 있을 경우)
-  if (tickers) {
+  // 1. 지수 데이터 조회 전용 로직
+  if (type === 'index') {
+    const indices = await Promise.all([
+      fetchIndexData('KOSPI'),
+      fetchIndexData('KOSDAQ')
+    ]);
+    return NextResponse.json({ success: true, data: indices });
+  }
+
+  // 2. 다중 종목 실시간 시세 조회 로직
+  if (tickersParam) {
+    const tickers = tickersParam.split(',').filter(t => t.trim() !== '');
+    const details = await Promise.all(tickers.map(t => fetchTickerDetail(t)));
+    return NextResponse.json({ success: true, data: details });
+  }
+
+  // 3. 기존 랭킹 리스트 로직 (필요시 유지)
+  if (category) {
+    let listUrl = '';
+    const NAVER_FRONT_API = 'https://m.stock.naver.com/front-api';
+    
+    switch (category) {
+      case 'KOSPI 시총상위':
+        listUrl = `${NAVER_FRONT_API}/stock/domestic/stockList?sortType=marketValue&category=KOSPI&pageSize=30&domesticStockExchangeType=KRX&page=1`;
+        break;
+      case 'KOSDAQ 시총상위':
+        listUrl = `${NAVER_FRONT_API}/stock/domestic/stockList?sortType=marketValue&category=KOSDAQ&pageSize=30&domesticStockExchangeType=KRX&page=1`;
+        break;
+      case '거래량상위':
+        listUrl = `${NAVER_FRONT_API}/stock/domestic/stockList?sortType=quantTop&category=KOSPI&pageSize=30&domesticStockExchangeType=KRX&page=1`;
+        break;
+      default:
+        listUrl = `${NAVER_FRONT_API}/stock/domestic/stockList?sortType=marketValue&category=KOSPI&pageSize=30&domesticStockExchangeType=KRX&page=1`;
+    }
+
     try {
-      const response = await fetch(
-        `https://polling.finance.naver.com/api/realtime?query=SERVICE_ITEM:${tickers}`,
-        {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0.3 Mobile/15E148 Safari/604.1',
-            'Referer': 'https://m.stock.naver.com/'
-          },
-          next: { revalidate: 0 }
-        }
-      );
-      const json = await response.json();
-      const rawDatas = json?.result?.areas?.[0]?.datas || [];
-      const formatted = rawDatas.map((s: any) => ({
-        ticker: s.cd,
-        price: s.nv,
-        changeRate: s.cr,
-        volume: s.aq,
-        fluctuationType: s.rf === '2' ? 'UP' : s.rf === '5' ? 'DOWN' : 'SAME'
+      const response = await fetch(listUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0.3 Mobile/15E148 Safari/604.1',
+          'Referer': 'https://m.stock.naver.com/'
+        },
+        next: { revalidate: 0 }
+      });
+      const data = await response.json();
+      const rawStocks = data.result?.stocks || [];
+      const normalized = rawStocks.map((s: any) => ({
+        itemCode: s.itemCode || s.code,
+        stockName: s.stockName || s.name,
+        closePrice: s.closePrice || '0',
+        fluctuationsRatio: s.fluctuationsRatio || '0.00',
+        volume: s.accumulatedTradingVolume || '0',
+        fluctuationType: s.compareToPreviousPrice?.name || 'STABLE'
       }));
-      return NextResponse.json({ success: true, data: formatted });
+      return NextResponse.json({ success: true, data: normalized });
     } catch (e: any) {
       return NextResponse.json({ success: false, error: e.message }, { status: 500 });
     }
   }
 
-  // 2. 지수 데이터 조회 전용 카테고리
-  if (category === 'INDEX') {
-    try {
-      const [kospiRes, kosdaqRes] = await Promise.all([
-        fetch(`${NAVER_FRONT_API}/marketIndex/index/KOSPI`, { next: { revalidate: 0 } }),
-        fetch(`${NAVER_FRONT_API}/marketIndex/index/KOSDAQ`, { next: { revalidate: 0 } })
-      ]);
-      const kospiData = await kospiRes.json();
-      const kosdaqData = await kosdaqRes.json();
-
-      const indices = [
-        { ...kospiData.result, itemCode: 'KOSPI' },
-        { ...kosdaqData.result, itemCode: 'KOSDAQ' }
-      ].map(i => normalizeStockData(i, 'index'));
-
-      return NextResponse.json({ success: true, data: indices });
-    } catch (e: any) {
-      return NextResponse.json({ success: false, error: e.message }, { status: 500 });
-    }
-  }
-
-  // 3. 일반 카테고리 랭킹 조회
-  let apiUrl = '';
-  let dataType: 'list' | 'trend' = 'list';
-
-  switch (category) {
-    case 'KOSPI 시총상위':
-      apiUrl = `${NAVER_FRONT_API}/stock/domestic/stockList?sortType=marketValue&category=KOSPI&pageSize=30&domesticStockExchangeType=KRX&page=1`;
-      dataType = 'list';
-      break;
-    case 'KOSDAQ 시총상위':
-      apiUrl = `${NAVER_FRONT_API}/stock/domestic/stockList?sortType=marketValue&category=KOSDAQ&pageSize=30&domesticStockExchangeType=KRX&page=1`;
-      dataType = 'list';
-      break;
-    case '거래량상위':
-      apiUrl = `${NAVER_FRONT_API}/stock/domestic/stockList?sortType=quantTop&category=KOSPI&pageSize=30&domesticStockExchangeType=KRX&page=1`;
-      dataType = 'list';
-      break;
-    case '외국인매매':
-      apiUrl = `${NAVER_FRONT_API}/market/tradingTrend/ranking?periodType=daily&investorType=foreigner&tradingType=trendBuy&stockExchangeType=KRX`;
-      dataType = 'trend';
-      break;
-    case '기관매매':
-      apiUrl = `${NAVER_FRONT_API}/market/tradingTrend/ranking?periodType=daily&investorType=organization&tradingType=trendBuy&stockExchangeType=KRX`;
-      dataType = 'trend';
-      break;
-    case '시가총액':
-      apiUrl = `${NAVER_FRONT_API}/stock/domestic/stockList?sortType=marketValue&category=KOSPI&pageSize=30&domesticStockExchangeType=KRX&page=1`;
-      dataType = 'list';
-      break;
-    default:
-      apiUrl = `${NAVER_FRONT_API}/stock/domestic/stockList?sortType=marketValue&category=KOSPI&pageSize=30&domesticStockExchangeType=KRX&page=1`;
-      dataType = 'list';
-  }
-
-  try {
-    const response = await fetch(apiUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0.3 Mobile/15E148 Safari/604.1',
-        'Referer': 'https://m.stock.naver.com/'
-      },
-      next: { revalidate: 0 }
-    });
-
-    if (!response.ok) throw new Error('네이버 API 응답 오류');
-
-    const data = await response.json();
-    const rawStocks = data.result?.stocks || [];
-    const normalizedData = rawStocks
-      .map((s: any) => normalizeStockData(s, dataType))
-      .filter((s: any) => s !== null);
-
-    return NextResponse.json({
-      success: true,
-      data: normalizedData,
-      category: category,
-      timestamp: new Date().toISOString()
-    });
-
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message, data: [] }, { status: 500 });
-  }
+  return NextResponse.json({ success: false, error: 'Invalid parameters' }, { status: 400 });
 }
 
 export async function OPTIONS() {
