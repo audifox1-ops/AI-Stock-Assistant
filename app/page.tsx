@@ -143,10 +143,12 @@ export default function Home() {
   };
 
   return (
-    <div className="w-full bg-slate-50 min-h-screen pb-32 font-sans selection:bg-blue-100 selection:text-blue-900 overflow-x-hidden">
-      {/* 고정 영역: 헤더 + 탭 (그림자 및 z-index 강화) */}
-      <div className="fixed top-0 left-0 right-0 z-[100] bg-white border-b border-gray-100 max-w-[430px] mx-auto shadow-sm">
-        <header className="px-6 py-6 flex justify-between items-center bg-white">
+    /* 1. 최상위 래퍼: Flexbox 기반 전체 레이아웃 (스크롤 방지) */
+    <div className="h-screen w-full bg-slate-50 flex flex-col overflow-hidden font-sans selection:bg-blue-100 selection:text-blue-900">
+      
+      {/* 2. 상단 고정 영역: 헤더 + 탭 (flex-shrink-0으로 고정 공간 차지) */}
+      <div className="flex-shrink-0 z-10 bg-white border-b border-gray-100 max-w-[430px] mx-auto w-full shadow-sm">
+        <header className="px-6 py-6 flex justify-between items-center">
           <div>
             <h1 className="text-2xl font-black text-slate-900 tracking-tighter uppercase italic">AI STOCK</h1>
             <p className="text-[10px] font-bold text-blue-500 uppercase tracking-widest mt-1">실시간 스마트 랭킹 30</p>
@@ -168,8 +170,8 @@ export default function Home() {
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`py-4 px-4 text-xs uppercase tracking-widest transition-all relative ${
-                  activeTab === tab ? 'text-blue-600 font-black' : 'text-slate-400 hover:text-slate-600 font-bold'
+                className={`py-4 px-4 text-xs font-bold uppercase tracking-widest transition-all relative ${
+                  activeTab === tab ? 'text-blue-600 font-black' : 'text-slate-400 hover:text-slate-600'
                 }`}
               >
                 {tab}
@@ -182,11 +184,10 @@ export default function Home() {
         </div>
       </div>
 
-      {/* 메인 리스트: 1위 종목 가려짐 현상을 해결하기 위한 정확한 상단 여백 설정 */}
-      {/* 고정 헤더(약 88px) + 탭 영역(약 60px) 고려하여 pt-[160px] 및 mt-6 적용 */}
-      <main className="px-6 pt-[168px] mt-4">
+      {/* 3. 하단 리스트 영역: 독립 스크롤 (flex-1 overflow-y-auto) */}
+      <main className="flex-1 overflow-y-auto pt-4 pb-32 px-6 max-w-[430px] mx-auto w-full scroll-smooth">
         {/* 리스트 컨트롤 */}
-        <div className="flex justify-between items-center mb-6">
+        <div className="flex justify-between items-center mb-6 mt-4">
           <div className="flex items-center gap-2">
             <Activity size={16} className="text-blue-600" />
             <span className="text-[10px] font-black text-slate-900 uppercase tracking-[0.2em]">{activeTab} 실시간 현황</span>
@@ -209,12 +210,12 @@ export default function Home() {
 
         {/* 메인 리스트 */}
         {isLoading ? (
-          <div className="flex flex-col items-center justify-center py-40 gap-6">
+          <div className="flex flex-col items-center justify-center py-20 gap-6">
             <Loader2 className="animate-spin text-blue-600" size={48} />
             <p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.4em] animate-pulse">데이터를 수급하고 있습니다...</p>
           </div>
         ) : (
-          <div className={viewMode === 'list' ? 'space-y-4' : 'grid grid-cols-2 gap-4'}>
+          <div className={viewMode === 'list' ? 'space-y-4 pb-10' : 'grid grid-cols-2 gap-4 pb-10'}>
             {stocks.map((stock, idx) => {
               const changeVal = parseFloat(stock.fluctuationsRatio);
               const isPlus = changeVal > 0;
@@ -232,20 +233,20 @@ export default function Home() {
                     <div className="w-10 h-10 bg-slate-50 flex items-center justify-center border border-slate-100 rounded-none group-hover:bg-blue-50 transition-colors">
                       <span className="text-[11px] font-black text-slate-400 tabular-nums">{(idx + 1).toString().padStart(2, '0')}</span>
                     </div>
-                    <div>
-                      <h4 className="text-[16px] font-black text-slate-900 tracking-tighter uppercase truncate max-w-[120px]">
+                    <div className="flex-1 min-w-0">
+                      <h4 className="text-[16px] font-black text-slate-900 tracking-tighter uppercase truncate">
                         {stock.stockName}
                       </h4>
                       <div className="flex items-center gap-2 mt-0.5">
                         <span className="text-[9px] font-bold text-slate-300 tracking-widest uppercase">{stock.itemCode}</span>
                         {isInvestorTab && (
-                          <span className="text-[8px] font-black text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded-none border border-blue-100 uppercase">수급집계</span>
+                          <span className="text-[8px] font-black text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded-none border border-blue-100 uppercase">수급</span>
                         )}
                       </div>
                     </div>
                   </div>
 
-                  <div className={viewMode === 'list' ? 'text-right' : 'mt-auto pt-4 border-t border-slate-50'}>
+                  <div className={viewMode === 'list' ? 'text-right flex-shrink-0' : 'mt-auto pt-4 border-t border-slate-50'}>
                     <p className="text-[18px] font-black text-slate-900 tabular-nums leading-none tracking-tight">
                       {stock.closePrice}원
                     </p>
@@ -362,7 +363,7 @@ export default function Home() {
                       {isAiLoading ? (
                         <div className="py-20 flex flex-col items-center justify-center gap-6">
                            <Sparkles size={40} className="text-blue-600 animate-pulse" />
-                           <p className="text-[10px] font-black text-slate-300 tracking-[0.4em] uppercase">분석 시스템 가동 중...</p>
+                           <p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.4em]">분석 시스템 가동 중...</p>
                         </div>
                       ) : (
                         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
