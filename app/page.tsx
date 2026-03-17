@@ -150,43 +150,46 @@ export default function Home() {
 
   return (
     <div className="w-full bg-slate-50 min-h-screen pb-32 font-sans selection:bg-blue-100 selection:text-blue-900">
-      {/* 초슬림 헤더 */}
-      <header className="px-6 py-8 bg-white border-b border-gray-100 flex justify-between items-center sticky top-0 z-50 rounded-none">
-        <div>
-          <h1 className="text-2xl font-black text-slate-900 tracking-tighter uppercase italic">AI STOCK</h1>
-          <p className="text-[10px] font-bold text-blue-500 uppercase tracking-widest mt-1">실시간 스마트 랭킹 30</p>
-        </div>
-        <div className="flex gap-4">
-          <button 
-            onClick={handleRefresh}
-            className={`p-3 bg-slate-900 text-white rounded-none active:scale-95 transition-all shadow-none flex items-center justify-center ${isRefreshing ? 'animate-spin' : ''}`}
-          >
-            <RefreshCcw size={20} />
-          </button>
-        </div>
-      </header>
-
-      {/* 탭 네비게이션 - [23차] 가독성 개선 가이드라인 적용 */}
-      <div className="bg-white border-b border-gray-100 sticky top-[97px] z-40 overflow-x-auto whitespace-nowrap hide-scrollbar py-2 px-1 rounded-none">
-        <div className="flex gap-4 px-6 min-w-max">
-          {tabs.map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`py-5 px-5 text-sm md:text-base uppercase tracking-widest transition-all relative ${
-                activeTab === tab ? 'text-blue-600 font-bold' : 'text-slate-400 hover:text-slate-600 font-medium'
-              }`}
+      {/* 고정 영역: 헤더 + 탭 */}
+      <div className="fixed top-0 left-0 right-0 z-50 bg-white border-b border-gray-100 max-w-[430px] mx-auto">
+        <header className="px-6 py-8 flex justify-between items-center bg-white">
+          <div>
+            <h1 className="text-2xl font-black text-slate-900 tracking-tighter uppercase italic">AI STOCK</h1>
+            <p className="text-[10px] font-bold text-blue-500 uppercase tracking-widest mt-1">실시간 스마트 랭킹 30</p>
+          </div>
+          <div className="flex gap-4">
+            <button 
+              onClick={handleRefresh}
+              className={`p-3 bg-slate-900 text-white rounded-none active:scale-95 transition-all shadow-none flex items-center justify-center ${isRefreshing ? 'animate-spin' : ''}`}
             >
-              {tab}
-              {activeTab === tab && (
-                <div className="absolute bottom-0 left-0 right-0 h-1 bg-blue-600 animate-in fade-in slide-in-from-bottom-1" />
-              )}
+              <RefreshCcw size={20} />
             </button>
-          ))}
+          </div>
+        </header>
+
+        {/* 탭 네비게이션 - [23차] 가독성 개선 가이드라인 적용 */}
+        <div className="overflow-x-auto whitespace-nowrap hide-scrollbar py-2 px-1 bg-white border-t border-gray-50">
+          <div className="flex gap-4 px-6 min-w-max">
+            {tabs.map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`py-5 px-5 text-sm md:text-base uppercase tracking-widest transition-all relative ${
+                  activeTab === tab ? 'text-blue-600 font-bold' : 'text-slate-400 hover:text-slate-600 font-medium'
+                }`}
+              >
+                {tab}
+                {activeTab === tab && (
+                  <div className="absolute bottom-0 left-0 right-0 h-1 bg-blue-600 animate-in fade-in slide-in-from-bottom-1" />
+                )}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
-      <main className="px-6 mt-6">
+      {/* 메인 리스트 - 여백 추가를 통한 겹침 해결 (헤더+탭 높이 고려) */}
+      <main className="px-6 pt-[220px]">
         {/* 리스트 컨트롤 */}
         <div className="flex justify-between items-center mb-6">
           <div className="flex items-center gap-2">
@@ -209,7 +212,7 @@ export default function Home() {
           </div>
         </div>
 
-        {/* 메인 리스트 - [22차] 수급 지표 대응 */}
+        {/* 메인 리스트 */}
         {isLoading ? (
           <div className="flex flex-col items-center justify-center py-40 gap-6">
             <Loader2 className="animate-spin text-blue-600" size={48} />
@@ -251,7 +254,6 @@ export default function Home() {
                       {stock.closePrice}원
                     </p>
                     <div className="flex items-center justify-end gap-3 mt-2">
-                       {/* [22차] 수급 데이터일 경우 순매수액 우선 표시 */}
                        <span className="text-[10px] font-bold text-slate-300 uppercase tabular-nums">
                         {isInvestorTab ? `순매수 ${stock.netBuyValue}` : `거래 ${stock.volume?.toLocaleString()}주`}
                       </span>
@@ -307,7 +309,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* 전용 모달 (Chart/AI) - [23차] 일/주/월봉 연동형 멀티 차트 */}
+      {/* 전용 모달 (Chart/AI) */}
       {activeModal && selectedStock && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center px-0">
            <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-none" onClick={() => !isAiLoading && setActiveModal(null)}></div>

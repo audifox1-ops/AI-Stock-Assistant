@@ -3,7 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Plus, Search, Star, Trash2, TrendingUp, TrendingDown, ChevronRight, Loader2,
-  X, Info, RefreshCcw, BarChart3, LineChart as LineChartIcon, Bot, Sparkles, ShieldAlert
+  X, Info, RefreshCcw, BarChart3, LineChart as LineChartIcon, Bot, Sparkles, ShieldAlert,
+  Zap, AlertCircle
 } from 'lucide-react';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer 
@@ -26,12 +27,24 @@ interface Stock {
   opinion: string;
 }
 
+interface DetectedSupply {
+  ticker: string;
+  name: string;
+  type: '외국인' | '기관';
+  rank: number;
+  netBuyValue: string;
+}
+
 export default function WatchlistPage() {
   const [watchlist, setWatchlist] = useState<Stock[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+
+  // 수급 레이더 상태
+  const [detectedSupplies, setDetectedSupplies] = useState<DetectedSupply[]>([]);
+  const [isRadarLoading, setIsRadarLoading] = useState(false);
 
   // 인터랙션 상태
   const [selectedStock, setSelectedStock] = useState<Stock | null>(null);
@@ -41,6 +54,28 @@ export default function WatchlistPage() {
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [chartData, setChartData] = useState<any[]>([]);
   const [isChartLoading, setIsChartLoading] = useState(false);
+
+  // 수급 레이더 감지 로직
+  const checkSupplyRadar = async (stocks: Stock[]) => {
+    if (stocks.length === 0) return;
+    setIsRadarLoading(true);
+    try {
+      const tickers = stocks.map(s => s.itemCode);
+      const res = await fetch('/api/supply-radar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tickers })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setDetectedSupplies(data.data);
+      }
+    } catch (e) {
+      console.error('Radar check failed:', e);
+    } finally {
+      setIsRadarLoading(false);
+    }
+  };
 
   // 실시간 시세 로드 로직
   const fetchRealtimePrices = async (stocks: Stock[]) => {
@@ -77,8 +112,11 @@ export default function WatchlistPage() {
       if (saved) {
         const parsedStocks = JSON.parse(saved);
         setWatchlist(parsedStocks);
-        // 즉시 실시간 시세 업데이트 시도
-        await fetchRealtimePrices(parsedStocks);
+        // 시세 및 수급 레이더 동시 확인
+        await Promise.all([
+          fetchRealtimePrices(parsedStocks),
+          checkSupplyRadar(parsedStocks)
+        ]);
       }
     } catch (e) {
       console.error(e);
@@ -96,13 +134,14 @@ export default function WatchlistPage() {
     const updated = watchlist.filter(s => s.itemCode !== itemCode);
     setWatchlist(updated);
     localStorage.setItem(WATCHLIST_STORAGE_KEY, JSON.stringify(updated));
+    // 수급 데이터에서도 제거되어야 함 (UI 갱신)
+    setDetectedSupplies(prev => prev.filter(d => d.ticker !== itemCode));
   };
 
   const handleAddSimple = (e: React.FormEvent) => {
     e.preventDefault();
     if (!searchQuery) return;
     
-    // 심플 추가: 종목명/코드를 기반으로 기본 객체 생성
     const isCode = /^\d{6}$/.test(searchQuery);
     const newStock: Stock = {
       itemCode: isCode ? searchQuery : '000000',
@@ -123,8 +162,8 @@ export default function WatchlistPage() {
     setSearchQuery('');
     setIsAddModalOpen(false);
     
-    // 추가 후 시세 업데이트
     fetchRealtimePrices(updated);
+    checkSupplyRadar(updated);
   };
 
   const handleStockClick = (stock: Stock) => {
@@ -132,15 +171,45 @@ export default function WatchlistPage() {
     setIsBottomSheetOpen(true);
   };
 
-  // 차트/AI 기능
+  // 레이더 알림 클릭 시 AI 진단 호출용
+  const handleRadarClick = (detected: DetectedSupply) => {
+    const stock = watchlist.find(s => s.itemCode === detected.ticker);
+    if (stock) {
+      setSelectedStock(stock);
+      // 즉시 AI 모달 오픈
+      setActiveModal('ai');
+      triggerAiAnalysis(stock, `🚨 ${detected.type} 수급 포착(순매수 ${detected.rank}위)! 현재 대량 매수세가 유입된 배경과 대응 전략을 3줄로 리포트해.`);
+    }
+  };
+
+  const triggerAiAnalysis = async (stock: Stock, instruction: string) => {
+    setIsAiLoading(true);
+    setAiAnalysis(null);
+    try {
+      const res = await fetch('/api/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          symbol: stock.itemCode,
+          name: stock.stockName,
+          price: stock.closePrice,
+          changePercent: stock.fluctuationsRatio,
+          instruction: instruction
+        })
+      });
+      const data = await res.json();
+      setAiAnalysis(data.analysis || data.error);
+    } catch (e) {
+      setAiAnalysis("분석 실패");
+    } finally { setIsAiLoading(false); }
+  };
+
   const openChart = async () => {
     if (!selectedStock) return;
     setIsBottomSheetOpen(false);
     setActiveModal('chart');
     setIsChartLoading(true);
-
     try {
-      // 23차 개편된 통합 차트 API 사용
       const res = await fetch(`/api/chart?ticker=${selectedStock.itemCode}&period=day`);
       const data = await res.json();
       if (data.success) {
@@ -154,31 +223,13 @@ export default function WatchlistPage() {
     } finally { setIsChartLoading(false); }
   };
 
-  const openAi = async () => {
+  const openAiDefault = () => {
     if (!selectedStock) return;
     setIsBottomSheetOpen(false);
     setActiveModal('ai');
-    setIsAiLoading(true);
-    try {
-      const res = await fetch('/api/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          symbol: selectedStock.itemCode,
-          name: selectedStock.stockName,
-          price: selectedStock.closePrice,
-          changePercent: selectedStock.fluctuationsRatio,
-          instruction: "현재 관심 종목에 등록된 이 종목의 향후 전망과 핵심 이슈를 3줄로 리포트해."
-        })
-      });
-      const data = await res.json();
-      setAiAnalysis(data.analysis || data.error);
-    } catch (e) {
-      setAiAnalysis("분석 실패");
-    } finally { setIsAiLoading(false); }
+    triggerAiAnalysis(selectedStock, "현재 관심 종목에 등록된 이 종목의 향후 전망과 핵심 이슈를 3줄로 리포트해.");
   };
 
-  // 스켈레톤 UI 컴포넌트
   const SkeletonItem = () => (
     <div className="bg-white p-7 rounded-none border border-slate-100 flex justify-between items-center animate-pulse">
       <div className="flex items-center gap-5">
@@ -200,7 +251,7 @@ export default function WatchlistPage() {
       <header className="px-6 py-8 bg-white border-b border-gray-100 flex justify-between items-center sticky top-0 z-50 rounded-none">
         <div>
           <h1 className="text-2xl font-black text-slate-900 tracking-tighter uppercase">관심 종목</h1>
-          <p className="text-[10px] font-bold text-blue-500 uppercase tracking-widest mt-1">실시간 시세 연동 모드</p>
+          <p className="text-[10px] font-bold text-blue-500 uppercase tracking-widest mt-1">수급 레이더(RADAR) 가동 중</p>
         </div>
         <div className="flex gap-2">
           <button 
@@ -217,6 +268,36 @@ export default function WatchlistPage() {
           </button>
         </div>
       </header>
+
+      {/* 수급 포착 알림 배너 (Radar) - [24차] 신규 추가 */}
+      <div className="mt-4 px-6 space-y-3">
+        {detectedSupplies.length > 0 && (
+          <div className="flex flex-col gap-2">
+            {detectedSupplies.map((d, i) => (
+              <div 
+                key={`${d.ticker}-${i}`}
+                onClick={() => handleRadarClick(d)}
+                className="bg-gradient-to-r from-red-50 to-orange-50 border-l-4 border-red-500 p-5 flex items-center justify-between cursor-pointer active:scale-[0.98] transition-all group"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="bg-red-500 p-2 text-white">
+                    <Zap size={16} className="animate-pulse" />
+                  </div>
+                  <div>
+                    <p className="text-[12px] font-black text-slate-900 uppercase tracking-tighter">
+                      🚨 [{d.name}] {d.type} 대량 매수 포착!
+                    </p>
+                    <p className="text-[10px] font-bold text-red-600 uppercase tracking-widest mt-0.5">
+                      순매수 TOP {d.rank} 진입 ({d.netBuyValue}) - 매수 심층 분석 가동
+                    </p>
+                  </div>
+                </div>
+                <ChevronRight size={18} className="text-red-300 group-hover:translate-x-1 transition-transform" />
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       <div className="px-6 mt-6">
         {isLoading ? (
@@ -322,7 +403,7 @@ export default function WatchlistPage() {
                     <ChevronRight size={18} className="text-white/20" />
                  </button>
                  <button 
-                   onClick={openAi}
+                   onClick={openAiDefault}
                    className="w-full flex items-center justify-between p-7 bg-white text-slate-900 rounded-none hover:bg-slate-50 transition-all border-t border-slate-100"
                  >
                     <div className="flex items-center gap-5">
@@ -367,9 +448,17 @@ export default function WatchlistPage() {
                  ) : (
                    <div className="bg-slate-50 p-8 border-l-4 border-blue-600">
                       {isAiLoading ? (
-                        <div className="py-20 flex justify-center uppercase text-[10px] font-black text-slate-300 tracking-[0.4em]">통찰력 도출 중...</div>
+                        <div className="py-20 flex flex-col items-center justify-center gap-6">
+                           <Sparkles size={40} className="text-blue-600 animate-pulse" />
+                           <p className="text-[10px] font-black text-slate-300 tracking-[0.4em] uppercase">통찰력 도출 중...</p>
+                        </div>
                       ) : (
-                        <p className="text-[14px] font-bold text-slate-800 uppercase leading-relaxed tracking-tight whitespace-pre-wrap">{aiAnalysis}</p>
+                        <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                          <p className="text-[14px] font-bold text-slate-800 uppercase leading-relaxed tracking-tight whitespace-pre-wrap">{aiAnalysis}</p>
+                          <p className="text-[9px] font-bold text-slate-300 mt-10 text-center uppercase tracking-[0.3em] flex items-center justify-center gap-3">
+                            <ShieldAlert size={14} className="text-blue-500" /> 실전 매매 전 반드시 전문 AI 리포트를 참조하세요
+                          </p>
+                        </div>
                       )}
                    </div>
                  )}

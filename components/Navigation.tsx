@@ -16,27 +16,27 @@ const Navigation = () => {
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 px-6 py-4 flex justify-between items-center z-50 max-w-[430px] mx-auto rounded-none">
+    <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 flex justify-around items-center z-[100] max-w-[430px] mx-auto h-16 pb-safe rounded-none">
       {navItems.map((item) => {
         const isActive = pathname === item.path;
         return (
           <Link
             key={item.name}
             href={item.path}
-            className={`flex flex-col items-center gap-1.5 transition-all duration-300 relative group ${
-              isActive ? 'text-blue-600' : 'text-gray-400'
+            className={`flex-1 flex flex-col items-center justify-center h-full py-2 transition-all duration-300 relative group ${
+              isActive ? 'text-blue-600' : 'text-slate-400'
             }`}
           >
             {isActive && (
-              <div className="absolute -top-3 left-1/2 -translate-x-1/2 w-8 h-1 bg-blue-600 rounded-none animate-in fade-in zoom-in-50 duration-300" />
+              <div className="absolute top-0 left-1/2 -translate-x-1/2 w-10 h-1 bg-blue-600 rounded-none animate-in fade-in zoom-in-50 duration-300" />
             )}
-            <div className={`p-1.5 rounded-none transition-all duration-300 ${
-              isActive ? 'bg-blue-50' : 'group-hover:bg-gray-50'
+            <div className={`mb-1 transition-all duration-300 ${
+              isActive ? 'scale-110' : 'group-hover:text-slate-600'
             }`}>
               <item.icon size={22} strokeWidth={isActive ? 2.5 : 2} />
             </div>
             <span className={`text-[10px] font-black tracking-tighter uppercase transition-colors duration-300 ${
-              isActive ? 'text-blue-600' : 'text-gray-400'
+              isActive ? 'text-blue-600' : 'text-slate-400'
             }`}>
               {item.name}
             </span>
