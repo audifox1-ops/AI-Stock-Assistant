@@ -138,7 +138,8 @@ const StockChart: React.FC<StockChartProps> = ({ data, isMinute }) => {
         text: `MIN: ${candleData[lowIdx].low.toLocaleString()}`,
       }
     ];
-    candleSeries.setMarkers(markers);
+    // [v5.1 Fix]: setMarkers 대신 createSeriesMarkers API 사용
+    candleSeries.createSeriesMarkers(markers);
 
     // 반응형 처리
     const handleResize = () => {
