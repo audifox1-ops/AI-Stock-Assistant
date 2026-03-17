@@ -11,7 +11,7 @@ export const dynamic = 'force-dynamic';
 const WATCHLIST_STORAGE_KEY = 'myWatchlist';
 
 interface WatchlistItem {
-  itemCode: string; // Ticker 기준
+  itemCode: string;
   stockName: string;
   closePrice?: number;
   fluctuationsRatio?: string | number;
@@ -39,15 +39,15 @@ export default function WatchlistPage() {
       if (data.success && Array.isArray(data.data)) {
         const rtData = data.data; // [{ ticker, price, changeRate, volume }, ...]
         
-        // 데이터 병합(Merge) 로직
+        // 데이터 병합(Merge) 로직: 서버 데이터가 없어도 로컬 데이터 보존
         const merged = currentItems.map(local => {
           const rt = rtData.find((r: any) => r.ticker === local.itemCode);
           if (rt) {
             return {
               ...local,
-              closePrice: rt.price,
-              fluctuationsRatio: rt.changeRate,
-              volume: rt.volume
+              closePrice: rt.price || local.closePrice || 0,
+              fluctuationsRatio: rt.changeRate !== undefined ? rt.changeRate : (local.fluctuationsRatio || '0.00'),
+              volume: rt.volume || local.volume || 0
             };
           }
           return local;

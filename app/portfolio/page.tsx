@@ -56,15 +56,15 @@ export default function PortfolioPage() {
       if (data.success && Array.isArray(data.data)) {
         const rtData = data.data; // [{ ticker, price, changeRate, volume }, ...]
         
-        // 데이터 병합(Merge) 로직
+        // 데이터 병합(Merge) 로직: 티커 일치 여부 확인 고도화
         const merged = currentHoldings.map(local => {
           const rt = rtData.find((r: any) => r.ticker === local.itemCode);
           if (rt) {
             return {
               ...local,
-              currentPrice: rt.price || 0,
-              changeRate: rt.changeRate || 0,
-              volume: rt.volume || 0
+              currentPrice: rt.price || local.currentPrice || local.avgPrice || 0,
+              changeRate: rt.changeRate !== undefined ? rt.changeRate : (local.changeRate || 0),
+              volume: rt.volume || local.volume || 0
             };
           }
           return local;
@@ -276,7 +276,7 @@ export default function PortfolioPage() {
                         </div>
                         <div>
                           <h4 className="text-[17px] font-black text-slate-900 tracking-tighter uppercase">{h.stockName}</h4>
-                          <p className="text-[9px] font-bold text-slate-300 uppercase tracking-widest">{h.itemCode}</p>
+                          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{h.itemCode}</p>
                         </div>
                       </div>
                       <button onClick={() => removeHolding(h.itemCode)} className="p-2 text-slate-200 hover:text-red-500 transition-colors">
