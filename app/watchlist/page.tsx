@@ -39,14 +39,14 @@ export default function WatchlistPage() {
       if (data.success && Array.isArray(data.data)) {
         const rtData = data.data; // [{ ticker, price, changeRate, volume }, ...]
         
-        // 데이터 병합(Merge) 로직: '형변환 및 공백 제거' 강제 적용
+        // 데이터 병합(Merge) 로직: 'String() 형변환 및 강제 매칭' 적용
         const merged = currentItems.map(local => {
-          // rtData의 ticker와 local의 itemCode를 String()으로 변환 후 trim()하여 엄격하게 매칭
+          // 서버 ticker와 로컬 itemCode를 강제로 String으로 변환하여 매칭 실패 차단
           const rt = rtData.find((r: any) => String(r.ticker).trim() === String(local.itemCode).trim());
           if (rt && rt.price > 0) {
             return {
               ...local,
-              // 실시간 가격(rt.price)이 존재하면 로컬 데이터를 무시하고 강제로 업데이트
+              // 실시간 가격(rt.price)을 Number 타입으로 강제 주입
               closePrice: Number(rt.price),
               fluctuationsRatio: rt.changeRate !== undefined ? Number(rt.changeRate) : (local.fluctuationsRatio || 0),
               volume: rt.volume !== undefined ? Number(rt.volume) : (local.volume || 0)
@@ -56,7 +56,6 @@ export default function WatchlistPage() {
         });
         
         setWatchlist(merged);
-        // 상태 업데이트 직후 LocalStorage에도 즉시 동기화하여 데이터 유실 방지
         localStorage.setItem(WATCHLIST_STORAGE_KEY, JSON.stringify(merged));
       }
     } catch (e) {
@@ -91,7 +90,6 @@ export default function WatchlistPage() {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
           setWatchlist(parsed);
-          // 로드 즉시 시세 동기화 실행
           await Promise.all([
             fetchRealtimePrices(parsed),
             checkSupplyRadar(parsed)
@@ -149,8 +147,8 @@ export default function WatchlistPage() {
       <header className="px-6 py-8 bg-white border-b border-gray-100 sticky top-0 z-[100] shadow-sm">
         <div className="flex justify-between items-center mb-6">
           <div>
-            <h1 className="text-2xl font-black text-slate-900 tracking-tighter uppercase">관심 종목</h1>
-            <p className="text-[10px] font-bold text-blue-500 uppercase tracking-widest mt-1">Smart Watchlist Engine</p>
+            <h1 className="text-2xl font-black text-slate-900 tracking-tighter uppercase leading-none">Market Cloud</h1>
+            <p className="text-[10px] font-bold text-blue-500 uppercase tracking-widest mt-2">Real-time Watchlist Engine</p>
           </div>
           <button 
             onClick={() => setIsAddModalOpen(true)}
@@ -165,7 +163,7 @@ export default function WatchlistPage() {
              <Star size={14} className="text-blue-400" /> My List
            </div>
            <div className="flex items-center gap-2 px-5 py-3 bg-slate-50 text-slate-400 text-[11px] font-black uppercase tracking-widest whitespace-nowrap border border-slate-100">
-             Total {watchlist?.length || 0}
+             Total {watchlist?.length || 0} Stocks
            </div>
         </div>
       </header>
@@ -173,7 +171,7 @@ export default function WatchlistPage() {
       {isSyncing && (
         <div className="px-6 py-2 bg-blue-600 flex items-center justify-center gap-2 animate-pulse">
            <Loader2 size={12} className="text-white animate-spin" />
-           <span className="text-[10px] font-black text-white uppercase tracking-[0.2em]">실시간 시세 데이터 동기화 중...</span>
+           <span className="text-[10px] font-black text-white uppercase tracking-[0.2em]">서버 데이터 실시간 동기화 중...</span>
         </div>
       )}
 
@@ -183,9 +181,9 @@ export default function WatchlistPage() {
            <div className="flex items-center gap-4">
               <ShieldAlert size={24} className="text-white" />
               <div>
-                 <p className="text-[10px] font-black text-red-200 uppercase tracking-widest">외인/기관 대량 수급 포착</p>
+                 <p className="text-[10px] font-black text-red-200 uppercase tracking-widest leading-none mb-1">매수세 유입 포착</p>
                  <h2 className="text-lg font-black text-white tracking-tighter uppercase leading-tight">
-                    {(radarStocks || []).join(', ')} 집중 매수세 유입!
+                    {(radarStocks || []).join(', ')} 포지션 유입!
                  </h2>
               </div>
            </div>
@@ -199,28 +197,25 @@ export default function WatchlistPage() {
         {isLoading ? (
           <div className="py-20 flex flex-col items-center justify-center gap-6">
             <Loader2 className="animate-spin text-slate-200" size={40} />
-            <p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.4em]">데이터를 불러오고 있습니다...</p>
+            <p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.4em]">SYNCING DATA...</p>
           </div>
         ) : (!watchlist || watchlist.length === 0) ? (
           <div className="bg-white border-2 border-dashed border-slate-200 p-20 text-center flex flex-col items-center gap-6">
-            <div className="w-16 h-16 bg-slate-50 flex items-center justify-center border border-slate-100">
-               <AlertCircle size={32} className="text-slate-200" />
-            </div>
+            <AlertCircle size={32} className="text-slate-100" />
             <div>
-               <p className="text-sm font-black text-slate-900 uppercase tracking-widest">목록이 비어있습니다</p>
-               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-2">우측 상단 + 버튼으로 종목을 추가하세요</p>
+               <p className="text-xs font-black text-slate-300 uppercase tracking-widest">와치리스트가 비어있습니다</p>
             </div>
           </div>
         ) : (
           (watchlist || []).map((item, idx) => {
             const isRadar = (radarStocks || []).includes(item.stockName);
-            // 렌더링 시 실시간 현재가(closePrice)가 0보다 크면 무조건 최우선 출력
+            // 실시간 가격(closePrice)이 0보다 크면 무조건 최우선 적용
             const currentPrice = (item.closePrice && item.closePrice > 0) ? item.closePrice : 0;
             const changeRate = item.fluctuationsRatio || 0;
             const isPlus = Number(changeRate) > 0;
 
             return (
-              <div key={`${item.itemCode || idx}-${idx}`} className={`bg-white border rounded-none group transition-all duration-300 ${isRadar ? 'border-red-500 shadow-lg' : 'border-slate-100 hover:border-blue-200'}`}>
+              <div key={`${item.itemCode}-${idx}`} className={`bg-white border rounded-none group transition-all duration-300 ${isRadar ? 'border-red-500 shadow-lg' : 'border-slate-100 hover:border-blue-200'}`}>
                 <div className="p-6">
                   <div className="flex justify-between items-start mb-6">
                     <div className="flex items-center gap-4">
@@ -250,18 +245,7 @@ export default function WatchlistPage() {
                         {isPlus ? '+' : ''}{changeRate}%
                       </span>
                     </div>
-                    <div className="bg-white p-4 col-span-2 border-t border-slate-50 flex justify-between items-center">
-                       <p className="text-[9px] font-bold text-slate-400 uppercase">거래량</p>
-                       <p className="text-sm font-black text-slate-900 tabular-nums uppercase">{item.volume?.toLocaleString() || '-'}주</p>
-                    </div>
                   </div>
-
-                  {isRadar && (
-                    <div className="mt-4 pt-4 border-t border-red-50 flex items-center justify-center gap-2 bg-red-50 py-3 animate-pulse">
-                       <Zap size={14} className="text-red-600" />
-                       <span className="text-[10px] font-black text-red-600 uppercase tracking-[0.2em]">수급 포착: 강력 매수 타이밍</span>
-                    </div>
-                  )}
                 </div>
               </div>
             );
@@ -269,9 +253,9 @@ export default function WatchlistPage() {
         )}
       </main>
 
-      {/* 등록 모달 */}
+      {/* 등록 모달 - 가독성 개선 버전 */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center p-6 bg-slate-950/80 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-6 bg-slate-950/80 backdrop-blur-md">
           <div className="absolute inset-0" onClick={() => setIsAddModalOpen(false)}></div>
           <div className="relative bg-white w-full max-w-[450px] rounded-none p-10 border-t-8 border-slate-900 shadow-2xl">
             <div className="flex justify-between items-center mb-10 pb-6 border-b border-slate-100">
@@ -289,8 +273,9 @@ export default function WatchlistPage() {
                     <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
                     <input 
                       type="text" 
-                      placeholder="종목코드:종목명 (예: 005930:삼성전자)"
-                      className="w-full bg-slate-50 border border-slate-200 p-6 pl-12 rounded-none font-black outline-none focus:border-blue-600 focus:bg-white transition-all text-sm uppercase tracking-widest"
+                      placeholder="005930:삼성전자 형태 입력"
+                      // 가독성 확보를 위한 스타일 강제 지정
+                      className="w-full bg-white text-slate-900 border-2 border-slate-200 p-6 pl-12 rounded-none font-black outline-none focus:border-blue-500 placeholder:text-slate-400 transition-all text-sm uppercase tracking-widest"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                     />

@@ -56,14 +56,14 @@ export default function PortfolioPage() {
       if (data.success && Array.isArray(data.data)) {
         const rtData = data.data; // [{ ticker, price, changeRate, volume }, ...]
         
-        // 데이터 병합(Merge) 로직: '형변환 및 공백 제거' 강제 적용
+        // 데이터 병합(Merge) 로직: 'String() 형변환 및 강제 매칭' 적용
         const merged = currentHoldings.map(local => {
-          // rtData의 ticker와 local의 itemCode를 String() 변환 후 trim() 처리하여 엄격하게 매칭
+          // 서버 ticker와 로컬 itemCode를 String으로 강제 변환하여 매칭
           const rt = rtData.find((r: any) => String(r.ticker).trim() === String(local.itemCode).trim());
           if (rt && rt.price > 0) {
             return {
               ...local,
-              // 실시간 시세(rt.price)가 존재하면 평단가(avgPrice)를 무시하고 무조건 업데이트
+              // 실시간 시세(rt.price)를 Number 타입으로 매칭된 항목에 주입
               currentPrice: Number(rt.price),
               changeRate: rt.changeRate !== undefined ? Number(rt.changeRate) : (local.changeRate || 0),
               volume: rt.volume !== undefined ? Number(rt.volume) : (local.volume || 0)
@@ -73,7 +73,6 @@ export default function PortfolioPage() {
         });
         
         setHoldings(merged);
-        // 상태 업데이트 직후 LocalStorage에도 즉시 동기화하여 데이터 일관성 유지
         localStorage.setItem(PORTFOLIO_STORAGE_KEY, JSON.stringify(merged));
       }
     } catch (e) {
@@ -90,7 +89,6 @@ export default function PortfolioPage() {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
           setHoldings(parsed);
-          // 데이터 로드와 동시에 실시간 시세 동기화
           await fetchRealtimePrices(parsed);
         }
       }
@@ -117,7 +115,7 @@ export default function PortfolioPage() {
     let totalValuation = 0;
 
     (filteredHoldings || []).forEach(h => {
-      // 계산 시 실시간 현재가(currentPrice)가 0보다 크면 최우선 적용, 부재 시 평단가(avgPrice) 사용
+      // 계산 엔진: 실시간 현재가(currentPrice)가 있으면 최우선 적용하여 자산 평가
       const current = (h.currentPrice && h.currentPrice > 0) ? h.currentPrice : (h.avgPrice || 0);
       totalInvested += (h.avgPrice || 0) * (h.quantity || 0);
       totalValuation += current * (h.quantity || 0);
@@ -186,8 +184,8 @@ export default function PortfolioPage() {
       <header className="px-6 py-8 bg-white border-b border-gray-100 sticky top-0 z-[100] shadow-sm">
         <div className="flex justify-between items-center mb-6">
           <div>
-            <h1 className="text-2xl font-black text-slate-900 tracking-tighter uppercase">자산 관리</h1>
-            <p className="text-[10px] font-bold text-blue-500 uppercase tracking-widest mt-1">AI Portfolio Management</p>
+            <h1 className="text-2xl font-black text-slate-900 tracking-tighter uppercase leading-none">Asset.AI</h1>
+            <p className="text-[10px] font-bold text-blue-500 uppercase tracking-widest mt-2">Portfolio Management Node</p>
           </div>
           <button 
             onClick={() => setIsAddModalOpen(true)}
@@ -215,19 +213,19 @@ export default function PortfolioPage() {
       {isSyncing && (
         <div className="px-6 py-2 bg-blue-600 flex items-center justify-center gap-2 animate-pulse">
           <Loader2 size={12} className="text-white animate-spin" />
-          <span className="text-[10px] font-black text-white uppercase tracking-[0.2em]">포트폴리오 평가액 최신화 중...</span>
+          <span className="text-[10px] font-black text-white uppercase tracking-[0.2em]">실시간 시세 데이터 동기화 중...</span>
         </div>
       )}
 
       <main className="px-6 mt-8 space-y-8">
         <div className="bg-slate-900 p-8 rounded-none shadow-2xl relative overflow-hidden">
           <div className="relative z-10">
-            <p className="text-[10px] font-black text-blue-400 uppercase tracking-[0.3em] mb-4">Portfolio Performance</p>
+            <p className="text-[10px] font-black text-blue-400 uppercase tracking-[0.3em] mb-4">Market Valuation</p>
             <div className="flex items-end gap-3 mb-8">
-               <h2 className="text-4xl font-black text-white tabular-nums tracking-tighter">
+               <h2 className="text-4xl font-black text-white tabular-nums tracking-tighter leading-none">
                 {summary.valuation.toLocaleString()}
                </h2>
-               <span className="text-xl font-bold text-white/50 pb-1 italic uppercase">KRW</span>
+               <span className="text-xl font-bold text-white/50 pb-0.5 uppercase">KRW</span>
             </div>
             
             <div className="grid grid-cols-2 gap-8 border-t border-white/10 pt-8">
@@ -250,14 +248,13 @@ export default function PortfolioPage() {
 
         <button onClick={analyzePortfolio} className="w-full bg-white border-4 border-slate-900 p-6 flex items-center justify-center gap-4 hover:bg-slate-50 transition-all shadow-xl">
           <Bot size={24} className="text-blue-600" />
-          <span className="text-sm font-black text-slate-900 uppercase tracking-widest">AI 자산 건전성 리포트 가동</span>
+          <span className="text-sm font-black text-slate-900 uppercase tracking-widest">AI 자산 건전성 진단</span>
         </button>
 
         <div className="space-y-4">
           {isLoading ? (
             <div className="py-20 flex flex-col items-center justify-center gap-4">
               <Loader2 className="animate-spin text-slate-200" size={32} />
-              <p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.4em]">SYNCING ASSETS...</p>
             </div>
           ) : filteredHoldings.length === 0 ? (
             <div className="bg-white border-2 border-dashed border-slate-200 p-20 text-center flex flex-col items-center gap-5">
@@ -266,14 +263,14 @@ export default function PortfolioPage() {
             </div>
           ) : (
             (filteredHoldings || []).map((h, i) => {
-              // UI 출력 시 실시간 현재가(h.currentPrice)가 0보다 크면 무조건 최우선 적용
+              // 리스트 렌더링 쐐기 로직: 실시간 현재가(h.currentPrice)가 0보다 크면 무조건 우선 적용
               const current = (h.currentPrice && h.currentPrice > 0) ? h.currentPrice : h.avgPrice;
               const profit = (current - h.avgPrice) * h.quantity;
               const rate = h.avgPrice > 0 ? ((current - h.avgPrice) / h.avgPrice) * 100 : 0;
               const isPlus = profit >= 0;
 
               return (
-                <div key={`${h.itemCode}-${i}`} className="bg-white border-2 border-slate-50 rounded-none overflow-hidden hover:border-blue-200 transition-all shadow-sm">
+                <div key={`${h.itemCode}-${i}`} className="bg-white border-2 border-slate-100 rounded-none overflow-hidden hover:border-blue-200 transition-all shadow-sm">
                   <div className="p-6">
                     <div className="flex justify-between items-start mb-6">
                       <div className="flex items-center gap-4">
@@ -291,21 +288,21 @@ export default function PortfolioPage() {
                     </div>
 
                     <div className="grid grid-cols-2 gap-px bg-slate-50 border border-slate-50 mb-6 font-sans">
-                      <div className="bg-white p-4">
-                        <p className="text-[9px] font-bold text-slate-400 uppercase mb-1">Buy Price</p>
+                      <div className="bg-white p-4 font-sans">
+                        <p className="text-[9px] font-bold text-slate-400 uppercase mb-1 tracking-widest">Buying Prc</p>
                         <p className="text-sm font-black text-slate-900 tabular-nums">{h.avgPrice.toLocaleString()}원</p>
                       </div>
                       <div className="bg-white p-4 text-right">
-                        <p className="text-[9px] font-bold text-slate-400 uppercase mb-1">Current</p>
+                        <p className="text-[9px] font-bold text-slate-400 uppercase mb-1 tracking-widest">Real-time Prc</p>
                         <p className="text-sm font-black text-slate-900 tabular-nums">
                           {current > 0 ? `${current.toLocaleString()}원` : '-'}
                         </p>
                       </div>
-                      <div className="bg-white p-4 col-span-2 border-t border-slate-50 flex justify-between items-center">
+                      <div className="bg-white p-4 col-span-2 border-t border-slate-50 flex justify-between items-center font-sans">
                          <span className={`text-[15px] font-black tabular-nums ${isPlus ? 'text-red-500' : 'text-blue-500'}`}>
                            {isPlus ? '+' : ''}{rate.toFixed(2)}% ({profit.toLocaleString()}원)
                          </span>
-                         <span className="text-[10px] font-bold text-slate-400 uppercase">Vol: {h.volume?.toLocaleString() || '-'}</span>
+                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Qty: {h.quantity}</span>
                       </div>
                     </div>
                   </div>
@@ -316,55 +313,86 @@ export default function PortfolioPage() {
         </div>
       </main>
 
-      {/* 모달 로직 유지 */}
+      {/* 종목 추가 모달 - 가독성 전면 개선 */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center p-6 bg-slate-950/80">
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-6 bg-slate-950/80 backdrop-blur-md">
           <div className="absolute inset-0" onClick={() => setIsAddModalOpen(false)}></div>
-          <div className="relative bg-white w-full max-w-[450px] rounded-none p-10 border-t-8 border-slate-900 shadow-2xl">
-            <h2 className="text-xl font-black text-slate-900 tracking-tighter uppercase mb-8">Asset Registration</h2>
+          <div className="relative bg-white w-full max-w-[450px] rounded-none p-12 border-t-8 border-slate-900 shadow-2xl">
+            <h2 className="text-xl font-black text-slate-900 tracking-tighter uppercase mb-10 pb-6 border-b-2 border-slate-100">Asset Registration</h2>
             <form onSubmit={handleAddHolding} className="space-y-6">
                <div className="grid grid-cols-2 gap-4">
-                  <input type="text" required placeholder="005930" className="w-full bg-slate-50 border border-slate-200 p-4 font-black"
-                    value={formData.itemCode} onChange={e => setFormData({...formData, itemCode: e.target.value})} />
-                  <input type="text" required placeholder="삼성전자" className="w-full bg-slate-50 border border-slate-200 p-4 font-black"
-                    value={formData.stockName} onChange={e => setFormData({...formData, stockName: e.target.value})} />
+                  <div className="space-y-2">
+                     <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Ticker</label>
+                     <input type="text" required placeholder="005930" 
+                        // 가독성을 위해 흰 배경, 검정 글자색, 테두리 강화
+                        className="w-full bg-white text-slate-900 border-2 border-slate-200 p-4 font-black outline-none focus:border-blue-500 placeholder:text-slate-400"
+                        value={formData.itemCode} onChange={e => setFormData({...formData, itemCode: e.target.value})} />
+                  </div>
+                  <div className="space-y-2">
+                     <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Name</label>
+                     <input type="text" required placeholder="삼성전자" 
+                        className="w-full bg-white text-slate-900 border-2 border-slate-200 p-4 font-black outline-none focus:border-blue-500 placeholder:text-slate-400"
+                        value={formData.stockName} onChange={e => setFormData({...formData, stockName: e.target.value})} />
+                  </div>
                </div>
                <div className="grid grid-cols-2 gap-4">
-                  <input type="number" required placeholder="매수가" className="w-full bg-slate-50 border border-slate-200 p-4 font-black"
-                    value={formData.avgPrice} onChange={e => setFormData({...formData, avgPrice: e.target.value})} />
-                  <input type="number" required placeholder="수량" className="w-full bg-slate-50 border border-slate-200 p-4 font-black"
-                    value={formData.quantity} onChange={e => setFormData({...formData, quantity: e.target.value})} />
+                  <div className="space-y-2">
+                     <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Buying Price</label>
+                     <input type="number" required placeholder="매수가" 
+                        className="w-full bg-white text-slate-900 border-2 border-slate-200 p-4 font-black outline-none focus:border-blue-500 placeholder:text-slate-400"
+                        value={formData.avgPrice} onChange={e => setFormData({...formData, avgPrice: e.target.value})} />
+                  </div>
+                  <div className="space-y-2">
+                     <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Quantity</label>
+                     <input type="number" required placeholder="수량" 
+                        className="w-full bg-white text-slate-900 border-2 border-slate-200 p-4 font-black outline-none focus:border-blue-500 placeholder:text-slate-400"
+                        value={formData.quantity} onChange={e => setFormData({...formData, quantity: e.target.value})} />
+                  </div>
                </div>
                <div className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-100">
-                  <input type="number" required placeholder="목표가" className="w-full bg-blue-50 border border-blue-100 p-4 font-black"
-                    value={formData.targetPrice} onChange={e => setFormData({...formData, targetPrice: e.target.value})} />
-                  <input type="number" required placeholder="손절가" className="w-full bg-red-50 border border-red-100 p-4 font-black"
-                    value={formData.stopLossPrice} onChange={e => setFormData({...formData, stopLossPrice: e.target.value})} />
+                  <div className="space-y-2">
+                     <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest text-blue-500">Target Prc</label>
+                     <input type="number" required placeholder="목표가" 
+                        className="w-full bg-white text-slate-900 border-2 border-slate-200 p-4 font-black outline-none focus:border-blue-500 placeholder:text-slate-400"
+                        value={formData.targetPrice} onChange={e => setFormData({...formData, targetPrice: e.target.value})} />
+                  </div>
+                  <div className="space-y-2">
+                     <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest text-red-500">Stop Loss</label>
+                     <input type="number" required placeholder="손절가" 
+                        className="w-full bg-white text-slate-900 border-2 border-slate-200 p-4 font-black outline-none focus:border-blue-500 placeholder:text-slate-400"
+                        value={formData.stopLossPrice} onChange={e => setFormData({...formData, stopLossPrice: e.target.value})} />
+                  </div>
                </div>
-               <button className="w-full bg-slate-900 text-white font-black py-6 rounded-none uppercase tracking-widest text-xs">Commit Changes</button>
+               <button className="w-full bg-slate-900 text-white font-black py-7 rounded-none uppercase tracking-[0.3em] text-xs hover:bg-blue-600 active:scale-[0.98] transition-all mt-6 shadow-xl shadow-slate-100">
+                  Commit Registration
+               </button>
             </form>
           </div>
         </div>
       )}
 
+      {/* 분석 성과 모달 유지 */}
       {isAnalysisModalOpen && (
-        <div className="fixed inset-0 z-[130] flex items-center justify-center p-6 bg-slate-950/90">
+        <div className="fixed inset-0 z-[130] flex items-center justify-center p-6 bg-slate-950/90 backdrop-blur-xl">
            <div className="absolute inset-0" onClick={() => !isAiLoading && setIsAnalysisModalOpen(false)}></div>
-           <div className="relative bg-white w-full max-w-[500px] rounded-none p-12 border-t-[16px] border-slate-900">
+           <div className="relative bg-white w-full max-w-[500px] rounded-none p-12 border-t-[16px] border-slate-900 shadow-2xl">
               <div className="flex justify-between items-center mb-10 pb-6 border-b-2 border-slate-100">
-                 <h2 className="text-xl font-black text-slate-900 uppercase">AI Diagnostic Result</h2>
-                 <button onClick={() => setIsAnalysisModalOpen(false)} className="p-2 bg-slate-900 text-white rounded-none"><X size={20} /></button>
+                 <h2 className="text-xl font-black text-slate-900 uppercase tracking-tighter">AI Analysis Report</h2>
+                 <button onClick={() => setIsAnalysisModalOpen(false)} className="p-3 bg-slate-900 text-white rounded-none"><X size={20} /></button>
               </div>
-              <div className="min-h-[300px]">
+              <div className="min-h-[300px] font-sans">
                  {isAiLoading ? (
-                   <div className="py-20 flex flex-col items-center justify-center gap-6 animate-pulse">
-                      <Sparkles size={40} className="text-blue-600" />
+                   <div className="py-20 flex flex-col items-center justify-center gap-6">
+                      <Loader2 size={32} className="text-blue-600 animate-spin" />
+                      <p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.4em]">Processing Insights...</p>
                    </div>
                  ) : (
-                   <p className="text-[14px] font-bold text-slate-800 leading-relaxed whitespace-pre-wrap">{aiAnalysis}</p>
+                   <div className="text-[14px] font-bold text-slate-800 leading-relaxed whitespace-pre-wrap">
+                      {aiAnalysis}
+                   </div>
                  )}
               </div>
-              <button onClick={() => setIsAnalysisModalOpen(false)} className="w-full bg-slate-900 text-white font-black py-6 rounded-none mt-10 uppercase tracking-widest text-xs">Close</button>
+              <button onClick={() => setIsAnalysisModalOpen(false)} className="w-full bg-slate-900 text-white font-black py-6 rounded-none mt-10 uppercase tracking-widest text-xs">Acknowledge</button>
            </div>
         </div>
       )}
