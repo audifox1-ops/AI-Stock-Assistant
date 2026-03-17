@@ -19,6 +19,7 @@ interface WatchlistItem {
 }
 
 export default function WatchlistPage() {
+  // 1. 상태 초기값 빈 배열 강제 지정
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -29,30 +30,39 @@ export default function WatchlistPage() {
   const [radarStocks, setRadarStocks] = useState<string[]>([]);
 
   const fetchRealtimePrices = async (items: WatchlistItem[]) => {
-    if (items.length === 0) return;
+    // 배열 여부 및 길이 방어
+    if (!items || !Array.isArray(items) || items.length === 0) return;
+    
     setIsSyncing(true);
     const codes = items.map(item => item.itemCode).join(',');
     try {
-      // market API를 사용하여 다중 종목 시세 조회 (tickers 파라미터 활용)
       const res = await fetch(`/api/market?tickers=${codes}`);
       const data = await res.json();
       
-      if (data.success) {
-        const priceData = data.data; // [{ ticker, price, changeRate, volume }, ...]
+      // 데이터 형식 방어
+      if (data.success && Array.isArray(data.data)) {
+        const priceData = data.data; 
         const updated = items.map(item => {
           const live = priceData.find((p: any) => p.ticker === item.itemCode);
           if (live) {
             return {
               ...item,
               closePrice: live.price?.toLocaleString(),
-              fluctuationsRatio: live.changeRate.toString(),
-              volume: live.volume?.toLocaleString()
+              fluctuationsRatio: live.changeRate?.toString() || '0.00',
+              volume: live.volume?.toLocaleString() || '0'
             };
           }
           return item;
         });
-        setWatchlist(updated);
-        localStorage.setItem(WATCHLIST_STORAGE_KEY, JSON.stringify(updated));
+        
+        // 최종 업데이트 전 배열 확인
+        if (Array.isArray(updated)) {
+          setWatchlist(updated);
+          localStorage.setItem(WATCHLIST_STORAGE_KEY, JSON.stringify(updated));
+        }
+      } else {
+        // 비정상 응답 시 상태 유지 또는 빈 배열 방어 (필요시)
+        console.warn('Invalid price data format received');
       }
     } catch (e) {
       console.error('Watchlist Sync Error:', e);
@@ -62,7 +72,7 @@ export default function WatchlistPage() {
   };
 
   const checkSupplyRadar = async (items: WatchlistItem[]) => {
-    if (items.length === 0) return;
+    if (!items || !Array.isArray(items) || items.length === 0) return;
     try {
       const codes = items.map(i => i.itemCode);
       const res = await fetch('/api/supply-radar', {
@@ -71,7 +81,7 @@ export default function WatchlistPage() {
         body: JSON.stringify({ tickers: codes })
       });
       const data = await res.json();
-      if (data.success) {
+      if (data.success && Array.isArray(data.radarStocks)) {
         setRadarStocks(data.radarStocks);
       }
     } catch (e) {
@@ -84,15 +94,23 @@ export default function WatchlistPage() {
       const saved = localStorage.getItem(WATCHLIST_STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
-        setWatchlist(parsed);
-        // 즉시 동기화 실행
-        await Promise.all([
-          fetchRealtimePrices(parsed),
-          checkSupplyRadar(parsed)
-        ]);
+        // 파싱 결과가 배열인지 확인
+        if (Array.isArray(parsed)) {
+          setWatchlist(parsed);
+          // 즉시 동기화 실행
+          await Promise.all([
+            fetchRealtimePrices(parsed),
+            checkSupplyRadar(parsed)
+          ]);
+        } else {
+          setWatchlist([]);
+        }
+      } else {
+        setWatchlist([]);
       }
     } catch (e) {
-      console.error(e);
+      console.error('Local Storage Load Error:', e);
+      setWatchlist([]); // 에러 시 빈 배열로 초기화하여 'length' 에러 방지
     } finally {
       setIsLoading(false);
     }
@@ -114,12 +132,15 @@ export default function WatchlistPage() {
       stockName: name ? name.trim() : '신규종목'
     };
 
-    if (watchlist.some(item => item.itemCode === newItem.itemCode)) {
+    // watchlist가 undefined인 경우 대비 방어
+    const currentList = Array.isArray(watchlist) ? watchlist : [];
+    
+    if (currentList.some(item => item.itemCode === newItem.itemCode)) {
       alert('이미 등록된 종목입니다.');
       return;
     }
 
-    const updated = [newItem, ...watchlist];
+    const updated = [newItem, ...currentList];
     setWatchlist(updated);
     localStorage.setItem(WATCHLIST_STORAGE_KEY, JSON.stringify(updated));
     setSearchQuery('');
@@ -130,7 +151,8 @@ export default function WatchlistPage() {
   };
 
   const removeItem = (itemCode: string) => {
-    const updated = watchlist.filter(item => item.itemCode !== itemCode);
+    const currentList = Array.isArray(watchlist) ? watchlist : [];
+    const updated = currentList.filter(item => item.itemCode !== itemCode);
     setWatchlist(updated);
     localStorage.setItem(WATCHLIST_STORAGE_KEY, JSON.stringify(updated));
   };
@@ -156,7 +178,7 @@ export default function WatchlistPage() {
              <Star size={14} className="text-blue-400" /> My List
            </div>
            <div className="flex items-center gap-2 px-5 py-3 bg-slate-50 text-slate-400 text-[11px] font-black uppercase tracking-widest whitespace-nowrap border border-slate-100">
-             Total {watchlist.length}
+             Total {watchlist?.length || 0}
            </div>
         </div>
       </header>
@@ -169,15 +191,15 @@ export default function WatchlistPage() {
         </div>
       )}
 
-      {/* 수급 포착 알림 바 */}
-      {radarStocks.length > 0 && (
+      {/* 수급 포착 알림 바 - optional chaining 방어 */}
+      {(radarStocks?.length || 0) > 0 && (
         <div className="mx-6 mt-6 bg-red-600 p-5 rounded-none border-l-[6px] border-red-900 shadow-xl flex items-center justify-between animate-bounce">
            <div className="flex items-center gap-4">
               <ShieldAlert size={24} className="text-white" />
               <div>
                  <p className="text-[10px] font-black text-red-200 uppercase tracking-widest">외인/기관 대량 수급 포착</p>
                  <h2 className="text-lg font-black text-white tracking-tighter uppercase leading-tight">
-                    {radarStocks.join(', ')} 집중 매수세 유입!
+                    {(radarStocks || []).join(', ')} 집중 매수세 유입!
                  </h2>
               </div>
            </div>
@@ -193,7 +215,7 @@ export default function WatchlistPage() {
             <Loader2 className="animate-spin text-slate-200" size={40} />
             <p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.4em]">데이터를 불러오고 있습니다...</p>
           </div>
-        ) : watchlist.length === 0 ? (
+        ) : (!watchlist || watchlist.length === 0) ? (
           <div className="bg-white border-2 border-dashed border-slate-200 p-20 text-center flex flex-col items-center gap-6">
             <div className="w-16 h-16 bg-slate-50 flex items-center justify-center border border-slate-100">
                <AlertCircle size={32} className="text-slate-200" />
@@ -204,13 +226,13 @@ export default function WatchlistPage() {
             </div>
           </div>
         ) : (
-          watchlist.map((item, idx) => {
-            const isRadar = radarStocks.includes(item.stockName);
+          (watchlist || []).map((item, idx) => {
+            const isRadar = (radarStocks || []).includes(item.stockName);
             const changeVal = parseFloat(item.fluctuationsRatio || '0');
             const isPlus = changeVal > 0;
 
             return (
-              <div key={`${item.itemCode}-${idx}`} className={`bg-white border rounded-none group transition-all duration-300 ${isRadar ? 'border-red-500 shadow-lg' : 'border-slate-100 hover:border-blue-200'}`}>
+              <div key={`${item.itemCode || idx}-${idx}`} className={`bg-white border rounded-none group transition-all duration-300 ${isRadar ? 'border-red-500 shadow-lg' : 'border-slate-100 hover:border-blue-200'}`}>
                 <div className="p-6">
                   <div className="flex justify-between items-start mb-6">
                     <div className="flex items-center gap-4">
@@ -218,8 +240,8 @@ export default function WatchlistPage() {
                         {idx + 1}
                       </div>
                       <div>
-                        <h3 className="text-[17px] font-black text-slate-900 tracking-tighter uppercase">{item.stockName}</h3>
-                        <p className="text-[9px] font-bold text-slate-400 tracking-[0.2em]">{item.itemCode}</p>
+                        <h3 className="text-[17px] font-black text-slate-900 tracking-tighter uppercase">{item.stockName || 'Unknown'}</h3>
+                        <p className="text-[9px] font-bold text-slate-400 tracking-[0.2em]">{item.itemCode || '-'}</p>
                       </div>
                     </div>
                     <button onClick={() => removeItem(item.itemCode)} className="p-2 text-slate-200 hover:text-red-500 transition-colors">
