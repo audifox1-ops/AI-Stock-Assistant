@@ -7,88 +7,71 @@ const ALLOWED_ORIGINS = [
   'https://ai-stock-assistant-nine.vercel.app'
 ];
 
-// KIS API 환경변수
-const KIS_APP_KEY = process.env.KIS_APP_KEY;
-const KIS_APP_SECRET = process.env.KIS_APP_SECRET;
-const KIS_URL = 'https://openapi.koreainvestment.com:9443';
-
-// 토큰 캐싱을 위한 변수 (메모리 캐싱)
-let cachedToken = '';
-let tokenExpireTime = 0;
+// 봇 차단 방지를 위한 일반적인 모바일 브라우저 헤더
+const NAVER_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1',
+  'Referer': 'https://m.stock.naver.com/',
+  'Accept': 'application/json, text/plain, */*'
+};
 
 /**
- * KIS 액세스 토큰 발급 함수
+ * 네이버 모바일 API 데이터 파싱 헬퍼 (콤마 제거 및 숫자 변환)
  */
-async function getKisToken() {
-  const now = Date.now();
-  // 캐시된 토큰이 있고 만료되지 않았으면 재사용 (보통 24시간 유효)
-  if (cachedToken && now < tokenExpireTime) {
-    return cachedToken;
-  }
+const parseNumber = (val: any) => {
+  if (typeof val === 'number') return val;
+  if (!val) return 0;
+  const cleaned = val.toString().replace(/,/g, '');
+  const num = Number(cleaned);
+  return isNaN(num) ? 0 : num;
+};
 
+/**
+ * 네이버 모바일 API 지수 데이터 조회
+ */
+async function fetchIndexData(type: 'KOSPI' | 'KOSDAQ') {
   try {
-    const res = await fetch(`${KIS_URL}/oauth2/tokenP`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        grant_type: 'client_credentials',
-        appkey: KIS_APP_KEY,
-        appsecret: KIS_APP_SECRET
-      })
+    const res = await fetch(`https://m.stock.naver.com/api/index/${type}/basic`, {
+      headers: NAVER_HEADERS,
+      next: { revalidate: 0 }
     });
     const data = await res.json();
-    if (data.access_token) {
-      cachedToken = data.access_token;
-      // 만료 시간 설정 (유효기간에서 1분 정도 여유를 둠)
-      tokenExpireTime = now + (data.expires_in * 1000) - 60000;
-      return cachedToken;
-    }
-    throw new Error('Token issuance failed');
+    return {
+      name: type === 'KOSPI' ? '코스피' : '코스닥',
+      value: data.closePrice || '0',
+      change: data.compareToPreviousClosePrice || '0',
+      changeRate: data.fluctuationsRatio || '0.00',
+      status: parseFloat(data.fluctuationsRatio || '0') > 0 ? 'UP' : (parseFloat(data.fluctuationsRatio || '0') < 0 ? 'DOWN' : 'SAME')
+    };
   } catch (e) {
-    console.error('KIS Token Error:', e);
-    return null;
+    console.error(`Naver Index Fetch Error (${type}):`, e);
+    return { name: type === 'KOSPI' ? '코스피' : '코스닥', value: '-', change: '0', changeRate: '0.00', status: 'SAME' };
   }
 }
 
 /**
- * KIS 주식현재가 시세 조회 (FHKST01010100)
+ * 네이버 모바일 API 개별 종목 시세 조회
  */
-async function fetchKisPrice(ticker: string, token: string) {
+async function fetchStockDetail(ticker: string) {
   try {
-    const res = await fetch(`${KIS_URL}/uapi/domestic-stock/v1/quotations/inquire-price?FID_COND_MRKT_DIV_CODE=J&FID_INPUT_ISCD=${ticker}`, {
-      headers: {
-        'Content-Type': 'application/json',
-        'authorization': `Bearer ${token}`,
-        'appkey': KIS_APP_KEY || '',
-        'appsecret': KIS_APP_SECRET || '',
-        'tr_id': 'FHKST01010100'
-      }
+    // integration API는 많은 정보를 포함하므로 시세 데이터 확보에 유리
+    const res = await fetch(`https://m.stock.naver.com/api/stock/${ticker}/integration`, {
+      headers: NAVER_HEADERS,
+      next: { revalidate: 0 }
     });
     const data = await res.json();
+    const stock = data.totalInfos?.[0] || {};
     
-    if (data.rt_cd !== '0') {
-      console.warn(`KIS API Error for ${ticker}: ${data.msg1}`);
-      throw new Error(data.msg1);
-    }
-
-    const output = data.output;
     return {
       ticker: ticker,
-      price: Number(output.stck_prpr || 0),
-      changeRate: Number(output.prdy_ctrt || 0),
-      volume: Number(output.acml_vol || 0),
-      status: Number(output.prdy_ctrt) > 0 ? 'UP' : (Number(output.prdy_ctrt) < 0 ? 'DOWN' : 'SAME')
+      price: parseNumber(stock.currentPrice || stock.closePrice),
+      changeRate: parseFloat(stock.fluctuationsRatio || '0.00'),
+      volume: parseNumber(stock.accumulatedTradingVolume),
+      status: parseFloat(stock.fluctuationsRatio || '0') > 0 ? 'UP' : (parseFloat(stock.fluctuationsRatio || '0') < 0 ? 'DOWN' : 'SAME')
     };
   } catch (e) {
-    console.error(`KIS Fetch Error for ${ticker}:`, e);
-    // 에러 발생 시 프론트엔드 중단을 막기 위한 Mock 데이터 Fallback
-    return {
-      ticker,
-      price: 50000, 
-      changeRate: 1.5,
-      volume: 1000000,
-      status: 'UP'
-    };
+    console.error(`Naver Stock Fetch Error (${ticker}):`, e);
+    // 롤백 요청에 따라 가짜 데이터(50000원 등)를 사용하지 않고 0을 리턴
+    return { ticker, price: 0, changeRate: 0, volume: 0, status: 'SAME' };
   }
 }
 
@@ -102,29 +85,20 @@ export async function GET(request: Request) {
   const type = searchParams.get('type');
   const tickersParam = searchParams.get('tickers');
 
-  // 1. KIS 토큰 획득
-  const token = await getKisToken();
-  if (!token) {
-    return NextResponse.json({ success: false, error: 'Authentication failed' }, { status: 500 });
+  // 1. 지수 데이터 상세 조회
+  if (type === 'index') {
+    const indices = await Promise.all([
+      fetchIndexData('KOSPI'),
+      fetchIndexData('KOSDAQ')
+    ]);
+    return NextResponse.json({ success: true, data: indices });
   }
 
-  // 2. 다중 종목 시세 조회 로직
+  // 2. 다중 종목 실시간 시세 조회 (관심/보유종목용)
   if (tickersParam) {
     const tickers = tickersParam.split(',').filter(t => t.trim() !== '');
-    const details = await Promise.all(tickers.map(t => fetchKisPrice(t.trim(), token)));
+    const details = await Promise.all(tickers.map(t => fetchStockDetail(t.trim())));
     return NextResponse.json({ success: true, data: details });
-  }
-
-  // 3. 지수 데이터 (임시 Mock 유지 또는 KIS 지수 API 연동 필요)
-  // KIS 지수 API(FHKST03010100) 연동 전까지는 안전을 위해 Mock 데이터 반환
-  if (type === 'index') {
-    return NextResponse.json({
-      success: true,
-      data: [
-        { name: '코스피', value: '2,680.15', change: '15.20', changeRate: '0.57', status: 'UP' },
-        { name: '코스닥', value: '870.45', change: '2.30', changeRate: '0.26', status: 'UP' }
-      ]
-    });
   }
 
   return NextResponse.json({ success: false, error: 'Invalid parameters' }, { status: 400 });
