@@ -37,7 +37,7 @@ export default function WatchlistPage() {
   const syncTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   /**
-   * 실시간 시세 동기화 (강제 병합 로직 이식)
+   * 실시간 시세 동기화 (강제 병합 로직 + 6자리 숫자 필터링 강화)
    */
   const fetchRealtimePrices = async (currentItems: WatchlistItem[]) => {
     if (!currentItems || currentItems.length === 0) {
@@ -45,8 +45,13 @@ export default function WatchlistPage() {
       return;
     }
 
-    // 티커 목록 추출 및 정규화
-    const codes = currentItems.map(item => String(item.ticker || item.itemCode || '').trim()).filter(c => c !== '').join(',');
+    // [방어 코드]: 6자리 숫자가 아닌 티커는 API 요청 대항에서 제외 (NaN 및 429 방지)
+    const tickerRegex = /^\d{6}$/;
+    const codes = currentItems
+      .map(item => String(item.ticker || item.itemCode || '').trim())
+      .filter(c => tickerRegex.test(c))
+      .join(',');
+
     if (!codes) {
       setIsSyncing(false);
       return;
@@ -91,7 +96,13 @@ export default function WatchlistPage() {
   const checkSupplyRadar = async (items: WatchlistItem[]) => {
     if (!items || items.length === 0) return;
     try {
-      const codes = items.map(i => String(i.ticker || i.itemCode || '').trim());
+      const tickerRegex = /^\d{6}$/;
+      const codes = items
+        .map(i => String(i.ticker || i.itemCode || '').trim())
+        .filter(c => tickerRegex.test(c));
+        
+      if (codes.length === 0) return;
+
       const res = await fetch('/api/supply-radar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -139,7 +150,7 @@ export default function WatchlistPage() {
         }
         return current;
       });
-    }, 60000); // 60초 주기
+    }, 60000); 
 
     return () => {
       if (syncTimerRef.current) clearInterval(syncTimerRef.current);
@@ -154,7 +165,7 @@ export default function WatchlistPage() {
   }, [watchlist, isLoading]);
 
   /**
-   * 종목 검색
+   * 종목 검색 (자동완성)
    */
   useEffect(() => {
     const timer = setTimeout(async () => {
@@ -179,7 +190,7 @@ export default function WatchlistPage() {
   }, [searchQuery]);
 
   /**
-   * 종목 추가
+   * 검색 결과 리스트에서 클릭하여 추가
    */
   const addStockFromSearch = async (item: any) => {
     const ticker = String(item.code).trim();
@@ -208,25 +219,41 @@ export default function WatchlistPage() {
   };
 
   /**
-   * 수동 직접 추가 (Ticker:Name) - 6자리 숫자 정규식 검증 강화
+   * 수동 직접 추가 (Enter) - 자동 검색 및 6자리 코드 변환 로직 구현
    */
   const handleManualAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!searchQuery) return;
 
-    const parts = searchQuery.split(':');
-    const ticker = parts[0].trim();
-    const name = parts[1] ? parts[1].trim() : '직접입력';
+    let ticker = searchQuery.trim();
+    let stockName = '직접입력';
 
-    if (!ticker) return;
-
-    // [검증 절대 규칙]: 6자리 숫자 형태여야 함
+    // 만약 한글명이나 6자리 숫자가 아닌 긴 이름이 들어왔다면 백그라운드 검색 실행
     const tickerRegex = /^\d{6}$/;
     if (!tickerRegex.test(ticker)) {
-      alert('정확한 6자리 종목코드를 입력하거나, 아래 검색 자동완성 결과를 클릭해주세요.');
-      return;
+      try {
+        setIsSyncing(true);
+        const res = await fetch(`/api/market?q=${encodeURIComponent(ticker)}`);
+        const data = await res.json();
+        
+        if (data.success && Array.isArray(data.data) && data.data.length > 0) {
+          // 가장 유사한 첫 번째 결과의 코드와 이름을 사용
+          ticker = data.data[0].code;
+          stockName = data.data[0].name;
+        } else {
+          alert('검색된 종목이 없습니다. 정확한 종목코드(6자리)나 종목명을 입력해주세요.');
+          return;
+        }
+      } catch (err) {
+        console.error('Auto Search Error:', err);
+        alert('종목 검색 중 오류가 발생했습니다.');
+        return;
+      } finally {
+        setIsSyncing(false);
+      }
     }
 
+    // 중복 체크
     if (watchlist.some(item => String(item.ticker || item.itemCode || '').trim() === ticker)) {
       alert('이미 등록된 종목입니다.');
       return;
@@ -235,7 +262,7 @@ export default function WatchlistPage() {
     const newItem: WatchlistItem = {
       ticker: ticker,
       itemCode: ticker,
-      stockName: name,
+      stockName: stockName === '직접입력' ? ticker : stockName,
       currentPrice: 0,
       changeRate: 0,
       volume: 0
@@ -244,6 +271,7 @@ export default function WatchlistPage() {
     const updated = [newItem, ...watchlist];
     setWatchlist(updated);
     setSearchQuery('');
+    setSearchResults([]);
     setIsAddModalOpen(false);
 
     await fetchRealtimePrices(updated);
