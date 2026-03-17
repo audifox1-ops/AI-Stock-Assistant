@@ -11,11 +11,12 @@ export const dynamic = 'force-dynamic';
 const WATCHLIST_STORAGE_KEY = 'myWatchlist';
 
 interface WatchlistItem {
-  itemCode: string; // Ticker
+  ticker?: string;   // Ticker (v2)
+  itemCode?: string; // Ticker (v1)
   stockName: string;
-  closePrice?: number;
-  fluctuationsRatio?: string | number;
-  volume?: string | number;
+  currentPrice?: number;
+  changeRate?: number;
+  volume?: number;
 }
 
 export default function WatchlistPage() {
@@ -36,7 +37,7 @@ export default function WatchlistPage() {
   const syncTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   /**
-   * 실시간 시세 동기화
+   * 실시간 시세 동기화 (강제 병합 로직 이식)
    */
   const fetchRealtimePrices = async (currentItems: WatchlistItem[]) => {
     if (!currentItems || currentItems.length === 0) {
@@ -45,32 +46,32 @@ export default function WatchlistPage() {
     }
     
     // 티커 목록 추출 및 정규화
-    const codes = currentItems.map(item => String(item.itemCode).trim()).filter(c => c !== '').join(',');
+    const codes = currentItems.map(item => String(item.ticker || item.itemCode || '').trim()).filter(c => c !== '').join(',');
     if (!codes) {
       setIsSyncing(false);
       return;
     }
 
     try {
-      // 대량 요청의 경우 isSyncing 상태를 켜되, 백그라운드 폴링 중에는 사용자 경험 저하를 위해 불필요한 UI 차단 자제
+      setIsSyncing(true);
       const res = await fetch(`/api/market?tickers=${codes}`);
       const data = await res.json();
       
       if (data.success && Array.isArray(data.data)) {
         const rtData = data.data; 
         
-        // 데이터 병합: String().trim() 강제 매칭 및 필드명 보정
+        // [매칭 절대 규칙] 및 실시간 값 덮어쓰기 적용
         setWatchlist(prev => {
           return prev.map(local => {
-            const localCode = String(local.itemCode).trim();
-            const rt = rtData.find((r: any) => String(r.ticker).trim() === localCode);
+            const localTicker = String(local.ticker || local.itemCode || '').trim();
+            const rt = rtData.find((r: any) => String(r.ticker || '').trim() === localTicker);
             
             if (rt) {
               return {
                 ...local,
-                closePrice: rt.price !== undefined ? Number(rt.price) : local.closePrice,
-                fluctuationsRatio: rt.changeRate !== undefined ? String(rt.changeRate) : local.fluctuationsRatio,
-                volume: rt.volume !== undefined ? Number(rt.volume) : local.volume
+                currentPrice: rt.price ? Number(rt.price) : (local.currentPrice || 0),
+                changeRate: rt.changeRate !== undefined ? Number(rt.changeRate) : (local.changeRate || 0),
+                volume: rt.volume ? Number(rt.volume) : (local.volume || 0)
               };
             }
             return local;
@@ -90,7 +91,7 @@ export default function WatchlistPage() {
   const checkSupplyRadar = async (items: WatchlistItem[]) => {
     if (!items || items.length === 0) return;
     try {
-      const codes = items.map(i => String(i.itemCode).trim());
+      const codes = items.map(i => String(i.ticker || i.itemCode || '').trim());
       const res = await fetch('/api/supply-radar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -131,7 +132,6 @@ export default function WatchlistPage() {
     initializeWatchlist();
 
     syncTimerRef.current = setInterval(() => {
-      // 최신 상태의 watchlist를 사용하여 시세 갱신
       setWatchlist(current => {
         if (current.length > 0) {
           fetchRealtimePrices(current);
@@ -139,7 +139,7 @@ export default function WatchlistPage() {
         }
         return current;
       });
-    }, 10000); // 10초 주기
+    }, 10000);
 
     return () => {
       if (syncTimerRef.current) clearInterval(syncTimerRef.current);
@@ -154,7 +154,7 @@ export default function WatchlistPage() {
   }, [watchlist]);
 
   /**
-   * 종목 검색 (디바운싱 적용)
+   * 종목 검색
    */
   useEffect(() => {
     const timer = setTimeout(async () => {
@@ -184,14 +184,18 @@ export default function WatchlistPage() {
   const addStockFromSearch = async (item: any) => {
     const ticker = String(item.code).trim();
     
-    if (watchlist.some(w => String(w.itemCode).trim() === ticker)) {
+    if (watchlist.some(w => String(w.ticker || w.itemCode || '').trim() === ticker)) {
       alert('이미 등록된 종목입니다.');
       return;
     }
 
     const newItem: WatchlistItem = {
+      ticker: ticker,
       itemCode: ticker,
-      stockName: item.name
+      stockName: item.name,
+      currentPrice: 0,
+      changeRate: 0,
+      volume: 0
     };
 
     const updated = [newItem, ...watchlist];
@@ -216,14 +220,18 @@ export default function WatchlistPage() {
 
     if (!ticker) return;
 
-    if (watchlist.some(item => String(item.itemCode).trim() === ticker)) {
+    if (watchlist.some(item => String(item.ticker || item.itemCode || '').trim() === ticker)) {
       alert('이미 등록된 종목입니다.');
       return;
     }
 
     const newItem: WatchlistItem = {
+      ticker: ticker,
       itemCode: ticker,
-      stockName: name
+      stockName: name,
+      currentPrice: 0,
+      changeRate: 0,
+      volume: 0
     };
 
     const updated = [newItem, ...watchlist];
@@ -237,8 +245,8 @@ export default function WatchlistPage() {
   /**
    * 종목 제거
    */
-  const removeItem = (itemCode: string) => {
-    const updated = watchlist.filter(item => String(item.itemCode).trim() !== String(itemCode).trim());
+  const removeItem = (ticker: string) => {
+    const updated = watchlist.filter(item => String(item.ticker || item.itemCode || '').trim() !== String(ticker).trim());
     setWatchlist(updated);
   };
 
@@ -253,7 +261,6 @@ export default function WatchlistPage() {
           <div className="flex gap-2">
             <button 
               onClick={() => {
-                setIsSyncing(true);
                 fetchRealtimePrices(watchlist);
               }}
               className="p-3 bg-slate-100 text-slate-400 hover:bg-blue-600 hover:text-white transition-all shadow-md active:scale-95"
@@ -279,7 +286,7 @@ export default function WatchlistPage() {
         </div>
       </header>
 
-      {/* 실시간 싱크 바 (백그라운드용) */}
+      {/* 실시간 싱크 바 */}
       <div className={`transition-all duration-500 overflow-hidden ${isSyncing ? 'h-6' : 'h-0'}`}>
         <div className="px-6 py-1 bg-blue-600 flex items-center justify-center gap-2">
            <Loader2 size={10} className="text-white animate-spin" />
@@ -319,13 +326,11 @@ export default function WatchlistPage() {
         ) : (
           watchlist.map((item, idx) => {
             const isRadar = (radarStocks || []).includes(item.stockName);
-            const currentPrice = (item.closePrice && item.closePrice > 0) ? item.closePrice : 0;
-            const changeRate = item.fluctuationsRatio || '0.00';
-            const isPlus = parseFloat(String(changeRate)) > 0;
-            const isMinus = parseFloat(String(changeRate)) < 0;
+            const isPlus = (item.changeRate || 0) > 0;
+            const isMinus = (item.changeRate || 0) < 0;
 
             return (
-              <div key={`${item.itemCode}-${idx}`} className={`bg-white border transition-all duration-300 ${isRadar ? 'border-red-500 shadow-lg' : 'border-slate-100 hover:border-blue-200 shadow-sm'}`}>
+              <div key={`${item.ticker || item.itemCode}-${idx}`} className={`bg-white border transition-all duration-300 ${isRadar ? 'border-red-500 shadow-lg' : 'border-slate-100 hover:border-blue-200 shadow-sm'}`}>
                 <div className="p-6">
                   <div className="flex justify-between items-start mb-6">
                     <div className="flex items-center gap-4">
@@ -334,10 +339,10 @@ export default function WatchlistPage() {
                       </div>
                       <div>
                         <h3 className="text-[17px] font-black text-slate-900 tracking-tighter uppercase">{item.stockName}</h3>
-                        <p className="text-[9px] font-bold text-slate-400 tracking-[0.2em]">{item.itemCode}</p>
+                        <p className="text-[9px] font-bold text-slate-400 tracking-[0.2em]">{item.ticker || item.itemCode}</p>
                       </div>
                     </div>
-                    <button onClick={() => removeItem(item.itemCode)} className="p-2 text-slate-200 hover:text-red-500 transition-colors">
+                    <button onClick={() => removeItem(item.ticker || item.itemCode || '')} className="p-2 text-slate-200 hover:text-red-500 transition-colors">
                       <Trash2 size={16} />
                     </button>
                   </div>
@@ -346,19 +351,19 @@ export default function WatchlistPage() {
                     <div className="bg-white p-4">
                       <p className="text-[9px] font-bold text-slate-400 uppercase mb-1 tracking-widest">Pricing Terminal</p>
                       <p className="text-lg font-black text-slate-900 tabular-nums leading-none tracking-tight">
-                         {currentPrice > 0 ? `${currentPrice.toLocaleString()}원` : '-'}
+                         {item.currentPrice ? `${item.currentPrice.toLocaleString()}원` : '0원'}
                       </p>
                     </div>
                     <div className="bg-white p-4 text-right">
                       <p className="text-[9px] font-bold text-slate-400 uppercase mb-1 tracking-widest">Rate Change</p>
                       <span className={`text-lg font-black tabular-nums p-1 inline-block ${isPlus ? 'text-red-500 bg-red-50/50' : isMinus ? 'text-blue-500 bg-blue-50/50' : 'text-slate-400 bg-slate-50'}`}>
-                        {isPlus ? '+' : ''}{changeRate}%
+                        {isPlus ? '+' : ''}{item.changeRate?.toFixed(2)}%
                       </span>
                     </div>
                     
                     <div className="bg-white p-4 col-span-2 border-t border-slate-50 flex justify-between items-center opacity-40">
                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Volume Node</span>
-                       <span className="text-[10px] font-bold text-slate-900 tabular-nums uppercase">{(item.volume || 0).toLocaleString()} 주</span>
+                       <span className="text-[10px] font-bold text-slate-900 tabular-nums uppercase">거래량: {(item.volume || 0).toLocaleString()}</span>
                     </div>
                   </div>
                 </div>
