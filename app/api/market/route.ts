@@ -7,77 +7,79 @@ const ALLOWED_ORIGINS = [
   'https://ai-stock-assistant-nine.vercel.app'
 ];
 
-// 봇 차단 방지를 위한 일반적인 모바일 브라우저 헤더
-const NAVER_HEADERS = {
-  'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1',
-  'Referer': 'https://m.stock.naver.com/',
+// 브라우저 차단 방지를 위한 일반적인 헤더
+const REQUEST_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+  'Referer': 'https://finance.naver.com/',
   'Accept': 'application/json, text/plain, */*'
 };
 
 /**
- * 네이버 모바일 API 데이터 파싱 헬퍼 (콤마 제거 및 Number 변환 완벽 구현)
+ * 네이버 Polling API 데이터 파싱 헬퍼
  */
 const cleanNumber = (val: any): number => {
   if (typeof val === 'number') return val;
   if (!val) return 0;
-  // 콤마 제거 후 숫자로 변환
   const cleaned = val.toString().replace(/,/g, '');
   const num = Number(cleaned);
   return isNaN(num) ? 0 : num;
 };
 
 /**
- * 네이버 모바일 API 지수 데이터 조회
+ * 네이버 Polling API 지수 데이터 조회 (SERVICE_INDEX)
  */
 async function fetchIndexData(type: 'KOSPI' | 'KOSDAQ') {
   try {
-    const res = await fetch(`https://m.stock.naver.com/api/index/${type}/basic`, {
-      headers: NAVER_HEADERS,
+    const url = `https://polling.finance.naver.com/api/realtime?query=SERVICE_INDEX:${type}`;
+    const res = await fetch(url, {
+      headers: REQUEST_HEADERS,
       next: { revalidate: 0 }
     });
     const data = await res.json();
+    const item = data?.result?.areas?.[0]?.datas?.[0];
+
     return {
       name: type === 'KOSPI' ? '코스피' : '코스닥',
-      value: data.closePrice || '0',
-      change: data.compareToPreviousClosePrice || '0',
-      changeRate: data.fluctuationsRatio || '0.00',
-      status: parseFloat(data.fluctuationsRatio || '0') > 0 ? 'UP' : (parseFloat(data.fluctuationsRatio || '0') < 0 ? 'DOWN' : 'SAME')
+      value: item?.nv ? item.nv.toLocaleString() : '0',
+      change: item?.cv ? item.cv.toLocaleString() : '0',
+      changeRate: item?.cr ? item.cr.toString() : '0.00',
+      status: Number(item?.cr || 0) > 0 ? 'UP' : (Number(item?.cr || 0) < 0 ? 'DOWN' : 'SAME')
     };
   } catch (e) {
-    console.error(`Naver Index Error (${type}):`, e);
+    console.error(`Naver Index Polling Error (${type}):`, e);
     return { name: type === 'KOSPI' ? '코스피' : '코스닥', value: '-', change: '0', changeRate: '0.00', status: 'SAME' };
   }
 }
 
 /**
- * 네이버 모바일 API 개별 종목 동적 시세 조회 (tickers 파라미터 대응)
+ * 네이버 Polling API 개별 종목 시세 조회 (SERVICE_ITEM)
  */
 async function fetchStockDetail(ticker: string) {
   try {
-    // 백틱을 사용한 동적 URL 할당
-    const url = `https://m.stock.naver.com/api/stock/${ticker}/basic`;
+    const url = `https://polling.finance.naver.com/api/realtime?query=SERVICE_ITEM:${ticker}`;
     const res = await fetch(url, {
-      headers: NAVER_HEADERS,
+      headers: REQUEST_HEADERS,
       next: { revalidate: 0 }
     });
     const data = await res.json();
-    
-    // 데이터 추출 및 숫자 타입 강제 변환
+    const item = data?.result?.areas?.[0]?.datas?.[0];
+
     return {
       ticker: ticker,
-      price: cleanNumber(data.closePrice),
-      changeRate: Number(data.fluctuationsRatio || 0),
-      volume: cleanNumber(data.accumulatedTradingVolume),
-      status: Number(data.fluctuationsRatio) > 0 ? 'UP' : (Number(data.fluctuationsRatio) < 0 ? 'DOWN' : 'SAME')
+      price: item?.nv ? Number(item.nv) : 0,
+      changeRate: item?.cr ? Number(item.cr) : 0,
+      volume: item?.aq ? Number(item.aq) : 0,
+      status: Number(item?.cr || 0) > 0 ? 'UP' : (Number(item?.cr || 0) < 0 ? 'DOWN' : 'SAME')
     };
   } catch (e) {
-    console.error(`Naver Detail Error (${ticker}):`, e);
+    console.error(`Naver Stock Polling Error (${ticker}):`, e);
     return { ticker, price: 0, changeRate: 0, volume: 0, status: 'SAME' };
   }
 }
 
 /**
- * 네이버 모바일 API 랭킹 리스트 조회 (홈 화면용)
+ * 네이버 모바일 API 랭킹 리스트 조회 (랭킹은 기존 모바일 API 유지 또는 최적화 필요)
+ * 랭킹 API는 아직 m.stock... 엔드포인트가 유효할 수 있으나, 차단 시 수동 갱신 로직 필요.
  */
 async function fetchRankingList(type: string) {
   let url = '';
@@ -102,7 +104,7 @@ async function fetchRankingList(type: string) {
   }
 
   try {
-    const res = await fetch(url, { headers: NAVER_HEADERS, next: { revalidate: 0 } });
+    const res = await fetch(url, { headers: REQUEST_HEADERS, next: { revalidate: 0 } });
     const data = await res.json();
     const stocks = data.stocks || [];
     
@@ -115,7 +117,7 @@ async function fetchRankingList(type: string) {
       fluctuationType: s.fluctuationType || 'STABLE'
     }));
   } catch (e) {
-    console.error(`Naver Ranking Error (${type}):`, e);
+    console.error(`Ranking Fetch Error (${type}):`, e);
     return [];
   }
 }
@@ -130,7 +132,7 @@ export async function GET(request: Request) {
   const type = searchParams.get('type');
   const tickersParam = searchParams.get('tickers');
 
-  // 1. 지수 데이터 상세 조회
+  // 1. 지수 데이터 조회 (Polling API)
   if (type === 'index') {
     const indices = await Promise.all([
       fetchIndexData('KOSPI'),
@@ -145,11 +147,9 @@ export async function GET(request: Request) {
     return NextResponse.json({ success: true, data: ranks });
   }
 
-  // 3. 다중 종목 실시간 시세 조회 (tickers=005930,000660...)
+  // 3. 다중 종목 실시간 시세 조회 (Polling API)
   if (tickersParam) {
-    // 쉼표로 분리하여 배열 생성
     const tickers = tickersParam.split(',').filter(t => t.trim() !== '');
-    // Promise.all을 이용한 비동기 순회 호출
     const details = await Promise.all(tickers.map(t => fetchStockDetail(t.trim())));
     return NextResponse.json({ success: true, data: details });
   }
