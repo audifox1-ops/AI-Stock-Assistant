@@ -2,6 +2,12 @@ import { NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
 
+// 허용된 도메인 리스트
+const ALLOWED_ORIGINS = [
+  'http://localhost:3000',
+  'https://ai-stock-assistant-nine.vercel.app'
+];
+
 const NAVER_FRONT_API = 'https://m.stock.naver.com/front-api';
 
 interface DetectedSupply {
@@ -29,6 +35,12 @@ async function fetchRanking(investorType: 'foreigner' | 'organization') {
 }
 
 export async function POST(req: Request) {
+  // CORS 검증
+  const origin = req.headers.get('origin');
+  if (origin && !ALLOWED_ORIGINS.includes(origin)) {
+    return new NextResponse('Forbidden', { status: 403 });
+  }
+
   try {
     const { tickers } = await req.json();
 
@@ -36,7 +48,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: "관심종목 데이터가 없습니다." }, { status: 400 });
     }
 
-    // 외인/기관 순매수 상위 데이터 동시 페칭
     const [foreignStocks, organStocks] = await Promise.all([
       fetchRanking('foreigner'),
       fetchRanking('organization')
@@ -44,7 +55,6 @@ export async function POST(req: Request) {
 
     const detected: DetectedSupply[] = [];
 
-    // 외인 수급 매칭
     foreignStocks.forEach((s: any) => {
       if (tickers.includes(s.itemCode)) {
         detected.push({
@@ -57,7 +67,6 @@ export async function POST(req: Request) {
       }
     });
 
-    // 기관 수급 매칭
     organStocks.forEach((s: any) => {
       if (tickers.includes(s.itemCode)) {
         detected.push({
@@ -70,14 +79,33 @@ export async function POST(req: Request) {
       }
     });
 
-    return NextResponse.json({
-      success: true,
-      data: detected,
-      timestamp: new Date().toISOString()
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        data: detected,
+        timestamp: new Date().toISOString()
+      },
+      {
+        headers: {
+          'Access-Control-Allow-Origin': origin || '*',
+          'Access-Control-Allow-Methods': 'POST, OPTIONS'
+        }
+      }
+    );
 
   } catch (error: any) {
     console.error('Supply Radar API Error:', error);
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
+}
+
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 204,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type'
+    }
+  });
 }

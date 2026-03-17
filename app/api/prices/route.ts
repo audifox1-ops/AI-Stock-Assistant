@@ -2,7 +2,19 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
 
+// 허용된 도메인 리스트
+const ALLOWED_ORIGINS = [
+  'http://localhost:3000',
+  'https://ai-stock-assistant-nine.vercel.app'
+];
+
 export async function GET(req: NextRequest) {
+  // CORS 검증
+  const origin = req.headers.get('origin');
+  if (origin && !ALLOWED_ORIGINS.includes(origin)) {
+    return new NextResponse('Forbidden', { status: 403 });
+  }
+
   try {
     const { searchParams } = new URL(req.url);
     const codes = searchParams.get('codes');
@@ -11,7 +23,6 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'Codes are required' }, { status: 400 });
     }
 
-    // 네이버 실시간 시세 폴링 API (다중 종목 지원)
     const response = await fetch(
       `https://polling.finance.naver.com/api/realtime?query=SERVICE_ITEM:${codes}`,
       {
@@ -44,13 +55,32 @@ export async function GET(req: NextRequest) {
       return acc;
     }, {});
 
-    return NextResponse.json({ 
-      success: true, 
-      data: priceMap
-    });
+    return NextResponse.json(
+      { 
+        success: true, 
+        data: priceMap
+      },
+      {
+        headers: {
+          'Access-Control-Allow-Origin': origin || '*',
+          'Access-Control-Allow-Methods': 'GET, OPTIONS'
+        }
+      }
+    );
 
   } catch (error: any) {
     console.error('Prices API Error:', error);
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
+}
+
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 204,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type'
+    }
+  });
 }

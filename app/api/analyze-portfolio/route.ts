@@ -3,10 +3,19 @@ import { NextResponse } from "next/server";
 
 export const dynamic = 'force-dynamic';
 
-const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GEMINI_API_KEY || "");
-const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+// 허용된 도메인 리스트
+const ALLOWED_ORIGINS = [
+  'http://localhost:3000',
+  'https://ai-stock-assistant-nine.vercel.app'
+];
 
+// 통합된 환경변수명 사용 및 CORS 검증
 export async function POST(req: Request) {
+  const origin = req.headers.get('origin');
+  if (origin && !ALLOWED_ORIGINS.includes(origin)) {
+    return new NextResponse('Forbidden', { status: 403 });
+  }
+
   try {
     const { portfolio } = await req.json();
 
@@ -14,12 +23,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "분석할 데이터가 없습니다." }, { status: 400 });
     }
 
-    // 포트폴리오 데이터를 문자열로 가공 (목표가/손절가 포함)
+    const apiKey = process.env.GEMINI_API_KEY || "";
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+
     const portfolioDataString = portfolio.map((h: any) => 
       `- 종목명: ${h.stockName}, 평단가: ${h.avgPrice}원, 현재가: ${h.currentPrice}원, 목표가: ${h.targetPrice || 0}원, 손절가: ${h.stopLossPrice || 0}원, 보유수량: ${h.quantity}주, 투자포지션: ${h.position || '미분류'}`
     ).join('\n');
 
-    // 기계적 매매 지침을 강화한 프롬프트 구성
     const prompt = `너는 감정을 배제하고 오직 확률과 원칙에만 근거해 매매하는 전설적인 퀀트 트레이더이자 AI 펀드매니저야. 
 아래 사용자의 보유 종목 데이터를 바탕으로 '기계적 매매 지침'을 최우선으로 하여 정밀 분석을 수행해.
 
@@ -45,9 +56,28 @@ ${portfolioDataString}
     const response = await result.response;
     const text = response.text();
 
-    return NextResponse.json({ diagnosis: text });
+    return NextResponse.json(
+      { diagnosis: text },
+      {
+        headers: {
+          'Access-Control-Allow-Origin': origin || '*',
+          'Access-Control-Allow-Methods': 'POST, OPTIONS'
+        }
+      }
+    );
   } catch (error: any) {
     console.error("Portfolio AI Analysis Error:", error);
     return NextResponse.json({ error: "AI 진단 중 오류가 발생했습니다." }, { status: 500 });
   }
+}
+
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 204,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type'
+    }
+  });
 }

@@ -2,13 +2,14 @@ import { NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
 
-// 네이버 모바일 프론트 API 기본 주소
+// 허용된 도메인 리스트
+const ALLOWED_ORIGINS = [
+  'http://localhost:3000',
+  'https://ai-stock-assistant-nine.vercel.app'
+];
+
 const NAVER_FRONT_API = 'https://m.stock.naver.com/front-api';
 
-/**
- * [22차] 데이터 정규화 함수
- * 서로 다른 API 응답 구조를 프론트엔드 통일 규격으로 변환
- */
 function normalizeStockData(stock: any, type: 'list' | 'trend') {
   try {
     if (type === 'list') {
@@ -23,14 +24,13 @@ function normalizeStockData(stock: any, type: 'list' | 'trend') {
         fluctuationType: stock.compareToPreviousPrice?.name || 'STABLE'
       };
     } else {
-      // 외인/기관 순매수 랭킹 데이터
       return {
         itemCode: stock.itemCode || stock.code,
         stockName: stock.itemName || stock.name,
         closePrice: stock.closePrice || '0',
         fluctuationsRatio: stock.fluctuationsRatio || '0.00',
-        volume: stock.accumulatedTradingVolume || '0', // 거래량
-        netBuyValue: stock.accumulatedTradingValueKrwHangeul || '-', // 순매수액(한글표기)
+        volume: stock.accumulatedTradingVolume || '0',
+        netBuyValue: stock.accumulatedTradingValueKrwHangeul || '-',
         rank: stock.ranking,
         fluctuationType: stock.fluctuationType || 'STABLE'
       };
@@ -41,13 +41,18 @@ function normalizeStockData(stock: any, type: 'list' | 'trend') {
 }
 
 export async function GET(request: Request) {
+  // CORS 검증
+  const origin = request.headers.get('origin');
+  if (origin && !ALLOWED_ORIGINS.includes(origin)) {
+    return new NextResponse('Forbidden', { status: 403 });
+  }
+
   const { searchParams } = new URL(request.url);
   const category = decodeURIComponent(searchParams.get('category') || 'KOSPI 시총상위');
 
   let apiUrl = '';
   let dataType: 'list' | 'trend' = 'list';
 
-  // [22차] 카테고리별 네이버 모바일 JSON API 매핑
   switch (category) {
     case 'KOSPI 시총상위':
       apiUrl = `${NAVER_FRONT_API}/stock/domestic/stockList?sortType=marketValue&category=KOSPI&pageSize=30&domesticStockExchangeType=KRX&page=1`;
@@ -70,7 +75,6 @@ export async function GET(request: Request) {
       dataType = 'trend';
       break;
     case '시가총액':
-      // 전체 시장 시총 상위
       apiUrl = `${NAVER_FRONT_API}/stock/domestic/stockList?sortType=marketValue&category=KOSPI&pageSize=30&domesticStockExchangeType=KRX&page=1`;
       dataType = 'list';
       break;
@@ -85,25 +89,31 @@ export async function GET(request: Request) {
         'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0.3 Mobile/15E148 Safari/604.1',
         'Referer': 'https://m.stock.naver.com/'
       },
-      next: { revalidate: 0 } // 실시간 데이터 보장을 위해 캐시 비활성화
+      next: { revalidate: 0 }
     });
 
     if (!response.ok) throw new Error('네이버 API 응답 오류');
 
     const data = await response.json();
     const rawStocks = data.result?.stocks || [];
-    
-    // 데이터 정규화 및 에러 방어
     const normalizedData = rawStocks
       .map((s: any) => normalizeStockData(s, dataType))
       .filter((s: any) => s !== null);
 
-    return NextResponse.json({
-      success: true,
-      data: normalizedData,
-      category: category,
-      timestamp: new Date().toISOString()
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        data: normalizedData,
+        category: category,
+        timestamp: new Date().toISOString()
+      },
+      {
+        headers: {
+          'Access-Control-Allow-Origin': origin || '*',
+          'Access-Control-Allow-Methods': 'GET, OPTIONS'
+        }
+      }
+    );
 
   } catch (error: any) {
     console.error('Market API Error:', error);
@@ -112,4 +122,15 @@ export async function GET(request: Request) {
       { status: 500 }
     );
   }
+}
+
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 204,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type'
+    }
+  });
 }
