@@ -29,7 +29,10 @@ function parseNaverXml(xml: string, isMinute: boolean) {
       const day = parseInt(rawTime.substring(6, 8));
       const hour = parseInt(rawTime.substring(8, 10));
       const min = parseInt(rawTime.substring(10, 12));
-      time = Math.floor(new Date(year, month, day, hour, min).getTime() / 1000);
+      
+      // KST (UTC+9) 보정 없이 브라우저/라이브러리가 로컬 시간으로 해석하도록 함
+      const date = new Date(year, month, day, hour, min);
+      time = Math.floor(date.getTime() / 1000);
     } else {
       // 일/주/월봉 처리: YYYYMMDD -> YYYY-MM-DD
       time = `${rawTime.substring(0, 4)}-${rawTime.substring(4, 6)}-${rawTime.substring(6, 8)}`;

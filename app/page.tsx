@@ -367,7 +367,7 @@ export default function HomePage() {
                 </div>
 
                 {/* 차트 영역 및 주기 선택 */}
-                <div className="mb-10 bg-white border border-slate-100 p-6">
+                <div className="mb-10 bg-white border border-slate-100 p-6 overflow-hidden">
                    <div className="flex justify-between items-center mb-6">
                       <div className="flex items-center gap-2">
                          <CandlestickChart size={18} className="text-slate-900" />
@@ -391,7 +391,7 @@ export default function HomePage() {
                       </div>
                    </div>
 
-                   <div className="relative min-h-[400px] border border-slate-50">
+                   <div className="relative min-h-[400px] border border-slate-100">
                       {isChartLoading ? (
                         <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/80 z-10 gap-4">
                            <Loader2 className="animate-spin text-blue-600" size={32} />
