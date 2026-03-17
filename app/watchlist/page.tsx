@@ -31,7 +31,7 @@ export default function WatchlistPage() {
   const fetchRealtimePrices = async (currentItems: WatchlistItem[]) => {
     if (!currentItems || currentItems.length === 0) return;
     setIsSyncing(true);
-    const codes = currentItems.map(item => item.itemCode).join(',');
+    const codes = currentItems.map(item => item.itemCode.trim()).join(',');
     try {
       const res = await fetch(`/api/market?tickers=${codes}`);
       const data = await res.json();
@@ -39,16 +39,17 @@ export default function WatchlistPage() {
       if (data.success && Array.isArray(data.data)) {
         const rtData = data.data; // [{ ticker, price, changeRate, volume }, ...]
         
-        // 데이터 병합(Merge) 로직: 0원이 평단가로 둔갑하는 버그 수정
+        // 데이터 병합(Merge) 로직: 티커 공백 제거 매칭 및 강제 업데이트 적용
         const merged = currentItems.map(local => {
-          const rt = rtData.find((r: any) => r.ticker === local.itemCode);
+          // r.ticker와 local.itemCode 모두 trim() 처리하여 엄격하게 비교
+          const rt = rtData.find((r: any) => r.ticker.trim() === local.itemCode.trim());
           if (rt) {
             return {
               ...local,
-              // 실시간 시세가 0보다 클 때만 업데이트, 아니면 로컬 데이터 유지
-              closePrice: rt.price > 0 ? rt.price : (local.closePrice || 0),
-              fluctuationsRatio: rt.price > 0 ? rt.changeRate : (local.fluctuationsRatio || '0.00'),
-              volume: rt.price > 0 ? rt.volume : (local.volume || 0)
+              // 서버 데이터(rt)가 있다면 무조건 실시간 가격으로 업데이트
+              closePrice: rt.price ? Number(rt.price) : (local.closePrice || 0),
+              fluctuationsRatio: rt.changeRate !== undefined ? Number(rt.changeRate) : (local.fluctuationsRatio || 0),
+              volume: rt.volume !== undefined ? Number(rt.volume) : (local.volume || 0)
             };
           }
           return local;
@@ -67,7 +68,7 @@ export default function WatchlistPage() {
   const checkSupplyRadar = async (items: WatchlistItem[]) => {
     if (!items || items.length === 0) return;
     try {
-      const codes = items.map(i => i.itemCode);
+      const codes = items.map(i => i.itemCode.trim());
       const res = await fetch('/api/supply-radar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -89,7 +90,7 @@ export default function WatchlistPage() {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
           setWatchlist(parsed);
-          // 즉시 동기화 실행
+          // 데이터 로드 즉시 실시간 시세 동기화 실행
           await Promise.all([
             fetchRealtimePrices(parsed),
             checkSupplyRadar(parsed)
@@ -121,7 +122,7 @@ export default function WatchlistPage() {
     };
 
     const currentList = Array.isArray(watchlist) ? watchlist : [];
-    if (currentList.some(item => item.itemCode === newItem.itemCode)) {
+    if (currentList.some(item => item.itemCode.trim() === newItem.itemCode.trim())) {
       alert('이미 등록된 종목입니다.');
       return;
     }
@@ -137,7 +138,7 @@ export default function WatchlistPage() {
 
   const removeItem = (itemCode: string) => {
     const currentList = Array.isArray(watchlist) ? watchlist : [];
-    const updated = currentList.filter(item => item.itemCode !== itemCode);
+    const updated = currentList.filter(item => item.itemCode.trim() !== itemCode.trim());
     setWatchlist(updated);
     localStorage.setItem(WATCHLIST_STORAGE_KEY, JSON.stringify(updated));
   };
@@ -212,8 +213,10 @@ export default function WatchlistPage() {
         ) : (
           (watchlist || []).map((item, idx) => {
             const isRadar = (radarStocks || []).includes(item.stockName);
-            const changeVal = parseFloat(item.fluctuationsRatio?.toString() || '0');
-            const isPlus = changeVal > 0;
+            // 병합된 실시간 가격을 최우선 출력
+            const currentPrice = (item.closePrice && item.closePrice > 0) ? item.closePrice : 0;
+            const changeRate = item.fluctuationsRatio || 0;
+            const isPlus = Number(changeRate) > 0;
 
             return (
               <div key={`${item.itemCode || idx}-${idx}`} className={`bg-white border rounded-none group transition-all duration-300 ${isRadar ? 'border-red-500 shadow-lg' : 'border-slate-100 hover:border-blue-200'}`}>
@@ -237,13 +240,13 @@ export default function WatchlistPage() {
                     <div className="bg-white p-4">
                       <p className="text-[9px] font-bold text-slate-400 uppercase mb-1">현재가</p>
                       <p className="text-lg font-black text-slate-900 tabular-nums leading-none tracking-tight">
-                        {item.closePrice?.toLocaleString() || '-'}원
+                        {currentPrice > 0 ? `${currentPrice.toLocaleString()}원` : '-'}
                       </p>
                     </div>
                     <div className="bg-white p-4 text-right">
                       <p className="text-[9px] font-bold text-slate-400 uppercase mb-1">등락률</p>
                       <span className={`text-lg font-black tabular-nums ${isPlus ? 'text-red-500' : 'text-blue-500'}`}>
-                        {isPlus ? '+' : ''}{item.fluctuationsRatio?.toString() || '0.00'}%
+                        {isPlus ? '+' : ''}{changeRate}%
                       </span>
                     </div>
                     <div className="bg-white p-4 col-span-2 border-t border-slate-50 flex justify-between items-center">

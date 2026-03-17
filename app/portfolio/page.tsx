@@ -48,7 +48,7 @@ export default function PortfolioPage() {
   const fetchRealtimePrices = async (currentHoldings: Holding[]) => {
     if (!currentHoldings || currentHoldings.length === 0) return;
     setIsSyncing(true);
-    const codes = currentHoldings.map(h => h.itemCode).join(',');
+    const codes = currentHoldings.map(h => h.itemCode.trim()).join(',');
     try {
       const res = await fetch(`/api/market?tickers=${codes}`);
       const data = await res.json();
@@ -56,16 +56,17 @@ export default function PortfolioPage() {
       if (data.success && Array.isArray(data.data)) {
         const rtData = data.data; // [{ ticker, price, changeRate, volume }, ...]
         
-        // 데이터 병합(Merge) 로직: 0원이 평단가로 둔갑하는 버그 수정
+        // 데이터 병합(Merge) 로직: 티커 공백 제거 매칭 및 강제 업데이트 적용
         const merged = currentHoldings.map(local => {
-          const rt = rtData.find((r: any) => r.ticker === local.itemCode);
+          // r.ticker와 local.itemCode 모두 trim() 처리하여 엄격하게 비교
+          const rt = rtData.find((r: any) => r.ticker.trim() === local.itemCode.trim());
           if (rt) {
             return {
               ...local,
-              // 실시간 시세가 0보다 클 때만 업데이트, 아니면 기존값 또는 평단가 유지
-              currentPrice: rt.price > 0 ? rt.price : (local.currentPrice || local.avgPrice || 0),
-              changeRate: rt.price > 0 ? rt.changeRate : (local.changeRate || 0),
-              volume: rt.price > 0 ? rt.volume : (local.volume || 0)
+              // 서버 데이터(rt)가 있다면 무조건 실시간 가격으로 업데이트
+              currentPrice: rt.price ? Number(rt.price) : (local.currentPrice || local.avgPrice || 0),
+              changeRate: rt.changeRate !== undefined ? Number(rt.changeRate) : (local.changeRate || 0),
+              volume: rt.volume !== undefined ? Number(rt.volume) : (local.volume || 0)
             };
           }
           return local;
@@ -88,6 +89,7 @@ export default function PortfolioPage() {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
           setHoldings(parsed);
+          // 즉시 동기화 실행
           await fetchRealtimePrices(parsed);
         }
       }
@@ -114,7 +116,8 @@ export default function PortfolioPage() {
     let totalValuation = 0;
 
     (filteredHoldings || []).forEach(h => {
-      const current = h.currentPrice || h.avgPrice || 0;
+      // 렌더링/계산 시 실시간 현재가를 최우선 적용
+      const current = (h.currentPrice && h.currentPrice > 0) ? h.currentPrice : (h.avgPrice || 0);
       totalInvested += (h.avgPrice || 0) * (h.quantity || 0);
       totalValuation += current * (h.quantity || 0);
     });
@@ -154,7 +157,7 @@ export default function PortfolioPage() {
 
   const removeHolding = (itemCode: string) => {
     const currentList = Array.isArray(holdings) ? holdings : [];
-    const updated = currentList.filter(h => h.itemCode !== itemCode);
+    const updated = currentList.filter(h => h.itemCode.trim() !== itemCode.trim());
     setHoldings(updated);
     localStorage.setItem(PORTFOLIO_STORAGE_KEY, JSON.stringify(updated));
   };
@@ -262,7 +265,8 @@ export default function PortfolioPage() {
             </div>
           ) : (
             (filteredHoldings || []).map((h, i) => {
-              const current = h.currentPrice || h.avgPrice || 0;
+              // 렌더링 시 실시간 현재가를 1순위로 최우선 출력
+              const current = (h.currentPrice && h.currentPrice > 0) ? h.currentPrice : (h.avgPrice || 0);
               const profit = (current - h.avgPrice) * h.quantity;
               const rate = h.avgPrice > 0 ? ((current - h.avgPrice) / h.avgPrice) * 100 : 0;
               const isPlus = profit >= 0;
@@ -292,7 +296,9 @@ export default function PortfolioPage() {
                       </div>
                       <div className="bg-white p-4 text-right">
                         <p className="text-[9px] font-bold text-slate-400 uppercase mb-1">Current</p>
-                        <p className="text-sm font-black text-slate-900 tabular-nums">{current.toLocaleString()}원</p>
+                        <p className="text-sm font-black text-slate-900 tabular-nums">
+                          {current > 0 ? `${current.toLocaleString()}원` : '-'}
+                        </p>
                       </div>
                       <div className="bg-white p-4 col-span-2 border-t border-slate-50 flex justify-between items-center">
                          <span className={`text-[15px] font-black tabular-nums ${isPlus ? 'text-red-500' : 'text-blue-500'}`}>
