@@ -149,7 +149,7 @@ export default function HomePage() {
         // 2. 차트 데이터 페칭 (기본 일봉)
         await fetchChartData(ticker, 'day');
 
-        // 3. AI 분석 요청
+        // 3. AI 분석 요청 (모든 상세 지표 전달)
         setIsAiLoading(true);
         const aiRes = await fetch('/api/analyze-stock', {
           method: 'POST',
@@ -358,7 +358,7 @@ export default function HomePage() {
                    <div className="bg-white p-6 flex flex-col justify-center text-right">
                       <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Target Price</p>
                       <p className="text-lg font-black text-slate-900 tabular-nums leading-none mb-2">{detailData.targetPrice.toLocaleString()}</p>
-                      {detailData.targetPrice > 0 && (
+                      {detailData.targetPrice > 0 && detailData.price > 0 && (
                         <span className="text-[10px] font-black text-blue-600 uppercase">
                           +{(((detailData.targetPrice - detailData.price) / detailData.price) * 100).toFixed(1)}% Gap
                         </span>
@@ -420,7 +420,11 @@ export default function HomePage() {
                    </div>
                    <div className="bg-white p-5 flex flex-col gap-1">
                       <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Market Cap (시총)</span>
-                      <span className="text-xs font-black text-slate-900 tracking-tighter">{detailData.marketCap.toLocaleString()}억원</span>
+                      <span className="text-xs font-black text-slate-900 tracking-tighter">
+                         {detailData.marketCap > 100000000 
+                            ? (detailData.marketCap / 100000000).toLocaleString(undefined, { maximumFractionDigits: 1 }) + '억원'
+                            : detailData.marketCap.toLocaleString() + '원'}
+                      </span>
                    </div>
                    <div className="bg-white p-5 flex flex-col gap-1">
                       <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Valuation (PER/PBR)</span>

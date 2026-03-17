@@ -15,11 +15,11 @@ const REQUEST_HEADERS = {
 };
 
 /**
- * 네이버 API 데이터 파싱 헬퍼
+ * 네이버 API 데이터 파싱 헬퍼 (엄격한 숫자 정제)
  */
 const cleanNumber = (val: any): number => {
   if (typeof val === 'number') return val;
-  if (!val) return 0;
+  if (!val || val === '-' || val === '') return 0;
   const cleaned = val.toString().replace(/,/g, '');
   const num = Number(cleaned);
   return isNaN(num) ? 0 : num;
@@ -78,7 +78,7 @@ async function fetchStockDetail(ticker: string) {
 }
 
 /**
- * 네이버 Integration API 종목 상세 정보 조회 (추가 지표 포함)
+ * 네이버 Integration API 종목 상세 정보 조회 (상세 지표 수동 매핑 강화)
  */
 async function fetchStockIntegration(ticker: string) {
   try {
@@ -89,26 +89,28 @@ async function fetchStockIntegration(ticker: string) {
     });
     const data = await res.json();
     
-    // 핵심 지표 파싱
-    const totalStatus = data?.totalInfos || [];
-    const mainInfo = totalStatus[0] || {};
+    // totalInfos[0] 또는 루트 레벨 데이터 활용
+    const totalInfo = data?.totalInfos?.[0] || {};
     
+    // 네이버 모바일 API 필드 구조에 따른 수동 매핑
     return {
       ticker: ticker,
-      stockName: mainInfo.stockName || '',
-      price: cleanNumber(mainInfo.closePrice),
-      changeRate: mainInfo.fluctuationsRatio || '0.00',
-      // 상세 지표
-      high52w: cleanNumber(mainInfo.high52w),
-      low52w: cleanNumber(mainInfo.low52w),
-      targetPrice: cleanNumber(mainInfo.targetPrice),
-      marketCap: cleanNumber(mainInfo.marketCap),
-      per: cleanNumber(mainInfo.per),
-      pbr: cleanNumber(mainInfo.pbr),
-      eps: cleanNumber(mainInfo.eps),
-      bps: cleanNumber(mainInfo.bps),
-      dividendYield: mainInfo.dividendYield || '0.00',
-      industryName: mainInfo.industryName || ''
+      stockName: totalInfo.stockName || data.stockName || '',
+      // 현재가: totalInfo.closePrice 또는 data.closePrice (데이터 구조 복합성 대응)
+      price: cleanNumber(totalInfo.closePrice || data.closePrice || data.now),
+      changeRate: totalInfo.fluctuationsRatio || data.fluctuationsRatio || '0.00',
+      
+      // 상세 투자 지표
+      high52w: cleanNumber(totalInfo.high52w || totalInfo.high52Weeks || data.high52Weeks),
+      low52w: cleanNumber(totalInfo.low52w || totalInfo.low52Weeks || data.low52Weeks),
+      targetPrice: cleanNumber(totalInfo.targetPrice || data.targetPrice),
+      marketCap: cleanNumber(totalInfo.marketCap || data.marketCap),
+      per: cleanNumber(totalInfo.per || data.per),
+      pbr: cleanNumber(totalInfo.pbr || data.pbr),
+      eps: cleanNumber(totalInfo.eps || data.eps),
+      bps: cleanNumber(totalInfo.bps || data.bps),
+      dividendYield: totalInfo.dividendYield || data.dividendYield || '0.00',
+      industryName: totalInfo.industryName || data.itemType || ''
     };
   } catch (e) {
     console.error(`Naver Integration Error (${ticker}):`, e);
