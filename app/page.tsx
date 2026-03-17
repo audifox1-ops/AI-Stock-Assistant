@@ -5,7 +5,7 @@ import {
   Plus, Search, Star, TrendingUp, TrendingDown, RefreshCcw, Loader2, X,
   ArrowRight, ShieldAlert, Sparkles, AlertCircle, BarChart3, Info, Zap,
   Menu, Bell, Settings, Filter, Target, Activity, PieChart, ChevronRight,
-  CandlestickChart
+  CandlestickChart, Bot
 } from 'lucide-react';
 import StockChart from '@/components/StockChart';
 
