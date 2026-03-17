@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Plus, Search, Star, Trash2, TrendingUp, TrendingDown, RefreshCcw, Loader2, X,
-  ArrowRight, ShieldAlert, Sparkles, AlertCircle, BarChart3, Info
+  ArrowRight, ShieldAlert, Sparkles, AlertCircle, BarChart3, Info, Zap
 } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
