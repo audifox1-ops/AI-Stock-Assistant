@@ -5,11 +5,13 @@ import {
   createChart, 
   ColorType, 
   IChartApi, 
-  ISeriesApi, 
   CandlestickData, 
   HistogramData,
   LineData,
-  SeriesMarker
+  SeriesMarker,
+  CandlestickSeries,
+  HistogramSeries,
+  LineSeries
 } from 'lightweight-charts';
 
 interface StockChartProps {
@@ -49,7 +51,8 @@ const StockChart: React.FC<StockChartProps> = ({ data, isMinute }) => {
     chartRef.current = chart;
 
     // 1. 캔들스틱 시리즈 (Candlestick)
-    const candleSeries = chart.addCandlestickSeries({
+    // [v5 Fix]: addCandlestickSeries 대신 unified addSeries API 사용
+    const candleSeries = chart.addSeries(CandlestickSeries, {
       upColor: '#ef4444',
       downColor: '#3b82f6',
       borderVisible: false,
@@ -68,7 +71,8 @@ const StockChart: React.FC<StockChartProps> = ({ data, isMinute }) => {
     candleSeries.setData(candleData);
 
     // 2. 거래량 시리즈 (Volume)
-    const volumeSeries = chart.addHistogramSeries({
+    // [v5 Fix]: addHistogramSeries 대신 unified addSeries API 사용
+    const volumeSeries = chart.addSeries(HistogramSeries, {
       color: '#cbd5e1',
       priceFormat: { type: 'volume' },
       priceScaleId: '', // 별도의 스케일 (하단 오버레이)
@@ -100,7 +104,8 @@ const StockChart: React.FC<StockChartProps> = ({ data, isMinute }) => {
     const periodsMA = [5, 20, 60, 120];
 
     periodsMA.forEach((p, idx) => {
-      const maSeries = chart.addLineSeries({
+      // [v5 Fix]: addLineSeries 대신 unified addSeries API 사용
+      const maSeries = chart.addSeries(LineSeries, {
         color: colorsMA[idx],
         lineWidth: 1,
         priceLineVisible: false,
