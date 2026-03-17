@@ -44,6 +44,7 @@ export default function HomePage() {
   
   // 확장된 6가지 탭 구성
   const [activeTab, setActiveTab] = useState('KOSPI');
+  
   // API 전송용 매핑
   const tabMapping: Record<string, string> = {
     'KOSPI': 'KOSPI',
@@ -75,6 +76,7 @@ export default function HomePage() {
 
   const fetchNaverRanking = async () => {
     setIsRankingLoading(true);
+    // [20차] 한글 파라미터를 그대로 보내되, 브라우저가 자동 인코딩함. 백엔드에서 강제 디코딩 예정.
     const category = tabMapping[activeTab] || 'KOSPI';
     try {
       const res = await fetch(`/api/market?category=${category}`, { cache: 'no-store' });
@@ -85,19 +87,23 @@ export default function HomePage() {
         setRankingStocks([]);
       }
     } catch (e) {
+      console.error("Ranking fetch error:", e);
       setRankingStocks([]);
     }
     finally { setIsRankingLoading(false); }
   };
 
+  // [20차] activeTab 의존성 배열 확인 및 로딩 상태 명시적 연동
   useEffect(() => {
     fetchMarket();
     fetchNaverRanking();
+    
+    // 60초 주기 갱신
     const interval = setInterval(() => {
       fetchMarket();
     }, 60000);
     return () => clearInterval(interval);
-  }, [activeTab]);
+  }, [activeTab]); // activeTab이 바뀔 때 마다 재호출
 
   // --- 종목 선택 및 차트/AI 호출 ---
   const handleStockClick = (stock: NaverStock) => {
@@ -163,7 +169,7 @@ export default function HomePage() {
 
   return (
     <div className="w-full relative min-h-screen bg-slate-50 font-sans pb-24">
-      {/* 고정 헤더 - [19차] 직각화: border-radius 제거 */}
+      {/* 고정 헤더 */}
       <header className="px-6 py-6 bg-white flex justify-between items-center sticky top-0 z-40 border-b border-gray-100 rounded-none">
         <h1 className="text-2xl font-black tracking-tighter text-slate-900 flex items-center gap-2">
           <BarChart3 className="text-blue-600" size={28} /> K-SMART
@@ -174,7 +180,7 @@ export default function HomePage() {
       </header>
 
       <div className="px-6 mt-6 space-y-8">
-        {/* 지수 보드 - [19차] 직각화: rounded-none 적용 */}
+        {/* 지수 보드 */}
         <section className="grid grid-cols-2 gap-4">
            {marketIndices.length === 0 ? (
              [1,2].map(i => <div key={i} className="h-32 bg-white rounded-none animate-pulse shadow-none border border-slate-100"></div>)
@@ -195,7 +201,7 @@ export default function HomePage() {
            ))}
         </section>
 
-        {/* 랭킹 섹션 - [19차] 직각화: rounded-none 적용 */}
+        {/* 랭킹 섹션 */}
         <section className="bg-white rounded-none border border-slate-200 shadow-none overflow-hidden flex flex-col">
            <div className="px-8 pt-8 pb-4 flex justify-between items-end">
               <div className="space-y-1">
@@ -206,7 +212,7 @@ export default function HomePage() {
               </div>
            </div>
 
-           {/* 가로 스크롤 탭 - [19차] 직각화: rounded-none 적용 */}
+           {/* 가로 스크롤 탭 */}
            <div className="px-6 py-4 flex gap-1 overflow-x-auto whitespace-nowrap hide-scrollbar border-b border-slate-100 bg-slate-50/30">
               {Object.keys(tabMapping).map(tabName => (
                 <button 
@@ -219,49 +225,64 @@ export default function HomePage() {
               ))}
            </div>
 
-           <div className="p-0 border-t border-slate-100">
+           <div className="p-0 border-t border-slate-100 min-h-[400px]">
+              {/* [20차] 탭 영역 하단에 로딩 상태 명시적 노출 */}
               {isRankingLoading ? (
-                <div className="py-40 text-center flex flex-col items-center gap-4">
-                  <Loader2 className="animate-spin text-blue-200" size={40} />
-                  <p className="text-[10px] font-black text-slate-200 uppercase tracking-widest">Mining Data Streams...</p>
+                <div className="py-40 text-center flex flex-col items-center justify-center gap-6">
+                  <div className="relative">
+                    <Loader2 className="animate-spin text-blue-600" size={48} />
+                    <div className="absolute inset-0 flex items-center justify-center">
+                       <Zap size={16} className="text-blue-600" />
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-[11px] font-black text-slate-900 uppercase tracking-[0.4em]">Streaming Data...</p>
+                    <p className="text-[9px] font-bold text-slate-300 uppercase tracking-widest">Applying Neural Filters for {activeTab}</p>
+                  </div>
                 </div>
               ) : rankingStocks.length === 0 ? (
-                <div className="py-40 text-center flex flex-col items-center gap-4">
+                <div className="py-40 text-center flex flex-col items-center justify-center gap-5">
                   <Info className="text-slate-100" size={48} />
-                  <p className="text-[10px] font-black text-slate-200 uppercase tracking-widest">No data available</p>
-                </div>
-              ) : rankingStocks.slice(0, 30).map((rs, idx) => {
-                const isUp = rs.fluctuationsRatio.startsWith('+') || parseFloat(rs.fluctuationsRatio) > 0;
-                return (
-                  <div 
-                    key={`${rs.itemCode}-${idx}`} 
-                    onClick={() => handleStockClick(rs)} 
-                    className="p-7 bg-white border-b border-slate-100 flex justify-between items-center group active:bg-slate-50 transition-all hover:bg-slate-50 relative"
-                  >
-                     <div className="flex items-center gap-5">
-                        <span className="text-[14px] font-black text-slate-300 group-hover:text-blue-500 transition-colors w-6">{idx + 1}</span>
-                        <div>
-                           <h4 className="text-[18px] font-black text-slate-900 tracking-tighter leading-tight uppercase">{rs.stockName}</h4>
-                           <div className="flex items-center gap-2 mt-1">
-                              <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">{rs.itemCode}</span>
-                              <span className="text-[11px] font-black text-slate-400">VOL: {rs.volume}</span>
-                           </div>
-                        </div>
-                     </div>
-                     <div className="text-right flex flex-col items-end gap-2">
-                        <p className="text-[20px] font-black text-slate-900 tracking-tighter leading-none tabular-nums">{rs.closePrice}</p>
-                        <span className={`text-[10px] font-black px-2.5 py-1 rounded-none flex items-center gap-1 ${isUp ? 'bg-red-50 text-red-500' : 'bg-blue-50 text-blue-500'}`}>
-                           {isUp ? '+' : ''}{rs.fluctuationsRatio}%
-                        </span>
-                     </div>
+                  <div className="space-y-1">
+                    <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">No strategic data found</p>
+                    <p className="text-[9px] font-bold text-slate-200 uppercase tracking-widest">Please try again or select another tab</p>
                   </div>
-                );
-              })}
+                  <button onClick={fetchNaverRanking} className="mt-2 px-6 py-2 border border-slate-200 text-[10px] font-black uppercase tracking-widest hover:bg-slate-50">Retry Sync</button>
+                </div>
+              ) : (
+                rankingStocks.slice(0, 30).map((rs, idx) => {
+                  const isUp = rs.fluctuationsRatio.startsWith('+') || parseFloat(rs.fluctuationsRatio) > 0;
+                  return (
+                    <div 
+                      key={`${rs.itemCode}-${idx}`} 
+                      onClick={() => handleStockClick(rs)} 
+                      className="p-7 bg-white border-b border-slate-100 flex justify-between items-center group active:bg-slate-50 transition-all hover:bg-slate-50 relative"
+                    >
+                       <div className="flex items-center gap-5">
+                          <span className="text-[14px] font-black text-slate-300 group-hover:text-blue-500 transition-colors w-6">{idx + 1}</span>
+                          <div>
+                             <h4 className="text-[18px] font-black text-slate-900 tracking-tighter leading-tight uppercase">{rs.stockName}</h4>
+                             <div className="flex items-center gap-2 mt-1">
+                                <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">{rs.itemCode}</span>
+                                <span className="text-[11px] font-black text-slate-400">VOL: {rs.volume}</span>
+                             </div>
+                          </div>
+                       </div>
+                       <div className="text-right flex flex-col items-end gap-2">
+                          <p className="text-[20px] font-black text-slate-900 tracking-tighter leading-none tabular-nums">{rs.closePrice}</p>
+                          <span className={`text-[10px] font-black px-2.5 py-1 rounded-none flex items-center gap-1 ${isUp ? 'bg-red-50 text-red-500' : 'bg-blue-50 text-blue-500'}`}>
+                             {isUp ? '+' : ''}{rs.fluctuationsRatio}%
+                          </span>
+                       </div>
+                    </div>
+                  );
+                })
+              )}
            </div>
         </section>
       </div>
 
-      {/* 바텀 시트 - [19차] 직각화: rounded-none 적용 */}
+      {/* 바텀 시트 */}
       {isBottomSheetOpen && selectedStock && (
         <div className="fixed inset-0 z-[110] flex items-end justify-center px-0 pb-0">
            <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-none" onClick={() => setIsBottomSheetOpen(false)}></div>
@@ -274,7 +295,7 @@ export default function HomePage() {
                  <button onClick={() => setIsBottomSheetOpen(false)} className="p-3 bg-slate-50 rounded-none text-slate-400 border border-slate-100"><X size={20} /></button>
               </div>
 
-              {/* 지표 패널 - [19차] 직각화: rounded-none 적용 */}
+              {/* 지표 패널 */}
               <div className="grid grid-cols-2 gap-px bg-slate-200 mb-10 border border-slate-200">
                  {[
                    { label: '52W HIGH / LOW', value: `${selectedStock.high52w} / ${selectedStock.low52w}`, icon: Zap, color: 'text-blue-500' },
@@ -293,7 +314,7 @@ export default function HomePage() {
                  ))}
               </div>
 
-              {/* 액션 버튼 - [19차] 직각화: rounded-none 적용 */}
+              {/* 액션 버튼 */}
               <div className="grid grid-cols-1 gap-px bg-slate-100 border border-slate-100">
                  <button 
                    onClick={openChart}
@@ -330,7 +351,7 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* 데이터 모달 - [19차] 직각화: rounded-none 적용 */}
+      {/* 데이터 모달 */}
       {activeModal && selectedStock && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center px-0">
            <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-none" onClick={() => !isAiLoading && setActiveModal(null)}></div>

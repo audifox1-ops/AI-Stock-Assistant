@@ -23,14 +23,16 @@ async function fetchIndex(index: string) {
   }
 }
 
-// 개별 종목 상세/고급 지표 패치
+// 개별 종목 상세/고급 지표 패치 (방어 로직 포함)
 async function fetchIntegration(itemCode: string) {
   const url = `${INTEGRATION_URL}/${itemCode}/integration`;
   try {
     const res = await fetch(url, { cache: 'no-store' });
+    if (!res.ok) throw new Error(`Fetch failed: ${res.status}`);
     return await res.json();
   } catch (e) {
-    return null;
+    console.error(`Integration Fetch Error for ${itemCode}:`, e);
+    return null; // 단일 종목 실패 시 null 반환하여 전체 중단 방지
   }
 }
 
@@ -44,8 +46,9 @@ function getOpinionText(score: any) {
 }
 
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const category = searchParams.get('category'); // KOSPI, KOSDAQ, 거래량상위 등
+  const urlObj = new URL(request.url);
+  // [20차] 한글 파라미터 안전 디코딩 적용
+  const category = decodeURIComponent(urlObj.searchParams.get('category') || '');
 
   try {
     // 1. 카테고리 파라미터가 없으면 지수 데이터만 반환 (헤더용)
@@ -77,7 +80,7 @@ export async function GET(request: Request) {
       case '거래량급증':
       case '거래량급락':
       case '골든크로스':
-        // 특수 탭은 일단 거래량 상위 100개를 가져와서 서버에서 가공
+        // 특수 탭은 거래량 데이터를 기반으로 서버에서 가공
         stockUrl = `${NAVER_STOCK_URL}/quant/KOSPI?page=1&pageSize=100`;
         isSpecialFilter = true;
         break;
@@ -87,26 +90,36 @@ export async function GET(request: Request) {
 
     const stockRes = await fetch(stockUrl, { cache: 'no-store' });
     const stockData = await stockRes.json();
-    let rawStocks = stockData.stocks || stockData.result?.stocks || [];
+    
+    // [20차] 네이버 API 응답 구조 다양성 대응 (defensive extraction)
+    let rawStocks = 
+      stockData.stocks || 
+      stockData.result?.stocks || 
+      stockData.result?.itemList || 
+      stockData.result || 
+      [];
+    
+    if (!Array.isArray(rawStocks)) rawStocks = [];
 
-    // [18차] 특수 탭 서버 사이드 가공 처리
-    if (isSpecialFilter) {
+    // 특수 탭 서버 사이드 가공 처리
+    if (isSpecialFilter && rawStocks.length > 0) {
       if (category === '거래량급증') {
-        // 등락률이 높은 순으로 정렬
-        rawStocks.sort((a: any, b: any) => parseFloat(b.fluctuationsRatio) - parseFloat(a.fluctuationsRatio));
+        rawStocks.sort((a: any, b: any) => parseFloat(b.fluctuationsRatio || 0) - parseFloat(a.fluctuationsRatio || 0));
       } else if (category === '거래량급락') {
-        // 등락률이 낮은 순으로 정렬
-        rawStocks.sort((a: any, b: any) => parseFloat(a.fluctuationsRatio) - parseFloat(b.fluctuationsRatio));
+        rawStocks.sort((a: any, b: any) => parseFloat(a.fluctuationsRatio || 0) - parseFloat(b.fluctuationsRatio || 0));
       } else if (category === '골든크로스') {
-        // 임시 Fallback: 거래량 상위 중 상승세(>1%)인 종목 필터링
-        rawStocks = rawStocks.filter((s: any) => parseFloat(s.fluctuationsRatio) > 1.0);
+        rawStocks = rawStocks.filter((s: any) => parseFloat(s.fluctuationsRatio || 0) > 1.0);
       }
       rawStocks = rawStocks.slice(0, 30);
     }
 
-    // 3. 각 종목별 상세 지표 통합 패치 (52주 고저, 목표가 등)
+    // 3. 각 종목별 상세 지표 통합 패치 (방어적 비동기 처리)
+    // entries()를 사용하여 인덱스와 함께 처리
     const detailedStocks = await Promise.all(rawStocks.map(async (stock: any) => {
-      const code = stock.itemCode;
+      const code = stock.itemCode || stock.symbolCode;
+      if (!code) return null;
+
+      // [20차] 개별 호출 실패 시 전체 중단을 막기 위해 fetchIntegration 내부에서 에러 핸들링됨
       const detail = await fetchIntegration(code);
       
       const infos = detail?.totalInfos || [];
@@ -114,10 +127,12 @@ export async function GET(request: Request) {
       const low52w = infos.find((i: any) => i.code === 'lowPriceOf52Weeks')?.value || '-';
       
       const targetPriceStr = detail?.consensusInfo?.priceTargetMean || '0';
-      const currentPriceStr = stock.closePrice || '0';
+      const currentPriceStr = stock.closePrice || stock.now || '0';
       
-      const targetPriceNum = parseFloat(targetPriceStr.toString().replace(/,/g, ''));
-      const currentPriceNum = parseFloat(currentPriceStr.toString().replace(/,/g, ''));
+      // 숫자 파싱 안전 처리
+      const parsePrice = (val: any) => parseFloat(val?.toString().replace(/,/g, '') || '0');
+      const targetPriceNum = parsePrice(targetPriceStr);
+      const currentPriceNum = parsePrice(currentPriceStr);
       
       let upsidePotential = '-';
       if (targetPriceNum > 0 && currentPriceNum > 0) {
@@ -131,22 +146,23 @@ export async function GET(request: Request) {
 
       return {
         itemCode: code,
-        stockName: stock.stockName,
-        closePrice: stock.closePrice,
-        fluctuationsRatio: stock.fluctuationsRatio.replace('+', ''),
+        stockName: stock.stockName || stock.itemName || 'Unknown',
+        closePrice: currentPriceStr.toString(), // 콤마 포함 여부에 상관없이 원본 활용 선호
+        fluctuationsRatio: (stock.fluctuationsRatio || '0').toString().replace('+', ''),
         volume: volumeFormatted,
         high52w,
         low52w,
-        targetPrice: targetPriceStr === '0' ? '-' : targetPriceStr,
+        targetPrice: targetPriceStr === '0' ? '-' : targetPriceStr.toString(),
         upsidePotential,
         opinion: getOpinionText(opinionMean)
       };
     }));
 
-    return NextResponse.json(detailedStocks);
+    // null 값 필터링 (잘못된 데이터 배제)
+    return NextResponse.json(detailedStocks.filter(s => s !== null));
 
   } catch (error) {
-    console.error('Market API Route Error:', error);
-    return NextResponse.json([], { status: 200 }); // 에러 시 빈 배열 반환하여 무한 로딩 방지
+    console.error('Market API Route Fatal Error:', error);
+    return NextResponse.json([], { status: 200 });
   }
 }
