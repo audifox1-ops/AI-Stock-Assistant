@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Plus, Search, Star, TrendingUp, TrendingDown, RefreshCcw, Loader2, X,
   ArrowRight, ShieldAlert, Sparkles, AlertCircle, BarChart3, Info, Zap,
-  Menu, Bell, Settings, Filter
+  Menu, Bell, Settings, Filter, Target, Activity, PieChart, ChevronRight
 } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
@@ -26,6 +26,23 @@ interface RankedStock {
   fluctuationType: string;
 }
 
+interface StockDetail {
+  ticker: string;
+  stockName: string;
+  price: number;
+  changeRate: string;
+  high52w: number;
+  low52w: number;
+  targetPrice: number;
+  marketCap: number;
+  per: number;
+  pbr: number;
+  eps: number;
+  bps: number;
+  dividendYield: string;
+  industryName: string;
+}
+
 const TABS = [
   { id: 'kospi_market_cap', label: '코스피 시총', value: 'kospi_market_cap' },
   { id: 'kosdaq_market_cap', label: '코스닥 시총', value: 'kosdaq_market_cap' },
@@ -41,6 +58,14 @@ export default function HomePage() {
   const [isLoadingIndices, setIsLoadingIndices] = useState(true);
   const [isLoadingRanking, setIsLoadingRanking] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<string>('');
+
+  // 상세 모달 상태
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedTicker, setSelectedTicker] = useState<string | null>(null);
+  const [detailData, setDetailData] = useState<StockDetail | null>(null);
+  const [isDetailLoading, setIsDetailLoading] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
+  const [isAiLoading, setIsAiLoading] = useState(false);
 
   const fetchIndices = async () => {
     setIsLoadingIndices(true);
@@ -71,6 +96,38 @@ export default function HomePage() {
     } finally {
       setIsLoadingRanking(false);
       setLastUpdated(new Date().toLocaleTimeString());
+    }
+  };
+
+  const openDetailModal = async (ticker: string) => {
+    setSelectedTicker(ticker);
+    setIsModalOpen(true);
+    setIsDetailLoading(true);
+    setAiAnalysis(null);
+    setDetailData(null);
+
+    try {
+      // 1. 상세 지표 데이터 페칭
+      const res = await fetch(`/api/market?type=detail&ticker=${ticker}`);
+      const data = await res.json();
+      if (data.success && data.data) {
+        setDetailData(data.data);
+        
+        // 2. AI 분석 요청 (상세 지표가 있는 경우에만)
+        setIsAiLoading(true);
+        const aiRes = await fetch('/api/analyze-stock', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ stockInfo: data.data })
+        });
+        const aiData = await aiRes.json();
+        setAiAnalysis(aiData.analysis || aiData.error);
+      }
+    } catch (e) {
+      console.error('Detail Fetch Error:', e);
+    } finally {
+      setIsDetailLoading(false);
+      setIsAiLoading(false);
     }
   };
 
@@ -171,7 +228,11 @@ export default function HomePage() {
               const isMinus = changeVal < 0;
 
               return (
-                <div key={stock.itemCode} className="bg-white border border-slate-100 p-6 flex flex-col gap-5 hover:border-blue-500 group transition-all duration-300 rounded-none shadow-sm hover:shadow-xl">
+                <div 
+                  key={stock.itemCode} 
+                  onClick={() => openDetailModal(stock.itemCode)}
+                  className="bg-white border border-slate-100 p-6 flex flex-col gap-5 hover:border-blue-500 group transition-all duration-300 rounded-none shadow-sm hover:shadow-xl cursor-pointer"
+                >
                    <div className="flex justify-between items-start">
                       <div className="flex items-center gap-5">
                          <div className="w-12 h-12 bg-slate-900 text-white flex items-center justify-center text-[11px] font-black uppercase">
@@ -205,7 +266,7 @@ export default function HomePage() {
                          <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest">Market View</span>
                          <div className="flex justify-end items-center gap-2">
                             {isPlus ? <TrendingUp size={12} className="text-red-500" /> : <TrendingDown size={12} className="text-blue-500" />}
-                            <span className="text-[10px] font-black text-slate-900 uppercase tracking-widest">Active</span>
+                            <span className="text-[10px] font-black text-slate-900 uppercase tracking-widest">See Detail</span>
                          </div>
                       </div>
                    </div>
@@ -216,8 +277,126 @@ export default function HomePage() {
         </div>
       </main>
 
-      {/* 3. 하단 고정 내비게이션 (생략 가능하나 구조상 유지) */}
-      {/* ... */}
+      {/* 3. 종목 상세 모달 (고도화 버전) */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center p-6 bg-slate-950/90 backdrop-blur-xl">
+          <div className="absolute inset-0" onClick={() => setIsModalOpen(false)}></div>
+          <div className="relative bg-white w-full max-w-[550px] max-h-[85vh] overflow-y-auto rounded-none border-t-[16px] border-slate-900 shadow-2xl hide-scrollbar">
+            
+            {isDetailLoading ? (
+              <div className="py-40 flex flex-col items-center justify-center gap-8">
+                <Loader2 className="animate-spin text-blue-600" size={48} />
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.4em]">ANALYZING MARKET DATA...</p>
+              </div>
+            ) : detailData && (
+              <div className="p-10">
+                {/* 모달 헤더 */}
+                <div className="flex justify-between items-start mb-10 pb-8 border-b-2 border-slate-100">
+                  <div>
+                    <div className="flex items-center gap-3 mb-2">
+                       <span className="bg-slate-900 text-white text-[9px] font-black px-3 py-1 uppercase">{detailData.industryName}</span>
+                       <span className="text-[10px] font-bold text-slate-400 tracking-widest uppercase">{detailData.ticker}</span>
+                    </div>
+                    <h2 className="text-3xl font-black text-slate-900 tracking-tighter uppercase leading-none">{detailData.stockName}</h2>
+                  </div>
+                  <button onClick={() => setIsModalOpen(false)} className="p-3 bg-slate-900 text-white rounded-none shadow-xl hover:bg-red-600 transition-colors">
+                    <X size={20} />
+                  </button>
+                </div>
+
+                {/* 현재가 및 목표가 괴리율 */}
+                <div className="bg-slate-900 p-8 rounded-none mb-10 relative overflow-hidden">
+                   <div className="relative z-10 flex justify-between items-end">
+                      <div>
+                         <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-3">Real-time Trading Price</p>
+                         <div className="flex items-end gap-3">
+                            <h3 className="text-4xl font-black text-white tabular-nums tracking-tighter leading-none">{detailData.price.toLocaleString()}</h3>
+                            <span className="text-lg font-bold text-white/40 pb-0.5 uppercase">KRW</span>
+                         </div>
+                      </div>
+                      <div className="text-right">
+                         <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3">Consensus Target</p>
+                         <p className="text-xl font-black text-white tabular-nums tracking-tighter">{detailData.targetPrice.toLocaleString()}원</p>
+                         {detailData.targetPrice > 0 && (
+                            <div className="mt-2 inline-flex items-center gap-2 bg-blue-600 px-3 py-1">
+                               <Sparkles size={10} className="text-white" />
+                               <span className="text-[10px] font-black text-white uppercase tracking-widest">
+                                 UP {(((detailData.targetPrice - detailData.price) / detailData.price) * 100).toFixed(1)}% LEFT
+                               </span>
+                            </div>
+                         )}
+                      </div>
+                   </div>
+                </div>
+
+                {/* 핵심 지표 그리드 */}
+                <div className="grid grid-cols-2 gap-px bg-slate-100 border border-slate-100 mb-10">
+                   <div className="bg-white p-5 flex flex-col gap-1">
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">52주 최고/최저</span>
+                      <div className="flex items-center gap-2">
+                         <span className="text-xs font-black text-red-500">{detailData.high52w.toLocaleString()}</span>
+                         <span className="text-slate-200">/</span>
+                         <span className="text-xs font-black text-blue-500">{detailData.low52w.toLocaleString()}</span>
+                      </div>
+                   </div>
+                   <div className="bg-white p-5 flex flex-col gap-1">
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">시가총액</span>
+                      <span className="text-xs font-black text-slate-900 tracking-tighter">{detailData.marketCap.toLocaleString()}억원</span>
+                   </div>
+                   <div className="bg-white p-5 flex flex-col gap-1">
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">PER / PBR</span>
+                      <div className="flex items-center gap-3">
+                         <span className="text-xs font-black text-slate-900">{detailData.per}x</span>
+                         <span className="text-xs font-black text-slate-900">{detailData.pbr}x</span>
+                      </div>
+                   </div>
+                   <div className="bg-white p-5 flex flex-col gap-1">
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Dividend Yield (배당)</span>
+                      <span className="text-xs font-black text-green-600">{detailData.dividendYield}%</span>
+                   </div>
+                </div>
+
+                {/* 차트 플레이스홀더 */}
+                <div className="w-full h-48 bg-slate-50 border-2 border-dashed border-slate-200 flex flex-col items-center justify-center gap-4 mb-10 overflow-hidden relative">
+                   <BarChart3 size={32} className="text-slate-200" />
+                   <p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.4em]">Advanced Chart Service Pending</p>
+                   <div className="absolute inset-0 bg-gradient-to-t from-slate-50 to-transparent"></div>
+                </div>
+
+                {/* AI 분석 리포트 영역 */}
+                <div className="border-t-4 border-slate-900 pt-10">
+                   <div className="flex items-center gap-3 mb-8">
+                      <div className="w-10 h-10 bg-blue-600 flex items-center justify-center rounded-none shadow-lg">
+                         <Bot size={20} className="text-white" />
+                      </div>
+                      <h4 className="text-lg font-black text-slate-900 tracking-tighter uppercase leading-none">🤖 AI 인텔리전스 투자 리포트</h4>
+                   </div>
+
+                   <div className="bg-slate-50 p-8 border-l-4 border-blue-600 min-h-[150px] font-sans">
+                      {isAiLoading ? (
+                        <div className="flex flex-col items-center justify-center py-10 gap-5">
+                           <Loader2 className="animate-spin text-blue-600" size={24} />
+                           <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.3em] animate-pulse">심층 밸류에이션 분석 중...</p>
+                        </div>
+                      ) : (
+                        <div className="text-[14px] font-bold text-slate-800 leading-relaxed whitespace-pre-wrap">
+                           {aiAnalysis || "분석 데이터를 가져오지 못했습니다."}
+                        </div>
+                      )}
+                   </div>
+                </div>
+                
+                <button 
+                   onClick={() => setIsModalOpen(false)}
+                   className="w-full bg-slate-900 text-white font-black py-7 rounded-none mt-12 uppercase tracking-[0.5em] text-xs shadow-2xl active:scale-[0.98] transition-all"
+                >
+                   Close Detail Node
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

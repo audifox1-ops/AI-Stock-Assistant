@@ -15,7 +15,7 @@ const REQUEST_HEADERS = {
 };
 
 /**
- * 네이버 Polling API 데이터 파싱 헬퍼
+ * 네이버 API 데이터 파싱 헬퍼
  */
 const cleanNumber = (val: any): number => {
   if (typeof val === 'number') return val;
@@ -78,8 +78,46 @@ async function fetchStockDetail(ticker: string) {
 }
 
 /**
- * 네이버 모바일 API 랭킹 리스트 조회 (랭킹은 기존 모바일 API 유지 또는 최적화 필요)
- * 랭킹 API는 아직 m.stock... 엔드포인트가 유효할 수 있으나, 차단 시 수동 갱신 로직 필요.
+ * 네이버 Integration API 종목 상세 정보 조회 (추가 지표 포함)
+ */
+async function fetchStockIntegration(ticker: string) {
+  try {
+    const url = `https://m.stock.naver.com/api/stock/${ticker}/integration`;
+    const res = await fetch(url, {
+      headers: REQUEST_HEADERS,
+      next: { revalidate: 0 }
+    });
+    const data = await res.json();
+    
+    // 핵심 지표 파싱
+    const totalStatus = data?.totalInfos || [];
+    const mainInfo = totalStatus[0] || {};
+    
+    return {
+      ticker: ticker,
+      stockName: mainInfo.stockName || '',
+      price: cleanNumber(mainInfo.closePrice),
+      changeRate: mainInfo.fluctuationsRatio || '0.00',
+      // 상세 지표
+      high52w: cleanNumber(mainInfo.high52w),
+      low52w: cleanNumber(mainInfo.low52w),
+      targetPrice: cleanNumber(mainInfo.targetPrice),
+      marketCap: cleanNumber(mainInfo.marketCap),
+      per: cleanNumber(mainInfo.per),
+      pbr: cleanNumber(mainInfo.pbr),
+      eps: cleanNumber(mainInfo.eps),
+      bps: cleanNumber(mainInfo.bps),
+      dividendYield: mainInfo.dividendYield || '0.00',
+      industryName: mainInfo.industryName || ''
+    };
+  } catch (e) {
+    console.error(`Naver Integration Error (${ticker}):`, e);
+    return null;
+  }
+}
+
+/**
+ * 네이버 모바일 API 랭킹 리스트 조회
  */
 async function fetchRankingList(type: string) {
   let url = '';
@@ -131,6 +169,7 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const type = searchParams.get('type');
   const tickersParam = searchParams.get('tickers');
+  const ticker = searchParams.get('ticker');
 
   // 1. 지수 데이터 조회 (Polling API)
   if (type === 'index') {
@@ -141,13 +180,19 @@ export async function GET(request: Request) {
     return NextResponse.json({ success: true, data: indices });
   }
 
-  // 2. 홈 화면 랭킹 리스트 조회
-  if (type && type !== 'index' && !tickersParam) {
+  // 2. 종목 상세 지표 데이터 조회 (Integration API)
+  if (type === 'detail' && ticker) {
+    const detail = await fetchStockIntegration(ticker);
+    return NextResponse.json({ success: true, data: detail });
+  }
+
+  // 3. 홈 화면 랭킹 리스트 조회
+  if (type && type !== 'index' && !tickersParam && !ticker) {
     const ranks = await fetchRankingList(type);
     return NextResponse.json({ success: true, data: ranks });
   }
 
-  // 3. 다중 종목 실시간 시세 조회 (Polling API)
+  // 4. 다중 종목 실시간 시세 조회 (Polling API)
   if (tickersParam) {
     const tickers = tickersParam.split(',').filter(t => t.trim() !== '');
     const details = await Promise.all(tickers.map(t => fetchStockDetail(t.trim())));
