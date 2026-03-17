@@ -35,36 +35,36 @@ export async function GET(request: Request) {
 
   /**
    * 네이버 실시간/장기 차트 JSON API 맵핑
-   * - 분봉: /minute, /minute3, /minute5
-   * - 일봉 이상: /day, /week, /month
+   * - 분봉: /minute?interval=1,3,5
+   * - 일봉 이상: ?periodType=dayCandle, weekCandle, monthCandle
    */
   let url = '';
   let isMinute = false;
 
   switch (timeframe) {
     case '1m':
-      url = `https://api.stock.naver.com/chart/domestic/item/${ticker}/minute`;
+      url = `https://api.stock.naver.com/chart/domestic/item/${ticker}/minute?interval=1`;
       isMinute = true;
       break;
     case '3m':
-      url = `https://api.stock.naver.com/chart/domestic/item/${ticker}/minute3`;
+      url = `https://api.stock.naver.com/chart/domestic/item/${ticker}/minute?interval=3`;
       isMinute = true;
       break;
     case '5m':
-      url = `https://api.stock.naver.com/chart/domestic/item/${ticker}/minute5`;
+      url = `https://api.stock.naver.com/chart/domestic/item/${ticker}/minute?interval=5`;
       isMinute = true;
       break;
     case 'day':
-      url = `https://api.stock.naver.com/chart/domestic/item/${ticker}/day`;
+      url = `https://api.stock.naver.com/chart/domestic/item/${ticker}?periodType=dayCandle`;
       break;
     case 'week':
-      url = `https://api.stock.naver.com/chart/domestic/item/${ticker}/week`;
+      url = `https://api.stock.naver.com/chart/domestic/item/${ticker}?periodType=weekCandle`;
       break;
     case 'month':
-      url = `https://api.stock.naver.com/chart/domestic/item/${ticker}/month`;
+      url = `https://api.stock.naver.com/chart/domestic/item/${ticker}?periodType=monthCandle`;
       break;
     default:
-      url = `https://api.stock.naver.com/chart/domestic/item/${ticker}/day`;
+      url = `https://api.stock.naver.com/chart/domestic/item/${ticker}?periodType=dayCandle`;
   }
 
   try {
@@ -76,28 +76,42 @@ export async function GET(request: Request) {
     let rawData: any[] = [];
     if (Array.isArray(json)) {
       rawData = json;
-    } else if (json.priceInfos && Array.isArray(json.priceInfos)) {
+    } else if (json && json.priceInfos && Array.isArray(json.priceInfos)) {
       rawData = json.priceInfos;
     }
 
     const formattedData = rawData.map((item: any) => {
-      const time = convertToUnix(item.localDateTime || item.startTime);
+      const dateStr = item.localDateTime || item.localDate || item.startTime;
+      const time = convertToUnix(dateStr);
       
+      // lightweight-charts는 날짜(YYYY-MM-DD) 또는 timestamp(seconds)를 받음
+      let formattedTime: any = time;
+      if (!isMinute && dateStr && dateStr.length >= 8) {
+        formattedTime = `${dateStr.substring(0, 4)}-${dateStr.substring(4, 6)}-${dateStr.substring(6, 8)}`;
+      }
+
       return {
-        time: isMinute ? time : `${(item.localDateTime || item.startTime).substring(0, 4)}-${(item.localDateTime || item.startTime).substring(4, 6)}-${(item.localDateTime || item.startTime).substring(6, 8)}`,
+        time: formattedTime,
         open: item.openPrice,
         high: item.highPrice,
         low: item.lowPrice,
-        close: item.closePrice,
+        close: item.closePrice || item.currentPrice, // 분봉은 currentPrice가 종가 역할
         volume: item.accumulatedTradingVolume || item.volume || 0
       };
     });
 
+    // 데이터가 유효한지 확인 (open/close 등이 존재하는지)
+    const validData = formattedData.filter(d => 
+      d.time && 
+      typeof d.open === 'number' && 
+      typeof d.close === 'number'
+    );
+
     // 중복 제거 및 시간 오름차순 정렬
-    const uniqueData = formattedData.filter((v, i, a) => a.findIndex(t => t.time === v.time) === i);
+    const uniqueData = validData.filter((v, i, a) => a.findIndex(t => t.time === v.time) === i);
     const sortedData = uniqueData.sort((a: any, b: any) => {
-      const tA = typeof a.time === 'number' ? a.time : new Date(a.time).getTime();
-      const tB = typeof b.time === 'number' ? b.time : new Date(b.time).getTime();
+      const tA = typeof a.time === 'number' ? a.time : new Date(a.time).getTime() / 1000;
+      const tB = typeof b.time === 'number' ? b.time : new Date(b.time).getTime() / 1000;
       return tA - tB;
     });
 
