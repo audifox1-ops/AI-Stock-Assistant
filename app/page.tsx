@@ -5,7 +5,7 @@ import {
   RefreshCcw, BarChart3, Bot, Sparkles, Loader2, Info, ChevronRight, X, 
   TrendingUp, TrendingDown, Activity, Zap, Star, LayoutGrid, List as ListIcon, 
   LineChart as LineChartIcon, PieChart, Lightbulb, ShieldAlert, Target, Search,
-  ArrowRight
+  ArrowRight, Award, Flame, BarChart4
 } from 'lucide-react';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer 
@@ -40,10 +40,19 @@ export default function HomePage() {
   // --- 상태 관리 ---
   const [marketIndices, setMarketIndices] = useState<IndexData[]>([]);
   const [rankingStocks, setRankingStocks] = useState<NaverStock[]>([]);
-  const [isRefreshing, setIsRefreshing] = useState(false);
   const [isRankingLoading, setIsRankingLoading] = useState(false);
-  const [rankingType, setRankingType] = useState('marketValue'); 
-  const [rankingCategory, setRankingCategory] = useState('KOSPI');
+  
+  // [16차] 확장된 6가지 탭 구성
+  const [activeTab, setActiveTab] = useState('KOSPI 시총');
+  // API 전송용 매핑
+  const tabMapping: Record<string, { type: string, category: string }> = {
+    'KOSPI 시총': { type: 'marketValue', category: 'KOSPI' },
+    'KOSDAQ 시총': { type: 'marketValue', category: 'KOSDAQ' },
+    '거래량상위': { type: 'volume', category: 'all' },
+    '거래량급증': { type: 'jump', category: 'all' },
+    '거래량급락': { type: 'fall', category: 'all' },
+    '골든크로스': { type: 'golden', category: 'all' }
+  };
 
   // 인터랙션 상태
   const [selectedStock, setSelectedStock] = useState<NaverStock | null>(null);
@@ -66,8 +75,9 @@ export default function HomePage() {
 
   const fetchNaverRanking = async () => {
     setIsRankingLoading(true);
+    const { type, category } = tabMapping[activeTab] || tabMapping['KOSPI 시총'];
     try {
-      const res = await fetch(`/api/naver?type=${rankingType}&category=${rankingCategory}`, { cache: 'no-store' });
+      const res = await fetch(`/api/naver?type=${type}&category=${category}`, { cache: 'no-store' });
       const data = await res.json();
       if (Array.isArray(data)) setRankingStocks(data);
     } catch (e) {}
@@ -81,7 +91,7 @@ export default function HomePage() {
       fetchMarket();
     }, 60000);
     return () => clearInterval(interval);
-  }, [rankingType, rankingCategory]);
+  }, [activeTab]);
 
   // --- 종목 선택 및 차트/AI 호출 ---
   const handleStockClick = (stock: NaverStock) => {
@@ -138,11 +148,20 @@ export default function HomePage() {
     } finally { setIsAiLoading(false); }
   };
 
+  // 52주 고가 근접 지표 계산
+  const getHighProximity = (current: string, high: string) => {
+    const c = parseFloat(current.replace(/,/g, ''));
+    const h = parseFloat(high.replace(/,/g, ''));
+    if (!c || !h) return '-';
+    return ((c / h) * 100).toFixed(1) + '%';
+  };
+
   return (
-    <div className="w-full relative min-h-screen bg-slate-50 font-sans pb-10">
+    <div className="w-full relative min-h-screen bg-slate-50 font-sans pb-24">
+      {/* 고정 헤더 */}
       <header className="px-6 py-6 bg-white flex justify-between items-center sticky top-0 z-40 border-b border-gray-100">
         <h1 className="text-2xl font-black tracking-tighter text-slate-900 flex items-center gap-2">
-          <BarChart3 className="text-blue-600" size={28} /> STOCK
+          <BarChart3 className="text-blue-600" size={28} /> K-SMART
         </h1>
         <button onClick={() => { fetchMarket(); fetchNaverRanking(); }} className="p-3 bg-slate-50 rounded-2xl text-slate-400 active:scale-95 transition-all">
           <RefreshCcw size={20} className={isRankingLoading ? 'animate-spin text-blue-500' : ''} />
@@ -150,19 +169,19 @@ export default function HomePage() {
       </header>
 
       <div className="px-6 mt-6 space-y-8">
-        {/* Market Board */}
+        {/* 지수 보드 */}
         <section className="grid grid-cols-2 gap-4">
            {marketIndices.length === 0 ? (
-             [1,2].map(i => <div key={i} className="h-32 bg-white rounded-3xl animate-pulse"></div>)
+             [1,2].map(i => <div key={i} className="h-32 bg-white rounded-[2rem] animate-pulse shadow-sm"></div>)
            ) : marketIndices.map(m => (
              <div key={m.name} className="bg-white p-6 rounded-[2rem] border border-gray-50 shadow-sm flex flex-col justify-between h-36 group relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-20 h-20 bg-blue-50/30 rounded-full -mr-10 -mt-10 group-hover:scale-110 transition-transform"></div>
+                <div className="absolute top-0 right-0 w-24 h-24 bg-blue-50/20 rounded-full -mr-12 -mt-12 group-hover:scale-125 transition-transform duration-700"></div>
                 <div className="relative z-10 flex justify-between items-center">
                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{m.name}</p>
                    {m.isUp ? <TrendingUp size={14} className="text-red-400" /> : <TrendingDown size={14} className="text-blue-400" />}
                 </div>
                 <div className="relative z-10">
-                   <h2 className={`text-[1.75rem] font-black tabular-nums tracking-tighter ${m.isUp ? 'text-red-500' : 'text-blue-500'}`}>{m.price}</h2>
+                   <h2 className={`text-[1.8rem] font-black tabular-nums tracking-tighter ${m.isUp ? 'text-red-500' : 'text-blue-500'}`}>{m.price}</h2>
                    <div className="flex items-center gap-2 mt-1">
                       <span className={`text-[11px] font-black ${m.isUp ? 'text-red-400' : 'text-blue-400'}`}>{m.isUp ? '▲' : '▼'} {m.changePrice}</span>
                       <span className={`text-[11px] font-black px-2 py-0.5 rounded-lg ${m.isUp ? 'bg-red-50 text-red-500' : 'bg-blue-50 text-blue-500'}`}>{m.changeRate}%</span>
@@ -172,53 +191,55 @@ export default function HomePage() {
            ))}
         </section>
 
-        {/* TOP 30 Rankings */}
+        {/* [16차] 실전 확장 탭 바 */}
         <section className="bg-white rounded-[2.5rem] border border-gray-50 shadow-sm overflow-hidden flex flex-col">
-           <div className="p-8 border-b border-gray-50 flex justify-between items-end bg-slate-50/20">
+           <div className="px-8 pt-8 pb-4 flex justify-between items-end">
               <div className="space-y-1">
-                 <h3 className="text-base font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
-                    <Activity size={18} className="text-red-500" /> Market Pulse
+                 <h3 className="text-base font-black text-slate-900 uppercase tracking-[0.2em] flex items-center gap-2">
+                    <Award size={18} className="text-blue-500" /> SMART RANKING 30
                  </h3>
-                 <p className="text-[11px] font-bold text-slate-300">Touch stock for AI Deep Insights</p>
-              </div>
-              <div className="flex p-1.5 bg-white rounded-2xl border border-gray-100 shadow-sm">
-                 <button onClick={() => setRankingCategory('KOSPI')} className={`px-4 py-2 rounded-xl text-[10px] font-black transition-all ${rankingCategory === 'KOSPI' ? 'bg-slate-900 text-white shadow-xl' : 'text-slate-400'}`}>KOSPI</button>
-                 <button onClick={() => setRankingCategory('KOSDAQ')} className={`px-4 py-2 rounded-xl text-[10px] font-black transition-all ${rankingCategory === 'KOSDAQ' ? 'bg-slate-900 text-white shadow-xl' : 'text-slate-400'}`}>KOSDAQ</button>
+                 <p className="text-[11px] font-bold text-slate-300">Advanced Algorithmic Filtering</p>
               </div>
            </div>
 
-           <div className="px-6 py-5 flex gap-3 overflow-x-auto no-scrollbar border-b border-gray-50">
-              {['marketValue', 'search', 'volume'].map(type => (
-                <button key={type} onClick={() => setRankingType(type)} className={`flex-shrink-0 px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${rankingType === type ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'bg-slate-50 text-slate-400'}`}>
-                  {type === 'marketValue' ? '시총상위' : type === 'search' ? '인기검색' : '거래량상위'}
+           {/* 가로 스크롤 탭 */}
+           <div className="px-6 py-4 flex gap-3 overflow-x-auto whitespace-nowrap hide-scrollbar border-b border-gray-50 bg-slate-50/30">
+              {Object.keys(tabMapping).map(tabName => (
+                <button 
+                  key={tabName} 
+                  onClick={() => setActiveTab(tabName)} 
+                  className={`px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all duration-300 ${activeTab === tabName ? 'bg-blue-600 text-white shadow-xl shadow-blue-100 scale-105' : 'bg-white text-slate-400 border border-slate-100'}`}
+                >
+                  {tabName}
                 </button>
               ))}
            </div>
 
            <div className="p-4 space-y-3">
               {isRankingLoading ? (
-                <div className="py-32 text-center flex flex-col items-center gap-4">
-                  <Loader2 className="animate-spin text-blue-600" size={32} />
-                  <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Compiling Data...</p>
+                <div className="py-40 text-center flex flex-col items-center gap-4">
+                  <Loader2 className="animate-spin text-blue-100" size={40} />
+                  <p className="text-[10px] font-black text-slate-200 uppercase tracking-widest">Streaming Intelligence...</p>
                 </div>
               ) : rankingStocks.slice(0, 30).map((rs, idx) => {
                 const isUp = rs.fluctuationsRatio.startsWith('+') || parseFloat(rs.fluctuationsRatio) > 0;
                 return (
-                  <div key={rs.itemCode} onClick={() => handleStockClick(rs)} className="p-6 bg-white rounded-[2.25rem] border border-gray-50 shadow-sm flex justify-between items-center group active:scale-[0.98] transition-all hover:bg-slate-50">
+                  <div key={rs.itemCode} onClick={() => handleStockClick(rs)} className="p-7 bg-white rounded-[2.25rem] border border-gray-50 shadow-sm flex justify-between items-center group active:scale-[0.98] transition-all hover:border-blue-100 hover:shadow-lg hover:shadow-slate-100">
                      <div className="flex items-center gap-5">
-                        <span className="text-[14px] font-black text-slate-200 group-hover:text-blue-500 transition-colors w-6">{idx + 1}</span>
+                        <span className="text-[16px] font-black text-slate-200 group-hover:text-blue-300 transition-colors w-7">{idx + 1}</span>
                         <div>
-                           <h4 className="text-[18px] font-black text-slate-900 tracking-tighter leading-tight">{rs.stockName}</h4>
+                           <h4 className="text-[19px] font-black text-slate-900 tracking-tighter leading-tight">{rs.stockName}</h4>
                            <div className="flex items-center gap-2 mt-1">
                               <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">{rs.itemCode}</span>
                               <span className="w-1 h-1 bg-slate-200 rounded-full"></span>
-                              <span className="text-[10px] font-black text-slate-400">거래량: {rs.volume}</span>
+                              {/* [16차] 거래량 렌더링 복구 */}
+                              <span className="text-[11px] font-black text-slate-400">거래량: {rs.volume} 주</span>
                            </div>
                         </div>
                      </div>
                      <div className="text-right flex flex-col items-end gap-2">
-                        <p className="text-[20px] font-black text-slate-900 tracking-tighter leading-none">{rs.closePrice}</p>
-                        <span className={`text-[11px] font-black px-3 py-1 rounded-xl flex items-center gap-1 ${isUp ? 'bg-red-50 text-red-500' : 'bg-blue-50 text-blue-500'}`}>
+                        <p className="text-[21px] font-black text-slate-900 tracking-tighter leading-none tabular-nums">{rs.closePrice}</p>
+                        <span className={`text-[11px] font-black px-3.5 py-1 rounded-xl flex items-center gap-1 ${isUp ? 'bg-red-50 text-red-500' : 'bg-blue-50 text-blue-500'}`}>
                            {isUp ? '+' : ''}{rs.fluctuationsRatio}%
                         </span>
                      </div>
@@ -229,33 +250,70 @@ export default function HomePage() {
         </section>
       </div>
 
-      {/* 실시간 종목 바텀 시트 */}
+      {/* [16차] 고도화된 바텀 시트 (고급 투자 지표 패널 포함) */}
       {isBottomSheetOpen && selectedStock && (
         <div className="fixed inset-0 z-[110] flex items-end justify-center px-6 pb-12">
-           <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setIsBottomSheetOpen(false)}></div>
-           <div className="relative bg-white w-full max-w-[420px] rounded-[3rem] p-10 shadow-2xl animate-in slide-in-from-bottom-20 duration-500">
+           <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-md" onClick={() => setIsBottomSheetOpen(false)}></div>
+           <div className="relative bg-white w-full max-w-[420px] rounded-[3.5rem] p-10 shadow-2xl animate-in slide-in-from-bottom-32 duration-700 overflow-hidden">
               <div className="absolute top-4 left-1/2 -translate-x-1/2 w-12 h-1.5 bg-slate-100 rounded-full"></div>
               
-              <div className="flex items-center justify-between mb-10 mt-2">
+              <div className="flex items-center justify-between mb-8 mt-2">
                  <div>
                     <h3 className="text-2xl font-black text-slate-900 tracking-tighter">{selectedStock.stockName}</h3>
-                    <p className="text-[11px] font-black text-blue-500 uppercase tracking-widest leading-none mt-1">{selectedStock.itemCode} · {selectedStock.closePrice}원</p>
+                    <p className="text-[11px] font-black text-blue-500 uppercase tracking-widest leading-none mt-1.5">{selectedStock.itemCode} 리서치 결과</p>
                  </div>
                  <button onClick={() => setIsBottomSheetOpen(false)} className="p-3 bg-slate-50 rounded-2xl text-slate-400"><X size={20} /></button>
               </div>
 
+              {/* 고급 투자 지표 패널 */}
+              <div className="grid grid-cols-2 gap-3 mb-10">
+                 <div className="bg-slate-50 p-5 rounded-[1.75rem] border border-slate-100 group">
+                    <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest mb-2 flex items-center gap-1.5">
+                       <Zap size={10} className="text-blue-500" /> 52주 최거 / 최저
+                    </p>
+                    <p className="text-[13px] font-black text-slate-900 tracking-tight">
+                       {selectedStock.high52w} / {selectedStock.low52w}
+                    </p>
+                 </div>
+                 <div className="bg-slate-50 p-5 rounded-[1.75rem] border border-slate-100">
+                    <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest mb-2 flex items-center gap-1.5">
+                       <TrendingUp size={10} className="text-red-500" /> 52주 신고가 근접
+                    </p>
+                    <p className="text-lg font-black text-red-500 tracking-tighter">
+                       {getHighProximity(selectedStock.closePrice, selectedStock.high52w)}
+                    </p>
+                 </div>
+                 <div className="bg-slate-50 p-5 rounded-[1.75rem] border border-slate-100">
+                    <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest mb-2 flex items-center gap-1.5">
+                       <Target size={10} className="text-green-500" /> 증권사 목표가
+                    </p>
+                    <p className="text-[13px] font-black text-slate-900 tracking-tight">
+                       {selectedStock.targetPrice === '-' ? '정보 없음' : selectedStock.targetPrice + '원'}
+                    </p>
+                 </div>
+                 <div className="bg-slate-50 p-5 rounded-[1.75rem] border border-slate-100">
+                    <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest mb-2 flex items-center gap-1.5">
+                       <Info size={10} className="text-slate-400" /> 투자의견
+                    </p>
+                    <p className="text-[13px] font-black text-blue-600 tracking-tight">
+                       {selectedStock.opinion}
+                    </p>
+                 </div>
+              </div>
+
+              {/* 액션 버튼 */}
               <div className="grid grid-cols-1 gap-4">
                  <button 
                    onClick={openChart}
-                   className="w-full flex items-center justify-between p-6 bg-slate-900 text-white rounded-[1.75rem] group hover:bg-blue-600 transition-all active:scale-95"
+                   className="w-full flex items-center justify-between p-6 bg-slate-900 text-white rounded-[2rem] group hover:bg-blue-600 transition-all active:scale-95 shadow-xl shadow-slate-200"
                  >
                     <div className="flex items-center gap-4">
                        <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center backdrop-blur-md">
                           <LineChartIcon size={24} />
                        </div>
                        <div className="text-left">
-                          <p className="text-base font-black uppercase tracking-widest leading-none">📊 차트 보기</p>
-                          <p className="text-[10px] text-white/50 font-bold mt-1.5">실시간 시황 데이터 시각화</p>
+                          <p className="text-base font-black uppercase tracking-widest leading-none">📊 차트 시각화 분석</p>
+                          <p className="text-[10px] text-white/50 font-bold mt-1.5">기술적 흐름 및 패턴 타점 확인</p>
                        </div>
                     </div>
                     <ChevronRight size={20} className="text-white/30 group-hover:text-white" />
@@ -264,17 +322,17 @@ export default function HomePage() {
                  <div className="grid grid-cols-2 gap-4 mt-2">
                     <button 
                       onClick={() => openAi('analysis')}
-                      className="flex flex-col items-center gap-4 p-8 bg-slate-50 rounded-[2rem] border border-transparent hover:border-blue-100 hover:bg-blue-50 transition-all group active:scale-95"
+                      className="flex flex-col items-center gap-4 p-8 bg-slate-50 rounded-[2.25rem] border border-transparent hover:border-blue-100 hover:bg-blue-50 transition-all group active:scale-95"
                     >
-                       <Bot size={28} className="text-slate-900 group-hover:text-blue-600" />
-                       <span className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 group-hover:text-blue-500">AI 분석</span>
+                       <Bot size={32} className="text-slate-900 group-hover:text-blue-600 transition-transform group-hover:scale-110" />
+                       <span className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 group-hover:text-blue-500">AI 정밀 분석</span>
                     </button>
                     <button 
                       onClick={() => openAi('strategy')}
-                      className="flex flex-col items-center gap-4 p-8 bg-slate-50 rounded-[2rem] border border-transparent hover:border-blue-100 hover:bg-blue-50 transition-all group active:scale-95"
+                      className="flex flex-col items-center gap-4 p-8 bg-slate-50 rounded-[2.25rem] border border-transparent hover:border-blue-100 hover:bg-blue-50 transition-all group active:scale-95"
                     >
-                       <Lightbulb size={28} className="text-slate-900 group-hover:text-blue-600" />
-                       <span className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 group-hover:text-blue-500">매매 전략</span>
+                       <Sparkles size={32} className="text-slate-900 group-hover:text-blue-600 transition-transform group-hover:scale-110" />
+                       <span className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 group-hover:text-blue-500">투자 전략가</span>
                     </button>
                  </div>
               </div>
@@ -285,74 +343,76 @@ export default function HomePage() {
       {/* 데이터 모달 (차트/AI) */}
       {activeModal && selectedStock && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center px-6">
-           <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-xl" onClick={() => !isAiLoading && setActiveModal(null)}></div>
-           <div className="relative bg-white w-full max-w-[440px] rounded-[3rem] p-10 shadow-2xl animate-in zoom-in-95 duration-300">
+           <div className="absolute inset-0 bg-slate-900/70 backdrop-blur-2xl" onClick={() => !isAiLoading && setActiveModal(null)}></div>
+           <div className="relative bg-white w-full max-w-[440px] rounded-[3.5rem] p-10 shadow-2xl animate-in zoom-in-95 duration-400 border border-white/20">
               <div className="flex justify-between items-center mb-8">
                  <div>
-                    <h2 className="text-2xl font-black text-slate-900 tracking-tighter uppercase">
-                       {activeModal === 'chart' ? 'Market Chart' : aiMode === 'analysis' ? 'AI Deep Analysis' : 'AI Investment Strategy'}
+                    <h2 className="text-2xl font-black text-slate-900 tracking-tighter uppercase leading-none">
+                       {activeModal === 'chart' ? 'Asset Stream' : aiMode === 'analysis' ? 'Neural Analysis' : 'Wealth Strategy'}
                     </h2>
-                    <p className="text-[10px] font-black text-blue-500 mt-1 uppercase tracking-widest">{selectedStock.stockName} · {selectedStock.itemCode}</p>
+                    <p className="text-[10px] font-black text-blue-500 mt-2 uppercase tracking-[0.2em] opacity-80">{selectedStock.stockName} · {selectedStock.itemCode}</p>
                  </div>
                  <button onClick={() => setActiveModal(null)} className="p-3 bg-slate-50 rounded-2xl text-slate-300"><X size={24} /></button>
               </div>
 
-              <div className="min-h-[300px] flex flex-col justify-center">
+              <div className="min-h-[320px] flex flex-col justify-center">
                  {activeModal === 'chart' ? (
-                   <div className="h-[300px] w-full mt-4">
+                   <div className="h-[320px] w-full mt-4">
                       {isChartLoading ? (
-                        <div className="h-full flex flex-col items-center justify-center gap-4">
-                           <Loader2 className="animate-spin text-blue-100" size={48} />
-                           <p className="text-[10px] font-black text-slate-200 tracking-widest uppercase">Streaming Real-time Data...</p>
+                        <div className="h-full flex flex-col items-center justify-center gap-5">
+                           <Loader2 className="animate-spin text-blue-100" size={56} />
+                           <p className="text-[10px] font-black text-slate-200 tracking-[0.4em] uppercase">Mining Financial Patterns...</p>
                         </div>
                       ) : (
                         <ResponsiveContainer width="100%" height="100%">
                            <AreaChart data={chartData}>
                               <defs>
                                  <linearGradient id="popChartGrad" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="5%" stopColor="#2563eb" stopOpacity={0.2}/>
+                                    <stop offset="5%" stopColor="#2563eb" stopOpacity={0.3}/>
                                     <stop offset="95%" stopColor="#2563eb" stopOpacity={0}/>
                                  </linearGradient>
                               </defs>
-                              <CartesianGrid vertical={false} strokeDasharray="5 5" stroke="#f1f5f9" />
+                              <CartesianGrid vertical={false} strokeDasharray="6 6" stroke="#f1f5f9" />
                               <XAxis dataKey="time" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 900, fill: '#cbd5e1' }} />
                               <YAxis hide domain={['auto', 'auto']} />
-                              <Tooltip contentStyle={{ borderRadius: '20px', border: 'none', boxShadow: '0 20px 40px -10px rgba(0,0,0,0.1)' }} />
-                              <Area type="monotone" dataKey="price" stroke="#2563eb" strokeWidth={4} fillOpacity={1} fill="url(#popChartGrad)" animationDuration={1000} />
+                              <Tooltip cursor={{ stroke: '#2563eb', strokeWidth: 1 }} contentStyle={{ borderRadius: '24px', border: 'none', boxShadow: '0 30px 60px -12px rgba(0,0,0,0.15)', padding: '20px' }} />
+                              <Area type="monotone" dataKey="price" stroke="#2563eb" strokeWidth={5} fillOpacity={1} fill="url(#popChartGrad)" animationDuration={1200} />
                            </AreaChart>
                         </ResponsiveContainer>
                       )}
-                      <div className="grid grid-cols-3 gap-2 mt-8">
-                         <div className="bg-slate-50 p-4 rounded-2xl">
-                            <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest mb-1">52w High</p>
-                            <p className="text-xs font-black text-slate-900">{selectedStock.high52w}</p>
+                      
+                      <div className="grid grid-cols-2 gap-3 mt-10">
+                         <div className="bg-slate-50 p-5 rounded-[1.5rem] flex items-center justify-between">
+                            <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest">52w High</span>
+                            <span className="text-xs font-black text-slate-900">{selectedStock.high52w}</span>
                          </div>
-                         <div className="bg-slate-50 p-4 rounded-2xl">
-                            <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest mb-1">52w Low</p>
-                            <p className="text-xs font-black text-slate-900">{selectedStock.low52w}</p>
-                         </div>
-                         <div className="bg-slate-50 p-4 rounded-2xl">
-                            <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest mb-1">Volume</p>
-                            <p className="text-xs font-black text-slate-900">{selectedStock.volume}</p>
+                         <div className="bg-slate-50 p-5 rounded-[1.5rem] flex items-center justify-between">
+                            <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest">Curr Price</span>
+                            <span className="text-xs font-black text-blue-600">{selectedStock.closePrice}</span>
                          </div>
                       </div>
                    </div>
                  ) : (
-                   <div className="min-h-[220px]">
+                   <div className="min-h-[260px]">
                       {isAiLoading ? (
-                        <div className="flex flex-col items-center justify-center py-20 gap-4">
-                           <Loader2 className="animate-spin text-blue-600" size={40} />
-                           <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Generating Neural Insight...</p>
+                        <div className="flex flex-col items-center justify-center py-24 gap-6">
+                           <div className="relative">
+                              <Loader2 className="animate-spin text-blue-600" size={48} />
+                              <div className="absolute inset-0 flex items-center justify-center">
+                                 <Bot size={20} className="text-blue-600" />
+                              </div>
+                           </div>
+                           <p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.4em]">Neural Insight Processing...</p>
                         </div>
                       ) : (
-                        <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-                           <div className="bg-blue-50/30 rounded-[2rem] p-8 border border-blue-50/50">
-                              <p className="text-base font-bold leading-relaxed text-gray-800 whitespace-pre-wrap tracking-tight">
+                        <div className="animate-in fade-in slide-in-from-bottom-8 duration-800">
+                           <div className="bg-blue-50/50 rounded-[2.5rem] p-10 border border-blue-100/50 shadow-inner">
+                              <p className="text-lg font-bold leading-[1.8] text-gray-800 whitespace-pre-wrap tracking-tight">
                                  {aiAnalysis}
                               </p>
                            </div>
-                           <p className="text-[10px] font-bold text-slate-300 mt-6 text-center uppercase tracking-widest flex items-center justify-center gap-2">
-                              <ShieldAlert size={12} /> Data based on Gemini 2.5 Flash Intelligence.
+                           <p className="text-[10px] font-bold text-slate-300 mt-8 text-center uppercase tracking-widest flex items-center justify-center gap-2">
+                              <ShieldAlert size={14} className="text-blue-500" /> Verified by Gemini 2.5 Flash Tech.
                            </p>
                         </div>
                       )}
@@ -361,8 +421,8 @@ export default function HomePage() {
               </div>
               
               {!isAiLoading && (
-                <button onClick={() => setActiveModal(null)} className="w-full bg-slate-900 text-white font-black py-6 rounded-[1.75rem] shadow-2xl shadow-slate-200 mt-8 uppercase tracking-widest text-xs">
-                   Confirm & Close
+                <button onClick={() => setActiveModal(null)} className="w-full bg-slate-900 text-white font-black py-7 rounded-[2rem] shadow-2xl shadow-slate-200 mt-10 uppercase tracking-[0.2em] text-[11px] active:scale-95 transition-all">
+                   Confirmed Insight
                 </button>
               )}
            </div>

@@ -7,12 +7,20 @@ const INTEGRATION_URL = 'https://m.stock.naver.com/api/stock';
 
 async function fetchStockList(type: string, category: string) {
   let url = '';
+  
+  // [16차] 신규 탭(급증/급락/골든크로스) 매핑 로직 확장
   if (type === 'marketValue') {
     url = `https://m.stock.naver.com/api/stocks/marketValue/${category}?page=1&pageSize=30`;
   } else if (type === 'search') {
     url = `${SEARCH_VOLUME_URL}?sortType=searchTop&category=all&pageSize=30&domesticStockExchangeType=NXT&page=1`;
   } else if (type === 'volume') {
     url = `${SEARCH_VOLUME_URL}?sortType=quantTop&category=all&pageSize=30&domesticStockExchangeType=NXT&page=1`;
+  } else if (type === 'jump') {
+    url = `${SEARCH_VOLUME_URL}?sortType=quantJumpTop&category=all&pageSize=30&domesticStockExchangeType=NXT&page=1`;
+  } else if (type === 'fall') {
+    url = `${SEARCH_VOLUME_URL}?sortType=quantFallTop&category=all&pageSize=30&domesticStockExchangeType=NXT&page=1`;
+  } else if (type === 'golden') {
+    url = `${SEARCH_VOLUME_URL}?sortType=goldenCrossTop&category=all&pageSize=30&domesticStockExchangeType=NXT&page=1`;
   }
 
   const res = await fetch(url, { cache: 'no-store' });
@@ -77,7 +85,6 @@ export async function GET(request: Request) {
 
       const opinionMean = detail?.consensusInfo?.recommMean || null;
 
-      // [15차] 거래량 포맷팅 및 요청 필드 반영
       const volumeRaw = stock.accumulatedTradingVolume || '0';
       const volumeFormatted = parseInt(volumeRaw.toString().replace(/,/g, '')).toLocaleString();
 
@@ -86,9 +93,9 @@ export async function GET(request: Request) {
         stockName: stock.stockName,
         closePrice: stock.closePrice,
         fluctuationsRatio: stock.fluctuationsRatio,
-        volume: volumeFormatted, // 콤마 포맷팅된 거래량
-        high52w, // 52주 최고가 복구
-        low52w,  // 52주 최저가 복구
+        volume: volumeFormatted,
+        high52w,
+        low52w,
         targetPrice: targetPriceStr === '0' ? '-' : targetPriceStr,
         upsidePotential,
         opinion: getOpinionText(opinionMean)
