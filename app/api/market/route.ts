@@ -242,7 +242,8 @@ export async function GET(request: Request) {
       return NextResponse.json({ success: !!detail, data: detail });
     }
 
-    // 3. 종목 검색 (네이버 모바일 통합 검색 API - ac.stock 해외 차단 우회용)
+    // 3. 종목 검색 (네이버 모바일 통합 검색 API - resilience 강화)
+    // [api-architect] ac.stock.naver.com 해외 차단으로 인해 m.stock.naver.com 모바일 검색으로 전면 교체
     if (query) {
       try {
         const url = `https://m.stock.naver.com/api/search/all?keyword=${encodeURIComponent(query)}`;
@@ -251,20 +252,17 @@ export async function GET(request: Request) {
         if (res.status === 429) return NextResponse.json({ success: false, error: 'RATE_LIMIT' });
         
         const data = await res.json();
-        // Vercel 환경 로깅 (모바일 API 응답 확인용)
-        console.log('Naver Search API (Mobile) Response:', data);
-
         const stocks = data?.result?.stocks || [];
+        
         const results = stocks.map((item: any) => ({
-          name: item.stockName, // 종목명
-          code: item.itemCode  // 종목코드 (6자리 숫자)
+          name: item.stockName,
+          code: item.itemCode
         }));
 
         return NextResponse.json({ success: true, data: results });
-      } catch (searchError: any) {
-        console.error('Search API Migration Error:', searchError.message);
-        // [api-architect] 검색 실패 시에도 앱 안정성을 위해 빈 배열 반환
-        return NextResponse.json({ success: true, data: [] });
+      } catch (e) {
+        console.error('Search API Error:', e);
+        return NextResponse.json({ success: true, data: [] }); // 에러 시 빈 배열 반환하여 프론트 크래시 방지
       }
     }
 

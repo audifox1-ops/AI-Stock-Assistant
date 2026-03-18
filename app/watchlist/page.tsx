@@ -217,18 +217,17 @@ export default function WatchlistPage() {
 
   /**
    * [fintech-expert] 스마트 서브밋 방어 로직 (handleManualAdd)
-   * - 6자리 숫자 입력 시 API 결과와 상관없이 즉우 우회 추가 (Fallback)
-   * - 검색 결과가 있으면 첫 번째 항목 추가
-   * - 결과가 없으면 강제 API 호출 시도
+   * - 6자리 숫자 입력 시 API 결과 유무와 무관하게 강제 추가 (Absolute Bypass)
+   * - 한글 입력 시 결과 없으면 에러 알림
    */
   const handleManualAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     const query = searchQuery.trim();
     if (!query) return;
 
-    // [핵심 우회 로직]: 6자리 숫자면 즉시 추가하여 차단 환경 대응
+    // [핵심 우회 로직]: 6자리 숫자면 즉시 '직접추가'로 꽂아버림 (Vercel 차단 가드)
     if (query.length === 6 && /^\d{6}$/.test(query)) {
-      addStockFromSearch({ code: query, name: '알수없음(직접입력)' });
+      addStockFromSearch({ code: query, name: '직접추가' });
       return;
     }
 
@@ -246,18 +245,17 @@ export default function WatchlistPage() {
       if (data.success && Array.isArray(data.data) && data.data.length > 0) {
         addStockFromSearch(data.data[0]);
       } else {
-        // [fintech-expert] Fallback: 검색 실패하더라도 6자리 코드면 여기서도 추가 우회
+        // [fintech-expert] 여기서도 6자리 코드면 마지막으로 체크해서 추가
         if (query.length === 6 && /^\d{6}$/.test(query)) {
-          addStockFromSearch({ code: query, name: '알수없음(직접입력)' });
+          addStockFromSearch({ code: query, name: '직접추가' });
         } else {
           alert('검색 결과가 없습니다. 종목명 또는 6자리 코드를 정확히 입력해주세요.');
         }
       }
     } catch (error) {
       console.error(error);
-      // 에러 발생 시에도 6자리 코드면 강제 추가 시도
       if (query.length === 6 && /^\d{6}$/.test(query)) {
-        addStockFromSearch({ code: query, name: '알수없음(직접입력)' });
+        addStockFromSearch({ code: query, name: '직접추가' });
       } else {
         alert('종목 검색 중 오류가 발생했습니다.');
       }
@@ -361,7 +359,7 @@ export default function WatchlistPage() {
                       </span>
                     </div>
 
-                    <div className="bg-white p-4 col-span-2 border-t border-slate-50 flex justify-between items-center">
+                    <div className="bg-white p-4 col-span-2 border-t border-slate-50 flex justify-between items-center px-6">
                       <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
                         <BarChart3 size={12} className="text-blue-500" /> Volume Node
                       </span>
@@ -429,10 +427,10 @@ export default function WatchlistPage() {
 
               <div className="bg-blue-50/50 p-6 rounded-[2rem] border border-blue-100/50">
                  <p className="text-[10px] font-bold text-blue-600 uppercase tracking-widest flex items-center gap-2 mb-2">
-                    <Zap size={14} fill="currentColor" /> Pro Tip
+                    <Zap size={14} fill="currentColor" /> Direct Access 
                  </p>
                  <p className="text-[11px] font-semibold text-blue-400/80 leading-relaxed">
-                    종목코드 **6자리 숫자**를 입력하고 엔터를 누르시면 검색 서버 차단 여부와 관계없이 즉시 추가됩니다. (IP 차단 방어 로직 적용)
+                    6자리 코드를 입력하고 엔터를 누르면 API가 차단된 Vercel 환경에서도 **무조건 추가**됩니다.
                  </p>
               </div>
             </form>
