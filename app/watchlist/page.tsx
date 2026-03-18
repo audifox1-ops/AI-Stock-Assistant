@@ -25,7 +25,7 @@ export default function WatchlistPage() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
-  // 검색 및 자동완성 상태
+  // 검색 및 자동완성 상태 (fintech-expert 개편)
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -45,7 +45,6 @@ export default function WatchlistPage() {
       return;
     }
 
-    // [방어 코드]: 6자리 숫자가 아닌 티커는 API 요청 대항에서 제외 (NaN 및 429 방지)
     const tickerRegex = /^\d{6}$/;
     const codes = currentItems
       .map(item => String(item.ticker || item.itemCode || '').trim())
@@ -65,7 +64,6 @@ export default function WatchlistPage() {
       if (data.success && Array.isArray(data.data)) {
         const rtData = data.data;
 
-        // [매칭 절대 규칙] 및 실시간 값 덮어쓰기 적용
         setWatchlist(prev => {
           return prev.map(local => {
             const localTicker = String(local.ticker || local.itemCode || '').trim();
@@ -138,7 +136,6 @@ export default function WatchlistPage() {
     }
   };
 
-  // 초기화 및 실시간 동기화 타이머 설정 (60초 주기로 변경하여 429 방어)
   useEffect(() => {
     initializeWatchlist();
 
@@ -157,7 +154,6 @@ export default function WatchlistPage() {
     };
   }, []);
 
-  // [수정 포인트]: 초기 로딩이 끝난 후에만 로컬 스토리지를 업데이트하여 데이터 증발 버그 차단!
   useEffect(() => {
     if (!isLoading) {
       localStorage.setItem(WATCHLIST_STORAGE_KEY, JSON.stringify(watchlist));
@@ -183,14 +179,14 @@ export default function WatchlistPage() {
           setIsSearching(false);
         }
       } else {
-        searchResults.length > 0 && setSearchResults([]);
+        setSearchResults([]);
       }
     }, 300);
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
   /**
-   * 검색 결과 리스트에서 클릭하여 추가
+   * 검색 결과 리스트에서 클릭하여 '즉시' 추가 (fintech-expert: 원클릭 추가 UX)
    */
   const addStockFromSearch = async (item: any) => {
     const ticker = String(item.code).trim();
@@ -218,69 +214,24 @@ export default function WatchlistPage() {
     await fetchRealtimePrices(updated);
   };
 
-  /**
-   * 수동 직접 추가 (Enter) - 자동 검색 및 6자리 코드 변환 로직 구현
-   */
+  // 수동 입력 추가 (종목 검색 로직과 통합)
   const handleManualAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!searchQuery) return;
-
-    let ticker = searchQuery.trim();
-    let stockName = '직접입력';
-
-    // 만약 한글명이나 6자리 숫자가 아닌 긴 이름이 들어왔다면 백그라운드 검색 실행
-    const tickerRegex = /^\d{6}$/;
-    if (!tickerRegex.test(ticker)) {
-      try {
-        setIsSyncing(true);
-        const res = await fetch(`/api/market?q=${encodeURIComponent(ticker)}`);
-        const data = await res.json();
-        
-        if (data.success && Array.isArray(data.data) && data.data.length > 0) {
-          // 가장 유사한 첫 번째 결과의 코드와 이름을 사용
-          ticker = data.data[0].code;
-          stockName = data.data[0].name;
-        } else {
-          alert('검색된 종목이 없습니다. 정확한 종목코드(6자리)나 종목명을 입력해주세요.');
-          return;
-        }
-      } catch (err) {
-        console.error('Auto Search Error:', err);
-        alert('종목 검색 중 오류가 발생했습니다.');
-        return;
-      } finally {
-        setIsSyncing(false);
-      }
+    
+    // 첫번째 검색 결과가 있다면 그것으로 즉시 추가
+    if (searchResults.length > 0) {
+      addStockFromSearch(searchResults[0]);
+    } else {
+      alert('검색된 종목이 없습니다. 정확한 종목명을 입력해주세요.');
     }
-
-    // 중복 체크
-    if (watchlist.some(item => String(item.ticker || item.itemCode || '').trim() === ticker)) {
-      alert('이미 등록된 종목입니다.');
-      return;
-    }
-
-    const newItem: WatchlistItem = {
-      ticker: ticker,
-      itemCode: ticker,
-      stockName: stockName === '직접입력' ? ticker : stockName,
-      currentPrice: 0,
-      changeRate: 0,
-      volume: 0
-    };
-
-    const updated = [newItem, ...watchlist];
-    setWatchlist(updated);
-    setSearchQuery('');
-    setSearchResults([]);
-    setIsAddModalOpen(false);
-
-    await fetchRealtimePrices(updated);
   };
 
   /**
    * 종목 제거
    */
   const removeItem = (ticker: string) => {
+    if (!confirm('관심종목에서 삭제하시겠습니까?')) return;
     const updated = watchlist.filter(item => String(item.ticker || item.itemCode || '').trim() !== String(ticker).trim());
     setWatchlist(updated);
   };
@@ -295,16 +246,14 @@ export default function WatchlistPage() {
           </div>
           <div className="flex gap-2">
             <button
-              onClick={() => {
-                fetchRealtimePrices(watchlist);
-              }}
+              onClick={() => fetchRealtimePrices(watchlist)}
               className="p-3 bg-slate-100 text-slate-400 hover:bg-blue-600 hover:text-white transition-all shadow-md active:scale-95 rounded-xl"
             >
               <RefreshCcw size={18} className={isSyncing ? 'animate-spin' : ''} />
             </button>
             <button
               onClick={() => setIsAddModalOpen(true)}
-              className="bg-slate-900 text-white p-3 shadow-lg active:bg-blue-600 transition-all active:scale-95 rounded-xl"
+              className="bg-slate-900 text-white p-3 shadow-lg hover:bg-slate-800 transition-all active:scale-95 rounded-xl"
             >
               <Plus size={24} />
             </button>
@@ -329,24 +278,6 @@ export default function WatchlistPage() {
         </div>
       </div>
 
-      {/* 수급 포착 알림 바 */}
-      {(radarStocks?.length || 0) > 0 && (
-        <div className="mx-6 mt-6 bg-red-600 p-5 border-l-[6px] border-red-900 shadow-xl flex items-center justify-between animate-pulse rounded-xl">
-          <div className="flex items-center gap-4">
-            <ShieldAlert size={24} className="text-white" />
-            <div>
-              <p className="text-[10px] font-black text-red-200 uppercase tracking-widest leading-none mb-1">매수세 유입 포착</p>
-              <h2 className="text-lg font-black text-white tracking-tighter uppercase leading-tight">
-                {(radarStocks || []).join(', ')} 포지션 유입!
-              </h2>
-            </div>
-          </div>
-          <div className="w-10 h-10 bg-white/20 flex items-center justify-center font-black text-white text-xs rounded-lg">
-            LIVE
-          </div>
-        </div>
-      )}
-
       <main className="px-6 mt-8 space-y-4">
         {isLoading ? (
           <div className="py-20 flex flex-col items-center justify-center gap-6">
@@ -365,7 +296,7 @@ export default function WatchlistPage() {
             const isMinus = (item.changeRate || 0) < 0;
 
             return (
-              <div key={`${item.ticker || item.itemCode}-${idx}`} className={`bg-white rounded-2xl border transition-all duration-300 ${isRadar ? 'border-red-500 shadow-xl' : 'border-slate-100 hover:border-blue-200 shadow-sm hover:shadow-md hover:-translate-y-0.5'} overflow-hidden`}>
+              <div key={`${item.ticker || item.itemCode}-${idx}`} className={`bg-white rounded-2xl border transition-all duration-300 ${isRadar ? 'border-red-500 shadow-xl' : 'border-slate-100 hover:border-blue-200 shadow-sm hover:shadow-md hover:-translate-y-0.5'} overflow-hidden relative`}>
                 <div className="p-6">
                   <div className="flex justify-between items-start mb-6">
                     <div className="flex items-center gap-4">
@@ -410,42 +341,47 @@ export default function WatchlistPage() {
         )}
       </main>
 
-      {/* 관심종목 추가 모달 */}
+      {/* 관심종목 추가 모달 (fintech-expert: 초고속 UX 개편) */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center p-6 bg-slate-950/80 backdrop-blur-md">
           <div className="absolute inset-0" onClick={() => setIsAddModalOpen(false)}></div>
-          <div className="relative bg-white w-full max-w-[450px] p-10 rounded-[2rem] border-t-8 border-slate-900 shadow-2xl overflow-hidden">
-            <div className="flex justify-between items-center mb-8 pb-6 border-b border-slate-100">
+          <div className="relative bg-white w-full max-w-[480px] p-10 rounded-[2.5rem] border-t-8 border-slate-900 shadow-2xl overflow-hidden">
+            <div className="flex justify-between items-center mb-10 pb-6 border-b border-slate-100">
               <div>
-                <h2 className="text-xl font-black text-slate-900 tracking-tighter uppercase">Watchlist Add</h2>
-                <p className="text-[9px] font-bold text-blue-500 uppercase tracking-widest mt-1">Search cloud database</p>
+                <h2 className="text-xl font-black text-slate-900 tracking-tighter uppercase">Symbol Radar</h2>
+                <p className="text-[10px] font-bold text-blue-500 uppercase tracking-widest mt-1">Instant addition by name search</p>
               </div>
               <button onClick={() => setIsAddModalOpen(false)} className="bg-slate-50 hover:bg-red-50 text-slate-400 hover:text-red-500 rounded-xl p-3 transition-all"><X size={20} /></button>
             </div>
 
             <form onSubmit={handleManualAdd} className="space-y-8">
               <div className="space-y-3 relative">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Symbol Search Query</label>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Search Terminal</label>
                 <div className="relative">
                   <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
                   <input
                     type="text"
-                    placeholder="종목명 또는 심볼 입력 (예: 삼성전자)"
-                    className="w-full bg-slate-50 text-slate-900 border-2 border-slate-200 p-5 pl-14 rounded-2xl font-black outline-none focus:border-blue-500 focus:bg-white transition-all text-sm uppercase tracking-wider"
+                    autoFocus
+                    placeholder="종목명을 입력하세요 (예: 삼성전자)"
+                    className="w-full bg-slate-50 text-slate-900 border-2 border-transparent p-5 pl-14 rounded-2xl font-black outline-none focus:border-blue-500 focus:bg-white transition-all text-sm uppercase tracking-wider shadow-inner"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                   />
                 </div>
 
+                {/* [fintech-expert] 원클릭 추가 드롭다운 */}
                 {(searchResults.length > 0 || isSearching) && (
-                  <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-100 rounded-2xl z-[150] max-h-60 overflow-y-auto shadow-2xl">
-                    {isSearching && <div className="p-6 text-xs font-black text-slate-400 animate-pulse uppercase tracking-widest text-center">Fetching data...</div>}
+                  <div className="absolute top-[calc(100%+8px)] left-0 right-0 mt-2 bg-white border border-slate-100 rounded-2xl z-[150] max-h-72 overflow-y-auto shadow-2xl ring-1 ring-slate-900/5 transition-all">
+                    {isSearching && <div className="p-8 text-xs font-black text-slate-400 animate-pulse uppercase tracking-widest text-center">Decrypting symbols...</div>}
                     {searchResults.map((item, idx) => (
-                      <div key={`${item.code}-${idx}`} onClick={() => addStockFromSearch(item)} className="p-5 flex justify-between items-center hover:bg-blue-50 cursor-pointer border-b border-slate-50 group transition-colors">
-                        <span className="text-sm font-black text-slate-900 group-hover:text-blue-600 transition-colors">{item.name}</span>
-                        <div className="flex items-center gap-3">
-                          <span className="text-[10px] font-bold text-slate-400 group-hover:text-blue-500 uppercase tracking-widest bg-slate-100 group-hover:bg-blue-100 px-2 py-1 rounded-md">{item.code}</span>
-                          <Check size={16} className="text-blue-500 opacity-0 group-hover:opacity-100 transition-all" />
+                      <div key={`${item.code}-${idx}`} onClick={() => addStockFromSearch(item)} className="p-5 flex justify-between items-center hover:bg-slate-900 hover:text-white cursor-pointer border-b border-slate-50 last:border-none group transition-all">
+                        <div className="flex flex-col">
+                           <span className="text-[15px] font-black tracking-tight group-hover:translate-x-1 transition-transform">{item.name}</span>
+                           <span className="text-[9px] font-bold uppercase tracking-widest opacity-40 group-hover:opacity-60">Market Node</span>
+                        </div>
+                        <div className="flex items-center gap-4">
+                           <span className="text-[10px] font-bold bg-slate-100 text-slate-400 group-hover:bg-white/10 group-hover:text-white px-3 py-1.5 rounded-lg transition-colors">{item.code}</span>
+                           <Plus size={18} className="text-blue-500 opacity-0 group-hover:opacity-100 transition-all scale-75 group-hover:scale-100" />
                         </div>
                       </div>
                     ))}
@@ -453,9 +389,14 @@ export default function WatchlistPage() {
                 )}
               </div>
 
-              <button className="w-full bg-slate-900 text-white font-black py-6 rounded-2xl uppercase tracking-[0.3em] text-xs hover:bg-blue-600 hover:-translate-y-0.5 transition-all shadow-xl hover:shadow-2xl active:scale-[0.98]">
-                Commit Monitoring Node
-              </button>
+              <div className="bg-blue-50 p-6 rounded-2xl border border-blue-100">
+                 <p className="text-[10px] font-bold text-blue-600 uppercase tracking-widest flex items-center gap-2 mb-2">
+                    <Zap size={14} fill="currentColor" /> Pro Tip
+                 </p>
+                 <p className="text-[11px] font-semibold text-blue-400 leading-relaxed">
+                    종목명을 입력하고 결과 리스트에서 바로 종목을 클릭하세요. 클릭 즉시 감시 리스트에 추가됩니다.
+                 </p>
+              </div>
             </form>
           </div>
         </div>

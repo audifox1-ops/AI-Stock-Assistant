@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   Plus, TrendingUp, TrendingDown, Wallet, PieChart, ArrowUpRight, ArrowDownRight,
   Target, ShieldAlert, Bot, Sparkles, Loader2, X, Trash2, RefreshCcw, ChevronRight,
@@ -34,6 +34,7 @@ export default function PortfolioPage() {
   const [formData, setFormData] = useState({
     itemCode: '',
     stockName: '',
+    searchQuery: '',
     avgPrice: '',
     quantity: '',
     category: '스윙',
@@ -44,6 +45,7 @@ export default function PortfolioPage() {
   // 종목 검색 상태
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const avgPriceRef = useRef<HTMLInputElement>(null);
 
   const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
   const [isAiLoading, setIsAiLoading] = useState(false);
@@ -105,19 +107,19 @@ export default function PortfolioPage() {
     loadData();
   }, []);
 
-  // 종목 검색 디바운싱
+  // 종목 검색 디바운싱 (api-architect & fintech-expert 개편)
   useEffect(() => {
     const timer = setTimeout(async () => {
-      if (formData.stockName.length >= 2) {
+      if (formData.searchQuery.length >= 2) {
         setIsSearching(true);
         try {
-          const res = await fetch(`/api/market?q=${encodeURIComponent(formData.stockName)}`);
+          const res = await fetch(`/api/market?q=${encodeURIComponent(formData.searchQuery)}`);
           const data = await res.json();
-          if (data.success) {
+          if (data.success && Array.isArray(data.data)) {
             setSearchResults(data.data);
           }
         } catch (e) {
-          console.error(e);
+          console.error('Search API Error:', e);
         } finally {
           setIsSearching(false);
         }
@@ -126,15 +128,19 @@ export default function PortfolioPage() {
       }
     }, 300);
     return () => clearTimeout(timer);
-  }, [formData.stockName]);
+  }, [formData.searchQuery]);
 
+  // 검색 결과 선택 시 동작 (fintech-expert: 자연스러운 다음 스텝 이동)
   const selectSearchResult = (item: any) => {
     setFormData({
       ...formData,
       itemCode: item.code,
-      stockName: item.name
+      stockName: item.name,
+      searchQuery: item.name // 입력창에 종목명 표시
     });
     setSearchResults([]);
+    // 매수가 입력 필드로 자동 포커스 이동
+    setTimeout(() => avgPriceRef.current?.focus(), 100);
   };
 
   const filteredHoldings = useMemo(() => {
@@ -167,7 +173,7 @@ export default function PortfolioPage() {
   const handleAddHolding = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.itemCode || !formData.stockName) {
-       alert("종목을 선택하거나 티커를 직접 입력해주세요.");
+       alert("종목을 검색하여 리스트에서 선택해주세요.");
        return;
     }
 
@@ -177,7 +183,6 @@ export default function PortfolioPage() {
       avgPrice: Number(formData.avgPrice),
       quantity: Number(formData.quantity),
       category: formData.category,
-      // 선택적 입력 필드 처리: 값이 없을 경우 undefined/null 대신 0으로 저장
       targetPrice: formData.targetPrice ? Number(formData.targetPrice) : 0,
       stopLossPrice: formData.stopLossPrice ? Number(formData.stopLossPrice) : 0,
     };
@@ -187,13 +192,17 @@ export default function PortfolioPage() {
     setHoldings(updated);
     localStorage.setItem(PORTFOLIO_STORAGE_KEY, JSON.stringify(updated));
     setIsAddModalOpen(false);
-    setFormData({ itemCode: '', stockName: '', avgPrice: '', quantity: '', category: '스윙', targetPrice: '', stopLossPrice: '' });
+    setFormData({ 
+      itemCode: '', stockName: '', searchQuery: '', avgPrice: '', 
+      quantity: '', category: '스윙', targetPrice: '', stopLossPrice: '' 
+    });
     setSearchResults([]);
     
     await fetchRealtimePrices(updated);
   };
 
   const removeHolding = (itemCode: string) => {
+    if (!confirm('정말 삭제하시겠습니까?')) return;
     const currentList = Array.isArray(holdings) ? holdings : [];
     const updated = currentList.filter(h => String(h.itemCode).trim() !== String(itemCode).trim());
     setHoldings(updated);
@@ -219,7 +228,7 @@ export default function PortfolioPage() {
   };
 
   return (
-    <div className="w-full bg-slate-50 min-h-screen pb-32">
+    <div className="w-full bg-slate-50 min-h-screen pb-32 font-sans">
       <header className="px-6 py-6 bg-white border-b border-slate-100 sticky top-0 z-[100] shadow-sm">
         <div className="flex justify-between items-center mb-6">
           <div>
@@ -237,13 +246,13 @@ export default function PortfolioPage() {
         <div className="flex gap-2 overflow-x-auto hide-scrollbar pb-1">
           {['전체', '단기', '스윙', '장기'].map(f => (
             <button
-              key={f}
-              onClick={() => setActiveFilter(f)}
-              className={`px-5 py-2.5 text-sm font-semibold transition-all rounded-xl border whitespace-nowrap ${
+               key={f}
+               onClick={() => setActiveFilter(f)}
+               className={`px-5 py-2.5 text-sm font-semibold transition-all rounded-xl border whitespace-nowrap ${
                 activeFilter === f 
                   ? 'bg-slate-900 text-white border-slate-900' 
                   : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'
-              }`}
+               }`}
             >
               {f}
             </button>
@@ -253,8 +262,8 @@ export default function PortfolioPage() {
 
       {isSyncing && (
         <div className="px-6 py-2 bg-blue-600 flex items-center justify-center gap-2 animate-pulse">
-          <Loader2 size={12} className="text-white animate-spin" />
-          <span className="text-[10px] font-black text-white uppercase tracking-[0.2em]">실시간 시세 데이터 동기화 중...</span>
+           <Loader2 size={12} className="text-white animate-spin" />
+           <span className="text-[10px] font-black text-white uppercase tracking-[0.2em]">실시간 시세 데이터 동기화 중...</span>
         </div>
       )}
 
@@ -283,7 +292,7 @@ export default function PortfolioPage() {
               <div className="text-right">
                 <p className="text-xs font-medium text-slate-500 mb-1">수익률</p>
                 <span className={`text-lg font-bold tabular-nums tracking-tight ${summary.rate >= 0 ? 'text-red-400' : 'text-blue-400'}`}>
-                  {summary.rate >= 0 ? '+' : ''}{summary.rate.toFixed(2)}%
+                   {summary.rate >= 0 ? '+' : ''}{summary.rate.toFixed(2)}%
                 </span>
               </div>
             </div>
@@ -349,7 +358,7 @@ export default function PortfolioPage() {
                     
                     <div className="text-right">
                       <p className="text-base font-bold text-slate-900 tabular-nums">
-                        {(current || 0).toLocaleString()}원
+                         {(current || 0).toLocaleString()}원
                       </p>
                       <div className={`flex items-center justify-end gap-1 text-xs font-bold tabular-nums mt-0.5 ${isPlus ? 'text-red-500' : 'text-blue-500'}`}>
                         <span>{isPlus ? '+' : ''}{rate.toFixed(2)}%</span>
@@ -401,36 +410,45 @@ export default function PortfolioPage() {
         </div>
       </main>
 
-      {/* 종목 추가 모달 */}
+      {/* 종목 추가 모달 (fintech-expert: 전면 개편) */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center p-6 bg-slate-950/60 backdrop-blur-sm">
           <div className="absolute inset-0" onClick={() => setIsAddModalOpen(false)}></div>
           <div className="relative bg-white w-full max-w-[480px] rounded-[2.5rem] p-10 shadow-2xl overflow-hidden">
             <div className="flex justify-between items-center mb-8">
-              <h2 className="text-xl font-bold text-slate-900 tracking-tight">자산 추가</h2>
-              <button onClick={() => setIsAddModalOpen(false)} className="p-2 text-slate-400 hover:text-slate-600 transition-colors">
+              <div>
+                <h2 className="text-xl font-bold text-slate-900 tracking-tight">자산 추가</h2>
+                <p className="text-[10px] font-bold text-blue-500 uppercase tracking-widest mt-1">Search & commit portfolio node</p>
+              </div>
+              <button onClick={() => setIsAddModalOpen(false)} className="p-2 text-slate-400 hover:text-red-500 transition-colors bg-slate-50 rounded-xl">
                 <X size={20} />
               </button>
             </div>
 
-            <form onSubmit={handleAddHolding} className="space-y-5">
+            <form onSubmit={handleAddHolding} className="space-y-6">
                <div className="space-y-2 relative">
                   <label className="text-xs font-bold text-slate-500 ml-1">종목 검색</label>
                   <div className="relative">
                     <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
-                    <input type="text" required placeholder="종목명 또는 티커 입력" 
-                        className="w-full bg-slate-50 text-slate-900 border-none rounded-2xl p-4 pl-12 font-bold outline-none ring-2 ring-transparent focus:ring-blue-500/20 transition-all placeholder:text-slate-300"
-                        value={formData.stockName} onChange={e => setFormData({...formData, stockName: e.target.value})} />
+                    <input type="text" required placeholder="종목명 입력 (예: 삼성전자)" 
+                        className="w-full bg-slate-50 text-slate-900 border-2 border-transparent rounded-2xl p-4 pl-12 font-bold outline-none focus:border-blue-500/20 focus:bg-white transition-all placeholder:text-slate-300 shadow-inner"
+                        value={formData.searchQuery} onChange={e => setFormData({...formData, searchQuery: e.target.value})} />
                   </div>
                   
-                  {/* 검색 결과 리스트 */}
+                  {/* [fintech-expert] 세련된 드롭다운 디자인 */}
                   {(searchResults.length > 0 || isSearching) && (
-                    <div className="absolute top-full left-0 right-0 bg-white border border-slate-100 rounded-2xl mt-2 z-[150] max-h-60 overflow-y-auto shadow-xl ring-1 ring-slate-200/50">
-                       {isSearching && <div className="p-4 text-xs font-bold text-slate-300 animate-pulse">검색 중...</div>}
+                    <div className="absolute top-[calc(100%+8px)] left-0 right-0 bg-white border border-slate-100 rounded-2xl z-[150] max-h-64 overflow-y-auto shadow-2xl ring-1 ring-slate-200/50">
+                       {isSearching && <div className="p-6 text-xs font-bold text-slate-300 animate-pulse text-center uppercase tracking-widest">Searching cloud...</div>}
                        {searchResults.map((item, idx) => (
-                         <div key={idx} onClick={() => selectSearchResult(item)} className="p-4 flex justify-between items-center hover:bg-slate-50 cursor-pointer border-b border-slate-50 last:border-none group">
-                            <span className="text-sm font-bold text-slate-900">{item.name}</span>
-                            <span className="text-[10px] font-bold text-blue-500 bg-blue-50 px-2 py-1 rounded-lg opacity-0 group-hover:opacity-100 transition-all">{item.code}</span>
+                         <div key={`${item.code}-${idx}`} onClick={() => selectSearchResult(item)} className="p-4 flex justify-between items-center hover:bg-slate-50 cursor-pointer border-b border-slate-50 last:border-none group transition-colors">
+                            <div className="flex flex-col">
+                               <span className="text-sm font-bold text-slate-900 group-hover:text-blue-600 transition-colors">{item.name}</span>
+                               <span className="text-[10px] font-medium text-slate-400 uppercase tracking-tighter">Symbol Node</span>
+                            </div>
+                            <div className="flex items-center gap-3">
+                               <span className="text-[10px] font-bold text-blue-500 bg-blue-50 px-2 py-1 rounded-lg group-hover:bg-blue-100 transition-colors">{item.code}</span>
+                               <Check size={14} className="text-blue-500 opacity-0 group-hover:opacity-100 transition-all" />
+                            </div>
                          </div>
                        ))}
                     </div>
@@ -440,14 +458,14 @@ export default function PortfolioPage() {
                <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                      <label className="text-xs font-bold text-slate-500 ml-1">매수가</label>
-                     <input type="number" required placeholder="0" 
-                        className="w-full bg-slate-50 text-slate-900 border-none rounded-2xl p-4 font-bold outline-none focus:ring-2 focus:ring-blue-500/10 transition-all tabular-nums"
+                     <input type="number" required placeholder="0" ref={avgPriceRef}
+                        className="w-full bg-slate-50 text-slate-900 border-none rounded-2xl p-4 font-bold outline-none focus:ring-2 focus:ring-blue-500/10 transition-all tabular-nums shadow-inner"
                         value={formData.avgPrice} onChange={e => setFormData({...formData, avgPrice: e.target.value})} />
                   </div>
                   <div className="space-y-2">
                      <label className="text-xs font-bold text-slate-500 ml-1">수량</label>
                      <input type="number" required placeholder="0" 
-                        className="w-full bg-slate-50 text-slate-900 border-none rounded-2xl p-4 font-bold outline-none focus:ring-2 focus:ring-blue-500/10 transition-all tabular-nums"
+                        className="w-full bg-slate-50 text-slate-900 border-none rounded-2xl p-4 font-bold outline-none focus:ring-2 focus:ring-blue-500/10 transition-all tabular-nums shadow-inner"
                         value={formData.quantity} onChange={e => setFormData({...formData, quantity: e.target.value})} />
                   </div>
                </div>
@@ -456,20 +474,32 @@ export default function PortfolioPage() {
                   <div className="space-y-2">
                      <label className="text-xs font-bold text-red-400 ml-1">목표가 (선택)</label>
                      <input type="number" placeholder="0" 
-                        className="w-full bg-red-50/30 text-slate-900 border-none rounded-2xl p-4 font-bold outline-none focus:ring-2 focus:ring-red-500/10 transition-all tabular-nums"
+                        className="w-full bg-red-50/30 text-slate-900 border-none rounded-2xl p-4 font-bold outline-none focus:ring-2 focus:ring-red-500/10 transition-all tabular-nums shadow-inner"
                         value={formData.targetPrice} onChange={e => setFormData({...formData, targetPrice: e.target.value})} />
                   </div>
                   <div className="space-y-2">
                      <label className="text-xs font-bold text-blue-400 ml-1">손절가 (선택)</label>
                      <input type="number" placeholder="0" 
-                        className="w-full bg-blue-50/30 text-slate-900 border-none rounded-2xl p-4 font-bold outline-none focus:ring-2 focus:ring-blue-500/10 transition-all tabular-nums"
+                        className="w-full bg-blue-50/30 text-slate-900 border-none rounded-2xl p-4 font-bold outline-none focus:ring-2 focus:ring-blue-500/10 transition-all tabular-nums shadow-inner"
                         value={formData.stopLossPrice} onChange={e => setFormData({...formData, stopLossPrice: e.target.value})} />
                   </div>
                </div>
 
+               <div>
+                 <label className="text-xs font-bold text-slate-500 ml-1 mb-2 block">포트폴리오 성격</label>
+                 <div className="flex gap-2">
+                    {['단기', '스윙', '장기'].map(c => (
+                      <button key={c} type="button" onClick={() => setFormData({...formData, category: c})}
+                        className={`flex-1 py-3 text-xs font-bold rounded-xl border transition-all ${formData.category === c ? 'bg-slate-900 text-white border-slate-900 shadow-md' : 'bg-white text-slate-400 border-slate-100 hover:border-slate-200'}`}>
+                        {c}
+                      </button>
+                    ))}
+                 </div>
+               </div>
+
                <div className="pt-4">
-                  <button className="w-full bg-slate-900 text-white font-bold py-5 rounded-[1.5rem] hover:bg-slate-800 active:scale-[0.98] transition-all shadow-lg shadow-slate-200">
-                    저장하기
+                  <button className="w-full bg-slate-900 text-white font-black py-6 rounded-[1.5rem] hover:bg-blue-600 active:scale-[0.98] transition-all shadow-xl shadow-slate-200 uppercase tracking-[0.3em] text-xs">
+                    Commit to Portfolio
                   </button>
                </div>
             </form>

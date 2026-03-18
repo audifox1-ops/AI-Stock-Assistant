@@ -3,6 +3,13 @@ import { NextResponse } from "next/server";
 
 export const dynamic = 'force-dynamic';
 
+/**
+ * [ai-analyst] 역할:
+ * - 지표 데이터를 기반으로 투자자가 즉시 행동할 수 있는 날카로운 인사이트를 도출합니다.
+ * - 결과물은 항상 전문 금융 용어를 섞은 애널리스트 톤으로 작성합니다.
+ * - 마크다운 형식을 활용하여 [밸류에이션], [모멘텀], [AI 종합 의견] 3단 구조로 출력합니다.
+ */
+
 const ALLOWED_ORIGINS = [
   'http://localhost:3000',
   'https://ai-stock-assistant-nine.vercel.app'
@@ -25,30 +32,35 @@ export async function POST(req: Request) {
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
-    const prompt = `너는 냉철하고 전문적인 전문 주식 애널리스트야. 
-다음 종목의 지표 데이터를 바탕으로 투자 전략 리포트를 작성해줘.
+    /**
+     * [ai-analyst] Context-Rich Prompting:
+     * - 넘겨받은 모든 지표를 마크다운 테이블로 정리하여 LLM에 주입합니다.
+     * - [밸류에이션], [수급 및 모멘텀], [🤖 AI 종합 투자 의견] 3단계 구조를 강제합니다.
+     */
+    const prompt = `당신은 골드만삭스 수석 퀀트 애널리스트입니다. 
+제공된 데이터를 정밀 분석하여 투자 전략 리포트를 마크다운 형식으로 작성하세요.
 
-[종목 정보]
-- 종목명: ${stockInfo.stockName} (${stockInfo.ticker})
-- 현재가: ${stockInfo.price}원
-- 52주 최고가: ${stockInfo.high52w}원
-- 52주 최저가: ${stockInfo.low52w}원
-- 증권사 목표가: ${stockInfo.targetPrice}원
-- PER: ${stockInfo.per}
-- PBR: ${stockInfo.pbr}
-- 시가총액: ${stockInfo.marketCap}억원
+### [종목 기본 데이터]
+| 지표명 | 데이터 |
+| :--- | :--- |
+| 종목명 | ${stockInfo.stockName} (${stockInfo.ticker}) |
+| 현재가 | ${Number(stockInfo.price).toLocaleString()}원 |
+| 52주 최고/최저 | ${Number(stockInfo.high52w).toLocaleString()} / ${Number(stockInfo.low52w).toLocaleString()} |
+| 증권사 목표가 | ${Number(stockInfo.targetPrice).toLocaleString()}원 |
+| PER / PBR | ${stockInfo.per} / ${stockInfo.pbr} |
+| 시가총액 | ${Number(stockInfo.marketCap).toLocaleString()}억원 |
 
-[분석 지침]
-1. 현재 주가가 52주 고점 대비 얼마나 하락했는지(하락폭 %)를 계산하여 심리적 지지선을 분석해.
-2. 증권사 목표가와 현재가의 괴리율을 계산하여, 현재 주가가 저평가 구간인지 아니면 보수적 접근이 필요한지 전문적으로 판단해.
-3. PER/PBR 지표를 산업 평균(가상)과 비교하여 밸류에이션 매력도를 평가해.
-4. 마지막으로 '투자 의견(매수/관망/매도)'을 이유와 함께 명확히 제시해.
+---
 
-[출력 형식]
-- 마크다운 기호를 쓰지 마라.
-- 전문 용어를 적절히 섞어 애널리스트 톤으로 작성해.
-- 모바일에서 읽기 편하게 군더더기 없이 깔끔하게 요약할 것.
-- 결과만 한글로 상세히 적어줘.`;
+### [분석 가이드라인]
+1. **[1. 현재 밸류에이션 평가]**: PER, PBR 및 목표가 괴리율을 분석하세요. 현재 가격이 밸류에이션 측면에서 저평가 국면인지, 혹은 프리미엄이 과도한지 서술하세요.
+2. **[2. 수급 및 모멘텀]**: 52주 고점 대비 하락폭과 최근 가격 추이를 통해 기술적 반등 가능성이나 추세 강화 여부를 진단하세요.
+3. **[3. 🤖 AI 종합 투자 의견]**: 매수(Buy), 관망(Hold), 매도(Sell) 중 하나를 선택하고, 그 이유를 '단기적 관점'과 '중기적 관점'에서 날카롭게 요약하세요.
+
+### [주의 사항]
+- 어조: 매우 냉철하고 전문적인 애널리스트 톤을 유지할 것.
+- 형식: 반드시 위 3가지 섹션으로 나누어 마크다운으로 작성할 것.
+- 언어: 한국어로 상세하게 작성할 것.`;
 
     const result = await model.generateContent(prompt);
     const response = await result.response;
@@ -64,8 +76,8 @@ export async function POST(req: Request) {
       }
     );
   } catch (error: any) {
-    console.error("Stock AI Analysis Error:", error);
-    return NextResponse.json({ error: "AI 분석 중 오류가 발생했습니다." }, { status: 500 });
+    console.error("[AI-Analyst] Analysis Error:", error);
+    return NextResponse.json({ error: "AI 분석 리포트 생성 중 오류가 발생했습니다." }, { status: 500 });
   }
 }
 

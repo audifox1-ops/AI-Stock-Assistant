@@ -212,7 +212,10 @@ export default function HomePage() {
                     <div className={`w-1.5 h-1.5 rounded-full ${isUp ? 'bg-red-500' : 'bg-blue-500'}`}></div>
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{idx.name}</span>
                   </div>
-                  <h2 className="text-xl font-bold text-white tabular-nums tracking-tight mb-1">{idx.value}</h2>
+                  {/* [fintech-expert] 지수 수치 표시: pt 단위 추가 */}
+                  <h2 className="text-xl font-bold text-white tabular-nums tracking-tight mb-1">
+                    {idx.value} <span className="text-xs text-white/40 font-medium ml-1">pt</span>
+                  </h2>
                   <div className={`flex items-center gap-2 ${isUp ? 'text-red-500' : 'text-blue-500'}`}>
                     <span className="text-[11px] font-bold tabular-nums">{isUp ? '▲' : '▼'} {idx.change}</span>
                     <span className={`text-[10px] font-black tabular-nums px-1.5 py-0.5 rounded ${isUp ? 'bg-red-500/10' : 'bg-blue-500/10'}`}>{idx.changeRate}%</span>
@@ -450,7 +453,7 @@ export default function HomePage() {
                            <p className="text-[9px] font-bold text-indigo-300 uppercase tracking-widest">AI Thinking...</p>
                         </div>
                       ) : (
-                        <div className="text-[14px] font-medium text-slate-600 leading-relaxed whitespace-pre-wrap text-justify">
+                        <div className="text-[14px] font-medium text-slate-600 leading-relaxed whitespace-pre-wrap text-justify whitespace-pre-wrap">
                            {aiAnalysis || "AI 리포트를 생성하는 중 오류가 발생했습니다."}
                         </div>
                       )}

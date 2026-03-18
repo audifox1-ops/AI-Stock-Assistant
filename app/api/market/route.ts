@@ -53,6 +53,9 @@ const cleanNumber = (val: any): number => {
 
 /**
  * 네이버 Polling API 지수 데이터 조회
+ * [api-architect] 지수 데이터 100배 뻥튀기 버그 해결:
+ * - 네이버 Polling API는 지수(nv) 및 등락(cv) 수치에 100을 곱해서 반환하므로,
+ * - 반드시 100으로 나눈 뒤 소수점 둘째 자리까지 고정(toFixed(2))하여 반환합니다.
  */
 async function fetchIndexData(type: 'KOSPI' | 'KOSDAQ') {
   try {
@@ -64,10 +67,14 @@ async function fetchIndexData(type: 'KOSPI' | 'KOSDAQ') {
     const data = await res.json();
     const item = data?.result?.areas?.[0]?.datas?.[0];
 
+    // 지수 값(nv) 및 등락 값(cv)을 100으로 나누어 정규화
+    const normalizedValue = item?.nv ? (Number(item.nv) / 100).toFixed(2) : '0.00';
+    const normalizedChange = item?.cv ? (Number(item.cv) / 100).toFixed(2) : '0.00';
+
     return {
       name: type === 'KOSPI' ? '코스피' : '코스닥',
-      value: item?.nv ? item.nv.toLocaleString() : '0',
-      change: item?.cv ? item.cv.toLocaleString() : '0',
+      value: normalizedValue,
+      change: normalizedChange,
       changeRate: item?.cr ? item.cr.toString() : '0.00',
       status: Number(item?.cr || 0) > 0 ? 'UP' : (Number(item?.cr || 0) < 0 ? 'DOWN' : 'SAME')
     };
@@ -231,7 +238,10 @@ export async function GET(request: Request) {
       return NextResponse.json({ success: !!detail, data: detail });
     }
 
-    // 3. 종목 검색
+    // 3. 종목 검색 (네이버 자동완성 API 연동)
+    // [api-architect] 검색 엔진 개편:
+    // - 네이버 자동완성 API를 q 파라미터로 호출하여 실시간 종목 리스트를 반환합니다.
+    // - 프론트엔드 대응을 위해 [{ code, name }, ...] 구조로 정규화합니다.
     if (query) {
       const url = `https://ac.stock.naver.com/ac?q=${encodeURIComponent(query)}&target=stock`;
       const res = await fetch(url, { headers: getHeaders(), next: { revalidate: 0 } });
@@ -240,8 +250,8 @@ export async function GET(request: Request) {
       const data = await res.json();
       const items = data?.items?.[0] || [];
       const results = items.map((item: any) => ({
-        name: item[0][0],
-        code: item[0][1]
+        name: item[0][0], // 종목명
+        code: item[0][1]  // 종목코드
       }));
       return NextResponse.json({ success: true, data: results });
     }
