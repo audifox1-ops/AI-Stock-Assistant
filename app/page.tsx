@@ -5,7 +5,7 @@ import {
   TrendingUp, TrendingDown, Activity, Star, Search, 
   BarChart3, Globe, Zap, ArrowRight, ShieldCheck, 
   ChevronRight, Sparkles, Filter, Loader2, X, Info, 
-  Target, AlertCircle, PieChart, Wallet
+  Target, AlertCircle, PieChart, Wallet, Bot
 } from 'lucide-react';
 import StockChart from '@/components/StockChart';
 
@@ -55,6 +55,11 @@ export default function HomePage() {
   const [detailData, setDetailData] = useState<StockDetail | null>(null);
   const [isDetailLoading, setIsDetailLoading] = useState(false);
   
+  // 차트 데이터 상태 추가
+  const [chartData, setChartData] = useState<any[]>([]);
+  const [isChartLoading, setIsChartLoading] = useState(false);
+  const [isMinute, setIsMinute] = useState(false);
+
   const [aiReport, setAiReport] = useState<string | null>(null);
   const [isAiLoading, setIsAiLoading] = useState(false);
 
@@ -96,19 +101,32 @@ export default function HomePage() {
     return () => clearInterval(timer);
   }, [activeTab]);
 
-  // 종목 상세 정보 로드
+  // 종목 상세 정보 및 차트 로드
   const handleStockClick = async (stock: StockRank) => {
     setSelectedStock(stock);
     setIsDetailLoading(true);
+    setIsChartLoading(true);
     setAiReport(null);
+    setChartData([]); // 데이터 초기화
+
     try {
-      const res = await fetch(`/api/market?type=detail&ticker=${stock.itemCode}`);
-      const json = await res.json();
-      if (json.success) setDetailData(json.data);
+      // 1. 상세 재무 지표 페칭
+      const detailRes = await fetch(`/api/market?type=detail&ticker=${stock.itemCode}`);
+      const detailJson = await detailRes.json();
+      if (detailJson.success) setDetailData(detailJson.data);
+
+      // 2. 차트 시세 페칭 (기본 일봉)
+      const chartRes = await fetch(`/api/stock/chart?ticker=${stock.itemCode}&timeframe=day`);
+      const chartJson = await chartRes.json();
+      if (chartJson.success) {
+        setChartData(chartJson.data);
+        setIsMinute(false);
+      }
     } catch (e) {
-      console.error('Detail Fetch Error:', e);
+      console.error('Data Fetch Error:', e);
     } finally {
       setIsDetailLoading(false);
+      setIsChartLoading(false);
     }
   };
 
@@ -295,13 +313,29 @@ export default function HomePage() {
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-16 flex-1">
               <div className="lg:col-span-8 space-y-16">
                 {/* 차트 영역 */}
-                <div className="bg-slate-50 p-1 rounded-[3.5rem] overflow-hidden border-4 border-slate-50 shadow-inner min-h-[500px] relative group">
-                  <div className="absolute top-10 left-10 z-10 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
-                    <div className="bg-white/80 backdrop-blur px-6 py-3 rounded-2xl border border-slate-200/50 shadow-2xl">
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Live Feed</p>
+                <div className="bg-slate-50 p-1 rounded-[3.5rem] overflow-hidden border-4 border-slate-50 shadow-inner min-h-[500px] relative group flex items-center justify-center">
+                  {isChartLoading ? (
+                    <div className="flex flex-col items-center gap-4">
+                      <Loader2 className="animate-spin text-blue-500" size={40} />
+                      <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Loading Chart Data...</p>
                     </div>
-                  </div>
-                  <StockChart ticker={selectedStock.itemCode} className="w-full h-full" />
+                  ) : chartData.length > 0 ? (
+                    <>
+                      <div className="absolute top-10 left-10 z-10 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="bg-white/80 backdrop-blur px-6 py-3 rounded-2xl border border-slate-200/50 shadow-2xl">
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Live Feed</p>
+                        </div>
+                      </div>
+                      <StockChart 
+                        data={chartData} 
+                        isMinute={isMinute} 
+                        className="w-full h-full" 
+                        ticker={selectedStock.itemCode}
+                      />
+                    </>
+                  ) : (
+                    <div className="text-slate-400 text-xs font-black uppercase tracking-widest">차트 데이터를 불러올 수 없습니다.</div>
+                  )}
                 </div>
 
                 {/* AI 리포트 영역 */}

@@ -17,18 +17,24 @@ import {
   ISeriesApi
 } from 'lightweight-charts';
 
+/**
+ * [chart-master] 인터페이스 정렬:
+ * - Vercel 빌드 에러 방지를 위해 ticker, className 등 모든 프롭스를 명시적으로 정의합니다.
+ */
 interface StockChartProps {
   data: any[];
   isMinute: boolean;
+  ticker?: string;      // 빌드 에러 방지용 (선택적)
+  className?: string;   // 컨테이너 스타일용
 }
 
 /**
  * [chart-master] 역할:
- * - 수천 개의 캔들 데이터를 부드럽게 렌더링하고 모바일 대응을 완료합니다.
+ * - 수천 개의 캔들 데이터를 부동하게 렌더링하고 모바일 대응을 완료합니다.
  * - OHLCV 레전드, 이동평균선, 실시간 상호작용을 완벽하게 구현합니다.
  */
 
-const StockChart: React.FC<StockChartProps> = ({ data, isMinute }) => {
+const StockChart: React.FC<StockChartProps> = ({ data, isMinute, className }) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   
@@ -225,7 +231,7 @@ const StockChart: React.FC<StockChartProps> = ({ data, isMinute }) => {
   };
 
   return (
-    <div className="w-full bg-white relative rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+    <div className={`bg-white relative rounded-2xl border border-slate-100 shadow-sm overflow-hidden ${className || 'w-full'}`}>
       {/* PROFESSIONAL LEGEND UI */}
       <div className="absolute top-4 left-4 z-20 pointer-events-none bg-white/60 backdrop-blur-md p-3 rounded-xl border border-white/40 shadow-sm">
         <div className="flex flex-col gap-2">
