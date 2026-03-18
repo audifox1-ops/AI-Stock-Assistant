@@ -145,36 +145,39 @@ export default function PortfolioPage() {
   };
 
   /**
-   * [fintech-expert] 스마트 서브밋 (엔터키 자동 선택)
+   * [fintech-expert] 스마트 서브밋 방어 로직 (handleManualAdd)
+   * - 검색 결과가 있으면 첫 번째 항목을 즉시 선택(포커스 이동)합니다.
+   * - 디바운스 대기로 인해 결과가 비었을 경우 실시간 강제 검색 후 선택합니다.
    */
-  const handleSmartSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleManualAdd = async (e: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (!formData.searchQuery.trim()) return;
 
-    // 1. 이미 종목코드가 세팅된 경우 (이미 선택한 상태에서 엔터) -> 폼 제출
+    // 0. 이미 종목코드가 세팅된 경우 (이미 선택한 상태에서 엔터) -> 폼 제출 시도
     if (formData.itemCode) {
       handleAddHolding(e);
       return;
     }
 
-    // 2. 검색 결과가 있는 경우 첫 번째 결과 선택
+    // 1. 이미 렌더링된 검색 결과가 있으면 바로 첫 번째 항목 선택
     if (searchResults.length > 0) {
       selectSearchResult(searchResults[0]);
       return;
     }
 
-    // 3. 실시간 검색 후 첫 번째 결과 선택
+    // 2. 타이밍 문제로 아직 결과가 없다면, 즉시 백엔드 API 강제 호출
     setIsSearching(true);
     try {
       const res = await fetch(`/api/market?q=${encodeURIComponent(formData.searchQuery)}`);
       const data = await res.json();
-      if (data.success && data.data && data.data.length > 0) {
-        selectSearchResult(data.data[0]);
+      if (data.success && Array.isArray(data.data) && data.data.length > 0) {
+        selectSearchResult(data.data[0]); // 찾아낸 첫 번째 결과 즉시 선택
       } else {
-        alert('검색 결과가 없습니다.');
+        alert('검색 결과가 없습니다. 종목명을 정확히 입력해주세요.');
       }
-    } catch (e) {
-      console.error('Portfolio Smart Submit Error:', e);
+    } catch (error) {
+      console.error(error);
+      alert('종목 검색 중 오류가 발생했습니다.');
     } finally {
       setIsSearching(false);
     }
@@ -211,8 +214,8 @@ export default function PortfolioPage() {
     if (e) e.preventDefault();
     
     if (!formData.itemCode || !formData.stockName) {
-       // 종목이 아직 선택되지 않았다면 스마트 서브밋 시도
-       return handleSmartSubmit(e);
+       // 종목이 아직 선택되지 않았다면 스마트 서브밋(강제검색) 시도
+       return handleManualAdd(e);
     }
 
     if (!formData.avgPrice || !formData.quantity) {
@@ -456,7 +459,7 @@ export default function PortfolioPage() {
       {isAddModalOpen && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center p-6 bg-slate-950/60 backdrop-blur-sm">
           <div className="absolute inset-0" onClick={() => setIsAddModalOpen(false)}></div>
-          <div className="relative bg-white w-full max-w-[480px] rounded-[2.5rem] p-10 shadow-2xl overflow-hidden">
+          <div className="relative bg-white w-full max-w-[480px] rounded-[2.5rem] p-10 shadow-2xl overflow-hidden border-t-8 border-slate-900">
             <div className="flex justify-between items-center mb-8">
               <div>
                 <h2 className="text-xl font-bold text-slate-900 tracking-tight">자산 추가</h2>
@@ -467,12 +470,12 @@ export default function PortfolioPage() {
               </button>
             </div>
 
-            <form onSubmit={handleSmartSubmit} className="space-y-6">
+            <form onSubmit={handleManualAdd} className="space-y-6">
                <div className="space-y-2 relative">
                   <label className="text-xs font-bold text-slate-500 ml-1">종목 검색</label>
                   <div className="relative">
                     <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
-                    <input type="text" required placeholder="종목명 입력 (엔터 시 자동 선택)" 
+                    <input type="text" required placeholder="종목명 입력 (엔터 시 즉시 선택)" 
                         className="w-full bg-slate-50 text-slate-900 border-2 border-transparent rounded-2xl p-4 pl-12 font-bold outline-none focus:border-blue-500/20 focus:bg-white transition-all placeholder:text-slate-300 shadow-inner"
                         value={formData.searchQuery} onChange={e => setFormData({...formData, searchQuery: e.target.value})} />
                   </div>
