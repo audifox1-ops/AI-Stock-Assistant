@@ -249,10 +249,13 @@ export async function GET(request: Request) {
       if (res.status === 429) return NextResponse.json({ success: false, error: 'RATE_LIMIT' });
       
       const data = await res.json();
+      // [api-architect] Vercel 환경 로깅 추가
+      console.log('Naver Search API Response:', data);
+
       const items = data?.items?.[0] || [];
       const results = items.map((item: any) => ({
-        name: item[0][0], // 종목명
-        code: item[0][1]  // 종목코드 (6자리 숫자)
+        name: item[0], // [api-architect] 배열 파싱 오타 수정 (item[0][0] -> item[0])
+        code: item[1]  // [api-architect] 배열 파싱 오타 수정 (item[0][1] -> item[1])
       }));
       return NextResponse.json({ success: true, data: results });
     }

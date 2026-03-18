@@ -217,12 +217,20 @@ export default function WatchlistPage() {
 
   /**
    * [fintech-expert] 스마트 서브밋 방어 로직 (handleManualAdd)
-   * - 검색 결과가 있으면 첫 번째 항목을 즉시 추가합니다.
-   * - 디바운스 대기로 인해 결과가 비었을 경우 실시간 강제 검색 후 추가합니다.
+   * - 6자리 숫자 입력 시 API 결과와 상관없이 즉우 우회 추가 (Fallback)
+   * - 검색 결과가 있으면 첫 번째 항목 추가
+   * - 결과가 없으면 강제 API 호출 시도
    */
   const handleManualAdd = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!searchQuery.trim()) return;
+    const query = searchQuery.trim();
+    if (!query) return;
+
+    // [핵심 우회 로직]: 6자리 숫자면 즉시 추가하여 차단 환경 대응
+    if (query.length === 6 && /^\d{6}$/.test(query)) {
+      addStockFromSearch({ code: query, name: '알수없음(직접입력)' });
+      return;
+    }
 
     // 1. 이미 렌더링된 검색 결과가 있으면 바로 첫 번째 항목 추가
     if (searchResults.length > 0) {
@@ -233,21 +241,26 @@ export default function WatchlistPage() {
     // 2. 타이밍 문제로 아직 결과가 없다면, 즉시 백엔드 API 강제 호출
     setIsSearching(true);
     try {
-      const res = await fetch(`/api/market?q=${encodeURIComponent(searchQuery)}`);
+      const res = await fetch(`/api/market?q=${encodeURIComponent(query)}`);
       const data = await res.json();
       if (data.success && Array.isArray(data.data) && data.data.length > 0) {
-        addStockFromSearch(data.data[0]); // 찾아낸 첫 번째 결과 즉시 추가
+        addStockFromSearch(data.data[0]);
       } else {
-        // [fintech-expert] 6자리 숫자면 직접 추가 예외 처리
-        if (searchQuery.length === 6 && /^\d{6}$/.test(searchQuery)) {
-          addStockFromSearch({ code: searchQuery, name: '직접추가종목' });
+        // [fintech-expert] Fallback: 검색 실패하더라도 6자리 코드면 여기서도 추가 우회
+        if (query.length === 6 && /^\d{6}$/.test(query)) {
+          addStockFromSearch({ code: query, name: '알수없음(직접입력)' });
         } else {
-          alert('검색 결과가 없습니다. 종목명을 정확히 입력해주세요.');
+          alert('검색 결과가 없습니다. 종목명 또는 6자리 코드를 정확히 입력해주세요.');
         }
       }
     } catch (error) {
       console.error(error);
-      alert('종목 검색 중 오류가 발생했습니다.');
+      // 에러 발생 시에도 6자리 코드면 강제 추가 시도
+      if (query.length === 6 && /^\d{6}$/.test(query)) {
+        addStockFromSearch({ code: query, name: '알수없음(직접입력)' });
+      } else {
+        alert('종목 검색 중 오류가 발생했습니다.');
+      }
     } finally {
       setIsSearching(false);
     }
@@ -369,7 +382,7 @@ export default function WatchlistPage() {
             <div className="flex justify-between items-center mb-10 pb-6 border-b border-slate-100">
               <div>
                 <h2 className="text-xl font-black text-slate-900 tracking-tighter uppercase">Symbol Radar</h2>
-                <p className="text-[10px] font-bold text-blue-500 uppercase tracking-widest mt-1">Instant addition by name search</p>
+                <p className="text-[10px] font-bold text-blue-500 uppercase tracking-widest mt-1">Instant addition by name or code</p>
               </div>
               <button onClick={() => setIsAddModalOpen(false)} className="bg-slate-50 hover:bg-red-50 text-slate-400 hover:text-red-500 rounded-2xl p-3 transition-all">
                 <X size={20} />
@@ -384,7 +397,7 @@ export default function WatchlistPage() {
                   <input
                     type="text"
                     autoFocus
-                    placeholder="종목명을 입력하세요 (엔터 시 즉시 추가)"
+                    placeholder="종목명 또는 6자리 코드 입력"
                     className="w-full bg-slate-50 text-slate-900 border-2 border-transparent p-6 pl-16 rounded-[2rem] font-black outline-none focus:border-blue-500 focus:bg-white transition-all text-sm uppercase tracking-wider shadow-inner"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
@@ -419,7 +432,7 @@ export default function WatchlistPage() {
                     <Zap size={14} fill="currentColor" /> Pro Tip
                  </p>
                  <p className="text-[11px] font-semibold text-blue-400/80 leading-relaxed">
-                    종목명을 입력하고 <b>엔터(Enter)</b>를 누르시면 가장 연관성 높은 첫 번째 종목이 즉시 추가됩니다. (디바운스 지연 방지 로직 적용)
+                    종목코드 **6자리 숫자**를 입력하고 엔터를 누르시면 검색 서버 차단 여부와 관계없이 즉시 추가됩니다. (IP 차단 방어 로직 적용)
                  </p>
               </div>
             </form>
