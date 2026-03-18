@@ -27,6 +27,7 @@ const getHeaders = () => ({
 
 /**
  * 네이버 API 데이터 파싱 헬퍼 (단위 및 특수문자 정밀 정제)
+ * [api-architect] 콤마(,) 및 특수문자를 완벽하게 제거하여 순수 숫자로 변환합니다.
  */
 const cleanNumber = (val: any): number => {
   if (typeof val === 'number') return val;
@@ -42,7 +43,7 @@ const cleanNumber = (val: any): number => {
     return (jo * 10000) + eok; 
   }
   
-  // 단순 숫자 추출
+  // 단순 숫자 추출 (마이너스 부호 및 소수점 포함)
   const match = str.match(/[-?0-9.]+/);
   if (match) {
     return parseFloat(match[0]);
@@ -52,10 +53,7 @@ const cleanNumber = (val: any): number => {
 };
 
 /**
- * 네이버 Polling API 지수 데이터 조회
- * [api-architect] 지수 데이터 100배 뻥튀기 버그 해결:
- * - 네이버 Polling API는 지수(nv) 및 등락(cv) 수치에 100을 곱해서 반환하므로,
- * - 반드시 100으로 나눈 뒤 소수점 둘째 자리까지 고정(toFixed(2))하여 반환합니다.
+ * 네이버 Polling API 지수 데이터 조회 (KOSPI/KOSDAQ)
  */
 async function fetchIndexData(type: 'KOSPI' | 'KOSDAQ') {
   try {
@@ -67,7 +65,7 @@ async function fetchIndexData(type: 'KOSPI' | 'KOSDAQ') {
     const data = await res.json();
     const item = data?.result?.areas?.[0]?.datas?.[0];
 
-    // 지수 값(nv) 및 등락 값(cv)을 100으로 나누어 정규화
+    // 지수 값(nv) 및 등락 값(cv)을 100으로 나누어 정규화 (네이버 Polling API 특성 반영)
     const normalizedValue = item?.nv ? (Number(item.nv) / 100).toFixed(2) : '0.00';
     const normalizedChange = item?.cv ? (Number(item.cv) / 100).toFixed(2) : '0.00';
 
@@ -86,8 +84,12 @@ async function fetchIndexData(type: 'KOSPI' | 'KOSDAQ') {
 
 /**
  * 네이버 Polling API 개별 종목 시세 조회 (실시간용)
+ * [api-architect] 0원 표기 버그 원천 차단:
+ * - item.nv(현재가), item.cr(등락률), item.aq(거래량)의 쉼표를 완벽히 제거 후 변환합니다.
+ * - 데이터가 비어있어도 안전한 기본 스키마를 반환합니다.
  */
 async function fetchStockDetail(ticker: string) {
+  const defaultRes = { ticker: ticker.trim(), price: 0, changeRate: 0, volume: 0, status: 'SAME' };
   try {
     const url = `https://polling.finance.naver.com/api/realtime?query=SERVICE_ITEM:${ticker}`;
     const res = await fetch(url, { headers: getHeaders(), next: { revalidate: 0 } });
@@ -97,21 +99,23 @@ async function fetchStockDetail(ticker: string) {
     const data = await res.json();
     const item = data?.result?.areas?.[0]?.datas?.[0];
 
+    if (!item) return defaultRes;
+
     return {
       ticker: ticker.trim(),
-      price: item?.nv ? Number(item.nv) : 0,
-      changeRate: item?.cr ? Number(item.cr) : 0,
-      volume: item?.aq ? Number(item.aq) : 0,
-      status: Number(item?.cr || 0) > 0 ? 'UP' : (Number(item?.cr || 0) < 0 ? 'DOWN' : 'SAME')
+      price: cleanNumber(item.nv),       // 현재가 정제
+      changeRate: cleanNumber(item.cr),  // 등락률 정제
+      volume: cleanNumber(item.aq),      // 거래량 정제
+      status: Number(item.cr || 0) > 0 ? 'UP' : (Number(item.cr || 0) < 0 ? 'DOWN' : 'SAME')
     };
   } catch (e: any) {
     console.error(`Stock Polling Error (${ticker}):`, e.message);
-    return { ticker: ticker.trim(), price: 0, changeRate: 0, volume: 0, status: 'SAME', error: e.message === 'RATE_LIMIT' ? '429' : null };
+    return { ...defaultRes, error: e.message === 'RATE_LIMIT' ? '429' : null };
   }
 }
 
 /**
- * 네이버 Integration API 종목 상세 정보 조회
+ * 네이버 Integration API 종목 상세 정보 조회 (재무지표 등)
  */
 async function fetchStockIntegration(ticker: string) {
   try {
@@ -157,7 +161,7 @@ async function fetchStockIntegration(ticker: string) {
 }
 
 /**
- * 네이버 모바일 API 랭킹 리스트 조회 (홈 화면 복구)
+ * 네이버 모바일 API 랭킹 리스트 조회
  */
 async function fetchRankingList(type: string) {
   let url = '';
@@ -238,10 +242,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ success: !!detail, data: detail });
     }
 
-    // 3. 종목 검색 (네이버 자동완성 API 연동)
-    // [api-architect] 검색 엔진 개편:
-    // - 네이버 자동완성 API를 q 파라미터로 호출하여 실시간 종목 리스트를 반환합니다.
-    // - 프론트엔드 대응을 위해 [{ code, name }, ...] 구조로 정규화합니다.
+    // 3. 종목 검색 (네이버 자동완성)
     if (query) {
       const url = `https://ac.stock.naver.com/ac?q=${encodeURIComponent(query)}&target=stock`;
       const res = await fetch(url, { headers: getHeaders(), next: { revalidate: 0 } });
@@ -251,7 +252,7 @@ export async function GET(request: Request) {
       const items = data?.items?.[0] || [];
       const results = items.map((item: any) => ({
         name: item[0][0], // 종목명
-        code: item[0][1]  // 종목코드
+        code: item[0][1]  // 종목코드 (6자리 숫자)
       }));
       return NextResponse.json({ success: true, data: results });
     }
@@ -263,9 +264,11 @@ export async function GET(request: Request) {
     }
 
     // 5. 다중 종목 실시간 시세 (관심종목용)
+    // [api-architect] 다중 시세 엔진 강화:
+    // - 개별 fetchStockDetail에서 콤마 제거 및 정밀 파싱을 수행하여 0원 버그를 차단합니다.
     if (tickersParam) {
-      const tickers = tickersParam.split(',').filter(t => t.trim() !== '');
-      const details = await Promise.all(tickers.map(t => fetchStockDetail(t.trim())));
+      const tickers = tickersParam.split(',').map(t => t.trim()).filter(t => t !== '');
+      const details = await Promise.all(tickers.map(t => fetchStockDetail(t)));
       const hasLimit = details.some((d: any) => d.error === '429');
       return NextResponse.json({ success: !hasLimit, data: details, error: hasLimit ? 'RATE_LIMIT' : null });
     }
