@@ -36,9 +36,7 @@ export default function WatchlistPage() {
   const syncTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   /**
-   * [fintech-expert] 실시간 데이터 병합 및 UI 바인딩 픽스:
-   * - 백엔드 응답(rtData)과 로컬 상태를 병합할 때 종목코드를 엄격하게 매칭합니다.
-   * - 유효한 데이터(0보다 큰 가격)가 올 때만 기존 값을 업데이트하여 0원 버그를 방지합니다.
+   * 실시간 데이터 병합 및 UI 바인딩
    */
   const fetchRealtimePrices = async (currentItems: WatchlistItem[]) => {
     if (!currentItems || currentItems.length === 0) {
@@ -68,13 +66,11 @@ export default function WatchlistPage() {
         setWatchlist(prev => {
           return prev.map(local => {
             const localTicker = String(local.ticker || '').trim();
-            // 백엔드 응답에서 해당 티커 찾기
             const rt = rtData.find((r: any) => String(r.ticker || '').trim() === localTicker);
 
             if (rt) {
               return {
                 ...local,
-                // [fintech-expert] 0원이 아닐 때만 업데이트하여 데이터 보호
                 currentPrice: Number(rt.price) > 0 ? Number(rt.price) : (local.currentPrice || 0),
                 changeRate: rt.changeRate !== undefined ? Number(rt.changeRate) : (local.changeRate || 0),
                 volume: Number(rt.volume) > 0 ? Number(rt.volume) : (local.volume || 0)
@@ -129,7 +125,6 @@ export default function WatchlistPage() {
         if (saved) {
           const parsed = JSON.parse(saved);
           if (Array.isArray(parsed) && parsed.length > 0) {
-            // [fintech-expert] 데이터 정규화 (ticker 필드 통일)
             const normalized = parsed.map(p => ({
               ...p,
               ticker: p.ticker || p.itemCode || ''
@@ -148,7 +143,6 @@ export default function WatchlistPage() {
     initializeWatchlist();
 
     syncTimerRef.current = setInterval(() => {
-      // 최신 상태 기반 폴링을 위해 함수형 업데이트 내에서 트리거
       setWatchlist(current => {
         if (current.length > 0) {
           fetchRealtimePrices(current);
@@ -164,8 +158,7 @@ export default function WatchlistPage() {
   }, []);
 
   /**
-   * [fintech-expert] 데이터 보존 로직 개선:
-   * - isLoading 중에는 로컬 스토리지를 덮어쓰지 않아 데이터 증발을 막습니다.
+   * 데이터 보존 (isLoading 가드 적용)
    */
   useEffect(() => {
     if (!isLoading) {
@@ -199,17 +192,14 @@ export default function WatchlistPage() {
   }, [searchQuery]);
 
   /**
-   * [fintech-expert] 검색 결과에서 종목 클릭 시 추가:
-   * - 반드시 한글명이 아닌 6자리 숫자 'code'를 ticker로 저장합니다.
+   * 종목 실행 추가 로직
    */
   const addStockFromSearch = async (item: any) => {
     const ticker = String(item.code).trim();
-
     if (watchlist.some(w => String(w.ticker).trim() === ticker)) {
       alert('이미 감시 중인 종목입니다.');
       return;
     }
-
     const newItem: WatchlistItem = {
       ticker: ticker,
       stockName: item.name,
@@ -217,26 +207,45 @@ export default function WatchlistPage() {
       changeRate: 0,
       volume: 0
     };
-
     const updated = [newItem, ...watchlist];
     setWatchlist(updated);
     setSearchQuery('');
     setSearchResults([]);
     setIsAddModalOpen(false);
-
-    // 추가 즉시 시세 동기화
     await fetchRealtimePrices(updated);
   };
 
-  const handleManualAdd = (e: React.FormEvent) => {
+  /**
+   * [fintech-expert] 스마트 서브밋 (엔터키 자동 추가)
+   * - 검색 결과가 있으면 첫 번째 항목을 즉시 추가합니다.
+   * - 검색 결과가 비어있으면 실시간으로 API를 다시 찔러서 결과를 가져온 후 추가합니다.
+   */
+  const handleSmartSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!searchQuery.trim()) return;
+
+    // 1. 이미 렌더링된 결과가 있는 경우
     if (searchResults.length > 0) {
       addStockFromSearch(searchResults[0]);
-    } else if (searchQuery.length === 6 && /^\d{6}$/.test(searchQuery)) {
-      // 6자리 코드로 직접 입력했을 경우 처리
-      addStockFromSearch({ code: searchQuery, name: '직접추가종목' });
-    } else {
-      alert('종목명을 입력하고 자동완성 리스트에서 선택해주세요.');
+      return;
+    }
+
+    // 2. 결과가 비었을 경우 실시간 강제 검색 후 추가
+    setIsSearching(true);
+    try {
+      const res = await fetch(`/api/market?q=${encodeURIComponent(searchQuery)}`);
+      const data = await res.json();
+      if (data.success && data.data && data.data.length > 0) {
+        addStockFromSearch(data.data[0]);
+      } else if (searchQuery.length === 6 && /^\d{6}$/.test(searchQuery)) {
+        addStockFromSearch({ code: searchQuery, name: '직접추가종목' });
+      } else {
+        alert('검색 결과가 없습니다. 종목명을 정확히 입력해주세요.');
+      }
+    } catch (e) {
+      console.error('Smart Submit Error:', e);
+    } finally {
+      setIsSearching(false);
     }
   };
 
@@ -279,7 +288,6 @@ export default function WatchlistPage() {
         </div>
       </header>
 
-      {/* 실시간 모니터링 라이트 */}
       <div className={`transition-all duration-500 overflow-hidden ${isSyncing ? 'h-6' : 'h-0'}`}>
         <div className="px-6 py-1 bg-blue-600 flex items-center justify-center gap-2">
           <Loader2 size={10} className="text-white animate-spin" />
@@ -350,7 +358,6 @@ export default function WatchlistPage() {
         )}
       </main>
 
-      {/* 종목 추가 모달 (Premium Glassmorphism) */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center p-6 bg-slate-950/80 backdrop-blur-md">
           <div className="absolute inset-0" onClick={() => setIsAddModalOpen(false)}></div>
@@ -365,7 +372,7 @@ export default function WatchlistPage() {
               </button>
             </div>
 
-            <form onSubmit={handleManualAdd} className="space-y-8">
+            <form onSubmit={handleSmartSubmit} className="space-y-8">
               <div className="space-y-3 relative">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Search Terminal</label>
                 <div className="relative">
@@ -373,14 +380,13 @@ export default function WatchlistPage() {
                   <input
                     type="text"
                     autoFocus
-                    placeholder="종목명을 입력하세요 (예: 삼성전자)"
+                    placeholder="종목명을 입력하세요 (엔터 시 첫 항목 추가)"
                     className="w-full bg-slate-50 text-slate-900 border-2 border-transparent p-6 pl-16 rounded-[2rem] font-black outline-none focus:border-blue-500 focus:bg-white transition-all text-sm uppercase tracking-wider shadow-inner"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                   />
                 </div>
 
-                {/* 검색 자동완성 드롭다운 */}
                 {(searchResults.length > 0 || isSearching) && (
                   <div className="absolute top-[calc(100%+12px)] left-0 right-0 bg-white border border-slate-100 rounded-[2rem] z-[150] max-h-80 overflow-y-auto shadow-2xl ring-1 ring-slate-900/5 overflow-hidden">
                     {isSearching && (
@@ -409,7 +415,7 @@ export default function WatchlistPage() {
                     <Zap size={14} fill="currentColor" /> Pro Tip
                  </p>
                  <p className="text-[11px] font-semibold text-blue-400/80 leading-relaxed">
-                    종목 검색 속도가 대폭 향상되었습니다. 리스트에서 종목을 클릭하면 즉시 관심종목으로 배포됩니다.
+                    종목명을 입력하고 <b>엔터(Enter)</b>를 누르시면 가장 연관성 높은 첫 번째 종목이 즉시 추가됩니다.
                  </p>
               </div>
             </form>
