@@ -68,13 +68,14 @@ export default function PortfolioPage() {
       if (data.success && Array.isArray(data.data)) {
         const rtData = data.data;
         setHoldings(prev => {
+          if (!prev) return [];
           return prev.map(local => {
             const rt = rtData.find((r: any) => String(r.ticker).trim() === String(local.itemCode).trim());
             if (rt) {
               return {
                 ...local,
-                currentPrice: Number(rt.price) > 0 ? Number(rt.price) : local.currentPrice,
-                changeRate: rt.changeRate !== undefined ? Number(rt.changeRate) : local.changeRate
+                currentPrice: Number(rt.price) > 0 ? Number(rt.price) : (local.currentPrice || 0),
+                changeRate: rt.changeRate !== undefined ? Number(rt.changeRate) : (local.changeRate || 0)
               };
             }
             return local;
@@ -113,7 +114,7 @@ export default function PortfolioPage() {
 
     syncTimerRef.current = setInterval(() => {
       setHoldings(curr => {
-        if (curr.length > 0) fetchRealtimePrices(curr);
+        if (curr && curr.length > 0) fetchRealtimePrices(curr);
         return curr;
       });
     }, 60000);
@@ -128,7 +129,7 @@ export default function PortfolioPage() {
    */
   useEffect(() => {
     if (!isLoading) {
-      localStorage.setItem(PORTFOLIO_STORAGE_KEY, JSON.stringify(holdings));
+      localStorage.setItem(PORTFOLIO_STORAGE_KEY, JSON.stringify(holdings || []));
     }
   }, [holdings, isLoading]);
 
@@ -165,12 +166,10 @@ export default function PortfolioPage() {
 
   /**
    * [fintech-expert] 스마트 서브밋 방어 로직 (handleManualAdd)
-   * - 6자리 숫자 입력 시 즉시 '알수없음'으로 종목 선택 처리 (Fallback)
    */
   const handleManualAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (selectedStock) {
-       // 이미 선택된 종목이 있다면 수량/단가 입력 필드로 포커스 이동 (또는 추가 로직 실행)
        const priceInput = document.getElementById('purchasePrice');
        priceInput?.focus();
        return;
@@ -179,13 +178,12 @@ export default function PortfolioPage() {
     const query = searchQuery.trim();
     if (!query) return;
 
-    // [핵심 우회 로직]: 6자리 숫자면 즉시 선택 처리하여 차단 환경 대응
     if (query.length === 6 && /^\d{6}$/.test(query)) {
-      selectStock({ code: query, name: '알수없음(직접입력)' });
+      selectStock({ code: query, name: '직접추가' });
       return;
     }
 
-    if (searchResults.length > 0) {
+    if (searchResults && searchResults.length > 0) {
       selectStock(searchResults[0]);
       return;
     }
@@ -197,9 +195,8 @@ export default function PortfolioPage() {
       if (data.success && data.data && data.data.length > 0) {
         selectStock(data.data[0]);
       } else {
-        // [fintech-expert] Fallback: 검색 실패하더라도 6자리 코드면 강제 선택
         if (query.length === 6 && /^\d{6}$/.test(query)) {
-          selectStock({ code: query, name: '알수없음(직접입력)' });
+          selectStock({ code: query, name: '직접추가' });
         } else {
           alert('검색 결과가 없습니다. 종목명 또는 6자리 코드를 정확히 입력해주세요.');
         }
@@ -207,7 +204,7 @@ export default function PortfolioPage() {
     } catch (e) {
       console.error(e);
       if (query.length === 6 && /^\d{6}$/.test(query)) {
-        selectStock({ code: query, name: '알수없음(직접입력)' });
+        selectStock({ code: query, name: '직접추가' });
       } else {
         alert('검색 중 오류가 발생했습니다.');
       }
@@ -219,7 +216,7 @@ export default function PortfolioPage() {
   const handleAddHolding = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedStock) {
-      handleManualAdd(e); // 종목 미선택 시 스마트 서브밋 시도
+      handleManualAdd(e);
       return;
     }
     if (!purchasePrice || !quantity) return;
@@ -233,10 +230,9 @@ export default function PortfolioPage() {
       changeRate: 0
     };
 
-    const updated = [newHolding, ...holdings];
+    const updated = [newHolding, ...(holdings || [])];
     setHoldings(updated);
     
-    // 상태 초기화
     setSelectedStock(null);
     setSearchQuery('');
     setPurchasePrice('');
@@ -248,14 +244,14 @@ export default function PortfolioPage() {
 
   const removeHolding = (idx: number) => {
     if (!confirm('정말 삭제하시겠습니까?')) return;
-    setHoldings(prev => prev.filter((_, i) => i !== idx));
+    setHoldings(prev => (prev || []).filter((_, i) => i !== idx));
   };
 
   /**
    * AI 포트폴리오 진단
    */
   const analyzePortfolio = async () => {
-    if (holdings.length === 0) return;
+    if (!holdings || holdings.length === 0) return;
     setIsAnalyzing(true);
     setAnalysisReport(null);
     try {
@@ -275,9 +271,10 @@ export default function PortfolioPage() {
     }
   };
 
-  // 총 자산 계산
-  const totalPurchase = holdings.reduce((acc, curr) => acc + (curr.purchasePrice * curr.quantity), 0);
-  const totalValue = holdings.reduce((acc, curr) => acc + (curr.currentPrice * curr.quantity), 0);
+  // [fintech-expert] 숫자 계산 시 완벽한 방어막 적용 (Defensive Calculation)
+  const safeHoldings = Array.isArray(holdings) ? holdings : [];
+  const totalPurchase = safeHoldings.reduce((acc, curr) => acc + (Number(curr.purchasePrice || 0) * Number(curr.quantity || 0)), 0);
+  const totalValue = safeHoldings.reduce((acc, curr) => acc + (Number(curr.currentPrice || 0) * Number(curr.quantity || 0)), 0);
   const totalProfit = totalValue - totalPurchase;
   const totalProfitRate = totalPurchase > 0 ? (totalProfit / totalPurchase) * 100 : 0;
 
@@ -292,7 +289,7 @@ export default function PortfolioPage() {
           <div className="flex gap-2">
             <button
                onClick={analyzePortfolio}
-               disabled={isAnalyzing || holdings.length === 0}
+               disabled={isAnalyzing || !safeHoldings.length}
                className="bg-blue-600 text-white px-5 py-3 rounded-xl text-[11px] font-black uppercase tracking-widest flex items-center gap-2 shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all disabled:opacity-50 active:scale-95"
             >
               <BrainCircuit size={16} className={isAnalyzing ? 'animate-pulse' : ''} />
@@ -313,7 +310,8 @@ export default function PortfolioPage() {
                <Wallet size={48} />
             </div>
             <p className="text-[9px] font-black text-blue-400 uppercase tracking-[0.2em] mb-2">Total Asset Value</p>
-            <h2 className="text-xl font-black tabular-nums tracking-tight">{totalValue.toLocaleString()}원</h2>
+            {/* [fintech-expert] Defensive formatting 적용 */}
+            <h2 className="text-xl font-black tabular-nums tracking-tight">{(Number(totalValue) || 0).toLocaleString()}원</h2>
           </div>
           <div className={`rounded-2xl p-5 shadow-lg border-2 relative overflow-hidden group transition-colors ${totalProfit >= 0 ? 'bg-red-50 border-red-100' : 'bg-blue-50 border-blue-100'}`}>
             <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:rotate-12 transition-transform">
@@ -321,14 +319,13 @@ export default function PortfolioPage() {
             </div>
             <p className={`text-[9px] font-black uppercase tracking-[0.2em] mb-2 ${totalProfit >= 0 ? 'text-red-400' : 'text-blue-400'}`}>Current Return</p>
             <h2 className={`text-xl font-black tabular-nums tracking-tight ${totalProfit >= 0 ? 'text-red-600' : 'text-blue-600'}`}>
-               {totalProfit >= 0 ? '+' : ''}{totalProfit.toLocaleString()}원
-               <span className="text-[10px] ml-1.5 opacity-60">({totalProfitRate.toFixed(2)}%)</span>
+               {totalProfit >= 0 ? '+' : ''}{(Number(totalProfit) || 0).toLocaleString()}원
+               <span className="text-[10px] ml-1.5 opacity-60">({(Number(totalProfitRate) || 0).toFixed(2)}%)</span>
             </h2>
           </div>
         </div>
       </header>
 
-      {/* 실시간 싱크 바 */}
       <div className={`transition-all duration-500 overflow-hidden ${isSyncing ? 'h-6' : 'h-0'}`}>
         <div className="px-6 py-1 bg-slate-800 flex items-center justify-center gap-2">
           <Loader2 size={10} className="text-blue-400 animate-spin" />
@@ -365,16 +362,18 @@ export default function PortfolioPage() {
            <PieChart size={14} className="text-slate-300" />
         </div>
 
-        {holdings.length === 0 ? (
+        {/* [fintech-expert] Defensive Rendering: 배열 존재 여부 이중 체크 */}
+        {!safeHoldings || safeHoldings.length === 0 ? (
           <div className="bg-white rounded-3xl border-2 border-dashed border-slate-200 p-20 text-center flex flex-col items-center gap-6">
             <AlertCircle size={32} className="text-slate-200" />
             <p className="text-xs font-black text-slate-400 uppercase tracking-widest leading-relaxed">보유 중인 자산이 없습니다.<br/>우측 상단 + 버튼으로 등록하세요.</p>
           </div>
         ) : (
-          holdings.map((item, idx) => {
-            const currentTotal = item.currentPrice * item.quantity;
-            const itemProfit = currentTotal - (item.purchasePrice * item.quantity);
-            const itemProfitRate = (itemProfit / (item.purchasePrice * item.quantity)) * 100;
+          safeHoldings.map((item, idx) => {
+            const currentTotal = (Number(item.currentPrice) || 0) * (Number(item.quantity) || 0);
+            const purchaseTotal = (Number(item.purchasePrice) || 0) * (Number(item.quantity) || 0);
+            const itemProfit = currentTotal - purchaseTotal;
+            const itemProfitRate = purchaseTotal > 0 ? (itemProfit / purchaseTotal) * 100 : 0;
             const isPlus = itemProfit >= 0;
 
             return (
@@ -386,11 +385,11 @@ export default function PortfolioPage() {
                         {idx + 1}
                       </div>
                       <div>
-                        <h4 className="text-lg font-black text-slate-900 tracking-tighter uppercase leading-tight">{item.stockName}</h4>
+                        <h4 className="text-lg font-black text-slate-900 tracking-tighter uppercase leading-tight">{item.stockName || 'Unknown'}</h4>
                         <div className="flex items-center gap-2 mt-0.5">
                            <span className="text-[9px] font-bold text-slate-400 tracking-[0.2em]">{item.itemCode}</span>
                            <span className="w-1 h-1 bg-slate-200 rounded-full"></span>
-                           <span className="text-[9px] font-black text-blue-500 uppercase tracking-widest">{item.quantity} SHARES</span>
+                           <span className="text-[9px] font-black text-blue-500 uppercase tracking-widest">{(Number(item.quantity) || 0).toLocaleString()} SHARES</span>
                         </div>
                       </div>
                     </div>
@@ -403,7 +402,7 @@ export default function PortfolioPage() {
                     <div className="bg-white p-5">
                       <p className="text-[9px] font-bold text-slate-400 uppercase mb-2 tracking-widest">Valuation</p>
                       <p className="text-xl font-black text-slate-900 tabular-nums tracking-tight">
-                        {currentTotal > 0 ? `${currentTotal.toLocaleString()}원` : '평가 중...'}
+                        {item.currentPrice > 0 ? `${(Number(currentTotal) || 0).toLocaleString()}원` : '평가 중...'}
                       </p>
                     </div>
                     <div className={`p-5 text-right flex flex-col items-end transition-colors ${isPlus ? 'bg-red-50/30' : 'bg-blue-50/30'}`}>
@@ -411,7 +410,7 @@ export default function PortfolioPage() {
                       <div className={`flex items-center gap-2 ${isPlus ? 'text-red-600' : 'text-blue-600'}`}>
                          {isPlus ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
                          <span className="text-xl font-black tabular-nums tracking-tight">
-                            {isPlus ? '+' : ''}{itemProfitRate.toFixed(2)}%
+                            {isPlus ? '+' : ''}{(Number(itemProfitRate) || 0).toFixed(2)}%
                          </span>
                       </div>
                     </div>
@@ -419,12 +418,12 @@ export default function PortfolioPage() {
                     <div className="bg-white p-4 col-span-2 border-t border-slate-50 flex justify-between items-center px-6">
                        <div className="flex flex-col">
                           <span className="text-[8px] font-black text-slate-300 uppercase tracking-widest mb-0.5">Purchase Node</span>
-                          <span className="text-xs font-bold text-slate-500 tabular-nums">{item.purchasePrice.toLocaleString()}원</span>
+                          <span className="text-xs font-bold text-slate-500 tabular-nums">{(Number(item.purchasePrice) || 0).toLocaleString()}원</span>
                        </div>
                        <ArrowRight size={14} className="text-slate-200" />
                        <div className="flex flex-col text-right">
                           <span className="text-[8px] font-black text-slate-300 uppercase tracking-widest mb-0.5">Current Terminal</span>
-                          <span className="text-xs font-bold text-slate-900 tabular-nums">{item.currentPrice.toLocaleString()}원</span>
+                          <span className="text-xs font-bold text-slate-900 tabular-nums">{(Number(item.currentPrice) || 0).toLocaleString()}원</span>
                        </div>
                     </div>
                   </div>
@@ -474,14 +473,14 @@ export default function PortfolioPage() {
                 </div>
 
                 {/* 자동완성 결과 */}
-                {(searchResults.length > 0 || isSearching) && !selectedStock && (
+                {(searchResults && searchResults.length > 0 || isSearching) && !selectedStock && (
                   <div className="absolute top-[calc(100%+12px)] left-0 right-0 bg-white border border-slate-100 rounded-[2.5rem] z-[150] max-h-80 overflow-y-auto shadow-2xl ring-1 ring-slate-900/10 overflow-hidden">
                     {isSearching && (
                       <div className="p-8 text-xs font-black text-slate-300 animate-pulse uppercase tracking-widest text-center">
                         Decrypting symbols...
                       </div>
                     )}
-                    {searchResults.map((item, idx) => (
+                    {(searchResults || []).map((item, idx) => (
                       <div key={`${item.code}-${idx}`} onClick={() => selectStock(item)} className="p-6 flex justify-between items-center hover:bg-slate-900 hover:text-white cursor-pointer border-b border-slate-50 last:border-none group transition-all">
                         <div className="flex flex-col">
                            <span className="text-base font-black tracking-tight group-hover:translate-x-1 transition-transform">{item.name}</span>
