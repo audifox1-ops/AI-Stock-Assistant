@@ -242,22 +242,30 @@ export async function GET(request: Request) {
       return NextResponse.json({ success: !!detail, data: detail });
     }
 
-    // 3. 종목 검색 (네이버 자동완성)
+    // 3. 종목 검색 (네이버 모바일 통합 검색 API - ac.stock 해외 차단 우회용)
     if (query) {
-      const url = `https://ac.stock.naver.com/ac?q=${encodeURIComponent(query)}&target=stock`;
-      const res = await fetch(url, { headers: getHeaders(), next: { revalidate: 0 } });
-      if (res.status === 429) return NextResponse.json({ success: false, error: 'RATE_LIMIT' });
-      
-      const data = await res.json();
-      // [api-architect] Vercel 환경 로깅 추가
-      console.log('Naver Search API Response:', data);
+      try {
+        const url = `https://m.stock.naver.com/api/search/all?keyword=${encodeURIComponent(query)}`;
+        const res = await fetch(url, { headers: getHeaders(), next: { revalidate: 0 } });
+        
+        if (res.status === 429) return NextResponse.json({ success: false, error: 'RATE_LIMIT' });
+        
+        const data = await res.json();
+        // Vercel 환경 로깅 (모바일 API 응답 확인용)
+        console.log('Naver Search API (Mobile) Response:', data);
 
-      const items = data?.items?.[0] || [];
-      const results = items.map((item: any) => ({
-        name: item[0], // [api-architect] 배열 파싱 오타 수정 (item[0][0] -> item[0])
-        code: item[1]  // [api-architect] 배열 파싱 오타 수정 (item[0][1] -> item[1])
-      }));
-      return NextResponse.json({ success: true, data: results });
+        const stocks = data?.result?.stocks || [];
+        const results = stocks.map((item: any) => ({
+          name: item.stockName, // 종목명
+          code: item.itemCode  // 종목코드 (6자리 숫자)
+        }));
+
+        return NextResponse.json({ success: true, data: results });
+      } catch (searchError: any) {
+        console.error('Search API Migration Error:', searchError.message);
+        // [api-architect] 검색 실패 시에도 앱 안정성을 위해 빈 배열 반환
+        return NextResponse.json({ success: true, data: [] });
+      }
     }
 
     // 4. 랭킹 리스트 (홈 화면 데이터)
