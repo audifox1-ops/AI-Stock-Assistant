@@ -220,27 +220,29 @@ export default function PortfolioPage() {
 
   return (
     <div className="w-full bg-slate-50 min-h-screen pb-32">
-      <header className="px-6 py-8 bg-white border-b border-gray-100 sticky top-0 z-[100] shadow-sm">
+      <header className="px-6 py-6 bg-white border-b border-slate-100 sticky top-0 z-[100] shadow-sm">
         <div className="flex justify-between items-center mb-6">
           <div>
-            <h1 className="text-2xl font-black text-slate-900 tracking-tighter uppercase leading-none">Asset.AI</h1>
-            <p className="text-[10px] font-bold text-blue-500 uppercase tracking-widest mt-2">Portfolio Management Node</p>
+            <h1 className="text-xl font-bold text-slate-900 tracking-tight">내 자산</h1>
+            <p className="text-xs font-medium text-slate-500 mt-1">AI 기반 맞춤형 자산 관리</p>
           </div>
           <button 
             onClick={() => setIsAddModalOpen(true)}
-            className="bg-slate-900 text-white p-3 rounded-none active:bg-blue-600 transition-all shadow-lg"
+            className="bg-slate-900 text-white p-3 rounded-2xl active:scale-95 transition-all shadow-lg hover:bg-slate-800"
           >
-            <Plus size={24} />
+            <Plus size={20} />
           </button>
         </div>
 
-        <div className="flex gap-2 overflow-x-auto hide-scrollbar">
+        <div className="flex gap-2 overflow-x-auto hide-scrollbar pb-1">
           {['전체', '단기', '스윙', '장기'].map(f => (
             <button
               key={f}
               onClick={() => setActiveFilter(f)}
-              className={`px-6 py-3 text-[11px] font-black uppercase tracking-widest transition-all rounded-none border ${
-                activeFilter === f ? 'bg-slate-900 text-white border-slate-900' : 'bg-slate-50 text-slate-400 border-slate-100'
+              className={`px-5 py-2.5 text-sm font-semibold transition-all rounded-xl border whitespace-nowrap ${
+                activeFilter === f 
+                  ? 'bg-slate-900 text-white border-slate-900' 
+                  : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'
               }`}
             >
               {f}
@@ -256,28 +258,31 @@ export default function PortfolioPage() {
         </div>
       )}
 
-      <main className="px-6 mt-8 space-y-8">
-        <div className="bg-slate-900 p-8 rounded-none shadow-2xl relative overflow-hidden">
+      <main className="px-6 mt-6 space-y-6">
+        <div className="bg-slate-900 p-8 rounded-[2rem] shadow-xl relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full -mr-16 -mt-16 blur-3xl"></div>
           <div className="relative z-10">
-            <p className="text-[10px] font-black text-blue-400 uppercase tracking-[0.3em] mb-4">Market Valuation</p>
-            <div className="flex items-end gap-3 mb-8">
-               <h2 className="text-4xl font-black text-white tabular-nums tracking-tighter leading-none">
+            <p className="text-xs font-medium text-slate-400 mb-2">총 자산 가치</p>
+            <div className="flex items-baseline gap-2 mb-8">
+               <h2 className="text-3xl font-bold text-white tabular-nums tracking-tight">
                 {summary.valuation.toLocaleString()}
                </h2>
-               <span className="text-xl font-bold text-white/50 pb-0.5 uppercase">KRW</span>
+               <span className="text-lg font-medium text-slate-400">원</span>
             </div>
             
-            <div className="grid grid-cols-2 gap-8 border-t border-white/10 pt-8">
+            <div className="grid grid-cols-2 gap-4 border-t border-white/10 pt-6">
               <div>
-                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">총 손익금</p>
-                <div className={`flex items-center gap-2 ${summary.profit >= 0 ? 'text-red-400' : 'text-blue-400'}`}>
-                   {summary.profit >= 0 ? <ArrowUpRight size={16} /> : <ArrowDownRight size={16} />}
-                   <span className="text-lg font-black tabular-nums">{summary.profit.toLocaleString()}원</span>
+                <p className="text-xs font-medium text-slate-500 mb-1">총 손익</p>
+                <div className={`flex items-center gap-1 ${summary.profit >= 0 ? 'text-red-400' : 'text-blue-400'}`}>
+                   <span className="text-lg font-bold tabular-nums tracking-tight">
+                     {summary.profit >= 0 ? '+' : ''}{summary.profit.toLocaleString()}
+                   </span>
+                   <span className="text-sm font-medium">원</span>
                 </div>
               </div>
-              <div>
-                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">총 수익률</p>
-                <span className={`text-lg font-black tabular-nums ${summary.rate >= 0 ? 'text-red-400' : 'text-blue-400'}`}>
+              <div className="text-right">
+                <p className="text-xs font-medium text-slate-500 mb-1">수익률</p>
+                <span className={`text-lg font-bold tabular-nums tracking-tight ${summary.rate >= 0 ? 'text-red-400' : 'text-blue-400'}`}>
                   {summary.rate >= 0 ? '+' : ''}{summary.rate.toFixed(2)}%
                 </span>
               </div>
@@ -285,20 +290,37 @@ export default function PortfolioPage() {
           </div>
         </div>
 
-        <button onClick={analyzePortfolio} className="w-full bg-white border-4 border-slate-900 p-6 flex items-center justify-center gap-4 hover:bg-slate-50 transition-all shadow-xl">
-          <Bot size={24} className="text-blue-600" />
-          <span className="text-sm font-black text-slate-900 uppercase tracking-widest">AI 자산 건전성 진단</span>
+        <button 
+          onClick={analyzePortfolio} 
+          className="w-full bg-white border border-slate-200 p-5 rounded-2xl flex items-center justify-between hover:bg-slate-50 transition-all shadow-sm active:scale-[0.99]"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600">
+              <Sparkles size={20} />
+            </div>
+            <div className="text-left">
+              <span className="block text-sm font-bold text-slate-900">AI 자산 진단</span>
+              <span className="block text-xs text-slate-500">내 포트폴리오는 건강한가요?</span>
+            </div>
+          </div>
+          <ChevronRight size={18} className="text-slate-300" />
         </button>
 
-        <div className="space-y-4">
+        <div className="space-y-3">
           {isLoading ? (
             <div className="py-20 flex flex-col items-center justify-center gap-4">
               <Loader2 className="animate-spin text-slate-200" size={32} />
+              <p className="text-sm text-slate-400 font-medium">데이터를 불러오는 중...</p>
             </div>
           ) : filteredHoldings.length === 0 ? (
-            <div className="bg-white border-2 border-dashed border-slate-200 p-20 text-center flex flex-col items-center gap-5">
-              <AlertCircle size={40} className="text-slate-100" />
-              <p className="text-xs font-black text-slate-300 uppercase tracking-widest">운용 중인 포지션이 없습니다</p>
+            <div className="bg-white border border-dashed border-slate-200 rounded-[2rem] p-16 text-center flex flex-col items-center gap-4">
+              <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center text-slate-200">
+                <Wallet size={32} />
+              </div>
+              <div>
+                <p className="text-base font-bold text-slate-900">보유 중인 종목이 없어요</p>
+                <p className="text-sm text-slate-500 mt-1">우측 상단의 + 버튼을 눌러 추가해 보세요</p>
+              </div>
             </div>
           ) : (
             (filteredHoldings || []).map((h, i) => {
@@ -308,45 +330,70 @@ export default function PortfolioPage() {
               const isPlus = profit >= 0;
 
               return (
-                <div key={`${h.itemCode}-${i}`} className="bg-white border-2 border-slate-100 rounded-none overflow-hidden hover:border-blue-200 transition-all shadow-sm">
-                  <div className="p-6">
-                    <div className="flex justify-between items-start mb-6">
-                      <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 bg-slate-900 text-white flex items-center justify-center text-[10px] font-black uppercase">
-                          {h.category}
-                        </div>
-                        <div>
-                          <h4 className="text-[17px] font-black text-slate-900 tracking-tighter uppercase">{h.stockName}</h4>
-                          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{h.itemCode}</p>
-                        </div>
+                <div key={`${h.itemCode}-${i}`} className="bg-white p-5 rounded-2xl border border-slate-100 hover:shadow-md transition-all active:scale-[0.99] group overflow-hidden relative">
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-900 font-bold group-hover:bg-slate-100 transition-colors">
+                        {h.stockName.substring(0, 1)}
                       </div>
-                      <button onClick={() => removeHolding(h.itemCode)} className="p-2 text-slate-200 hover:text-red-500 transition-colors">
-                        <Trash2 size={16} />
-                      </button>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h4 className="text-base font-bold text-slate-900">{h.stockName}</h4>
+                          <span className="px-1.5 py-0.5 bg-slate-100 text-[10px] font-bold text-slate-500 rounded-md uppercase tracking-tighter">
+                            {h.category}
+                          </span>
+                        </div>
+                        <p className="text-xs font-medium text-slate-400 mt-0.5">{h.itemCode}</p>
+                      </div>
                     </div>
-
-                    <div className="grid grid-cols-2 gap-px bg-slate-50 border border-slate-50 mb-6 font-sans">
-                      <div className="bg-white p-4 font-sans">
-                        <p className="text-[9px] font-bold text-slate-400 uppercase mb-1 tracking-widest">Buying Prc</p>
-                        <p className="text-sm font-black text-slate-900 tabular-nums">{h.avgPrice.toLocaleString()}원</p>
-                      </div>
-                      <div className="bg-white p-4 text-right">
-                        <p className="text-[9px] font-bold text-slate-400 uppercase mb-1 tracking-widest">Real-time Prc</p>
-                        <p className="text-sm font-black text-slate-900 tabular-nums">
-                          {current > 0 ? `${current.toLocaleString()}원` : '-'}
-                        </p>
-                      </div>
-                      <div className="bg-white p-4 col-span-2 border-t border-slate-50 flex justify-between items-center font-sans">
-                         <span className={`text-[15px] font-black tabular-nums ${isPlus ? 'text-red-500' : 'text-blue-500'}`}>
-                           {isPlus ? '+' : ''}{rate.toFixed(2)}% ({profit.toLocaleString()}원)
-                         </span>
-                         <div className="flex flex-col text-right">
-                            {h.targetPrice && h.targetPrice > 0 && <span className="text-[8px] font-black text-blue-500 uppercase">Target: {h.targetPrice.toLocaleString()}</span>}
-                            {h.stopLossPrice && h.stopLossPrice > 0 && <span className="text-[8px] font-black text-red-500 uppercase">Stoploss: {h.stopLossPrice.toLocaleString()}</span>}
-                         </div>
+                    
+                    <div className="text-right">
+                      <p className="text-base font-bold text-slate-900 tabular-nums">
+                        {(current || 0).toLocaleString()}원
+                      </p>
+                      <div className={`flex items-center justify-end gap-1 text-xs font-bold tabular-nums mt-0.5 ${isPlus ? 'text-red-500' : 'text-blue-500'}`}>
+                        <span>{isPlus ? '+' : ''}{rate.toFixed(2)}%</span>
+                        <span className="text-[10px] opacity-70">({isPlus ? '+' : ''}{profit.toLocaleString()}원)</span>
                       </div>
                     </div>
                   </div>
+
+                  <div className="mt-4 pt-4 border-t border-slate-50 flex justify-between items-center">
+                    <div className="flex gap-4">
+                      <div>
+                        <p className="text-[10px] font-medium text-slate-400 uppercase">평균단가</p>
+                        <p className="text-xs font-bold text-slate-700 tabular-nums mt-0.5">{(h.avgPrice || 0).toLocaleString()}원</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-medium text-slate-400 uppercase">보유수량</p>
+                        <p className="text-xs font-bold text-slate-700 tabular-nums mt-0.5">{(h.quantity || 0).toLocaleString()}주</p>
+                      </div>
+                    </div>
+                    <button 
+                      onClick={() => removeHolding(h.itemCode)} 
+                      className="p-2 text-slate-200 hover:text-red-400 hover:bg-red-50 rounded-xl transition-all"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                  
+                  {/* 목표/손절가 표시 (있을 때만) */}
+                  {(h.targetPrice || h.stopLossPrice) ? (
+                    <div className="mt-3 flex gap-2">
+                      {h.targetPrice ? (
+                        <div className="flex items-center gap-1.5 px-2 py-1 bg-red-50 text-red-500 rounded-lg">
+                          <Target size={10} />
+                          <span className="text-[10px] font-bold tabular-nums">목표 {h.targetPrice.toLocaleString()}원</span>
+                        </div>
+                      ) : null}
+                      {h.stopLossPrice ? (
+                        <div className="flex items-center gap-1.5 px-2 py-1 bg-blue-50 text-blue-500 rounded-lg">
+                          <ShieldAlert size={10} />
+                          <span className="text-[10px] font-bold tabular-nums">손절 {h.stopLossPrice.toLocaleString()}원</span>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
               );
             })
@@ -354,102 +401,114 @@ export default function PortfolioPage() {
         </div>
       </main>
 
-      {/* 종목 추가 모달 - 검색 연동 및 선택적 필드 적용 */}
+      {/* 종목 추가 모달 */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center p-6 bg-slate-950/80 backdrop-blur-md">
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-6 bg-slate-950/60 backdrop-blur-sm">
           <div className="absolute inset-0" onClick={() => setIsAddModalOpen(false)}></div>
-          <div className="relative bg-white w-full max-w-[450px] rounded-none p-12 border-t-8 border-slate-900 shadow-2xl">
-            <h2 className="text-xl font-black text-slate-900 tracking-tighter uppercase mb-10 pb-6 border-b-2 border-slate-100">Asset Registration</h2>
-            <form onSubmit={handleAddHolding} className="space-y-6">
+          <div className="relative bg-white w-full max-w-[480px] rounded-[2.5rem] p-10 shadow-2xl overflow-hidden">
+            <div className="flex justify-between items-center mb-8">
+              <h2 className="text-xl font-bold text-slate-900 tracking-tight">자산 추가</h2>
+              <button onClick={() => setIsAddModalOpen(false)} className="p-2 text-slate-400 hover:text-slate-600 transition-colors">
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddHolding} className="space-y-5">
                <div className="space-y-2 relative">
-                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Stock Name / Search</label>
+                  <label className="text-xs font-bold text-slate-500 ml-1">종목 검색</label>
                   <div className="relative">
                     <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
-                    <input type="text" required placeholder="종목명 입력 (예: 삼성전자)" 
-                        className="w-full bg-white text-slate-900 border-2 border-slate-200 p-4 pl-12 font-black outline-none focus:border-blue-500 placeholder:text-slate-400 uppercase"
+                    <input type="text" required placeholder="종목명 또는 티커 입력" 
+                        className="w-full bg-slate-50 text-slate-900 border-none rounded-2xl p-4 pl-12 font-bold outline-none ring-2 ring-transparent focus:ring-blue-500/20 transition-all placeholder:text-slate-300"
                         value={formData.stockName} onChange={e => setFormData({...formData, stockName: e.target.value})} />
                   </div>
                   
                   {/* 검색 결과 리스트 */}
                   {(searchResults.length > 0 || isSearching) && (
-                    <div className="absolute top-full left-0 right-0 bg-white border-2 border-slate-900 z-[150] max-h-60 overflow-y-auto shadow-2xl">
-                       {isSearching && <div className="p-4 text-xs font-black text-slate-300 animate-pulse uppercase">Searching...</div>}
+                    <div className="absolute top-full left-0 right-0 bg-white border border-slate-100 rounded-2xl mt-2 z-[150] max-h-60 overflow-y-auto shadow-xl ring-1 ring-slate-200/50">
+                       {isSearching && <div className="p-4 text-xs font-bold text-slate-300 animate-pulse">검색 중...</div>}
                        {searchResults.map((item, idx) => (
-                         <div key={idx} onClick={() => selectSearchResult(item)} className="p-4 flex justify-between items-center hover:bg-slate-50 cursor-pointer border-b border-slate-50 group">
-                            <span className="text-sm font-black text-slate-900">{item.name}</span>
-                            <span className="text-[10px] font-bold text-slate-400 group-hover:text-blue-500 transition-colors uppercase">{item.code}</span>
+                         <div key={idx} onClick={() => selectSearchResult(item)} className="p-4 flex justify-between items-center hover:bg-slate-50 cursor-pointer border-b border-slate-50 last:border-none group">
+                            <span className="text-sm font-bold text-slate-900">{item.name}</span>
+                            <span className="text-[10px] font-bold text-blue-500 bg-blue-50 px-2 py-1 rounded-lg opacity-0 group-hover:opacity-100 transition-all">{item.code}</span>
                          </div>
                        ))}
                     </div>
                   )}
                </div>
 
-               <div className="space-y-2">
-                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Ticker Code (Auto-filled)</label>
-                  <input type="text" required placeholder="티커 자동 입력" readOnly
-                      className="w-full bg-slate-50 text-slate-400 border-2 border-slate-100 p-4 font-black outline-none"
-                      value={formData.itemCode} />
-               </div>
-
                <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                     <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Avg Price</label>
-                     <input type="number" required placeholder="매수가" 
-                        className="w-full bg-white text-slate-900 border-2 border-slate-200 p-4 font-black outline-none focus:border-blue-500 placeholder:text-slate-400"
+                     <label className="text-xs font-bold text-slate-500 ml-1">매수가</label>
+                     <input type="number" required placeholder="0" 
+                        className="w-full bg-slate-50 text-slate-900 border-none rounded-2xl p-4 font-bold outline-none focus:ring-2 focus:ring-blue-500/10 transition-all tabular-nums"
                         value={formData.avgPrice} onChange={e => setFormData({...formData, avgPrice: e.target.value})} />
                   </div>
                   <div className="space-y-2">
-                     <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Quantity</label>
-                     <input type="number" required placeholder="수량" 
-                        className="w-full bg-white text-slate-900 border-2 border-slate-200 p-4 font-black outline-none focus:border-blue-500 placeholder:text-slate-400"
+                     <label className="text-xs font-bold text-slate-500 ml-1">수량</label>
+                     <input type="number" required placeholder="0" 
+                        className="w-full bg-slate-50 text-slate-900 border-none rounded-2xl p-4 font-bold outline-none focus:ring-2 focus:ring-blue-500/10 transition-all tabular-nums"
                         value={formData.quantity} onChange={e => setFormData({...formData, quantity: e.target.value})} />
                   </div>
                </div>
                
-               <div className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-100">
+               <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                     <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest text-blue-500">Target (Opt)</label>
-                     <input type="number" placeholder="없음" 
-                        className="w-full bg-white text-slate-900 border-2 border-slate-200 p-4 font-black outline-none focus:border-blue-500 placeholder:text-slate-400"
+                     <label className="text-xs font-bold text-red-400 ml-1">목표가 (선택)</label>
+                     <input type="number" placeholder="0" 
+                        className="w-full bg-red-50/30 text-slate-900 border-none rounded-2xl p-4 font-bold outline-none focus:ring-2 focus:ring-red-500/10 transition-all tabular-nums"
                         value={formData.targetPrice} onChange={e => setFormData({...formData, targetPrice: e.target.value})} />
                   </div>
                   <div className="space-y-2">
-                     <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest text-red-500">Stoploss (Opt)</label>
-                     <input type="number" placeholder="없음" 
-                        className="w-full bg-white text-slate-900 border-2 border-slate-200 p-4 font-black outline-none focus:border-blue-500 placeholder:text-slate-400"
+                     <label className="text-xs font-bold text-blue-400 ml-1">손절가 (선택)</label>
+                     <input type="number" placeholder="0" 
+                        className="w-full bg-blue-50/30 text-slate-900 border-none rounded-2xl p-4 font-bold outline-none focus:ring-2 focus:ring-blue-500/10 transition-all tabular-nums"
                         value={formData.stopLossPrice} onChange={e => setFormData({...formData, stopLossPrice: e.target.value})} />
                   </div>
                </div>
-               <button className="w-full bg-slate-900 text-white font-black py-7 rounded-none uppercase tracking-[0.3em] text-xs hover:bg-blue-600 active:scale-[0.98] transition-all mt-6 shadow-xl shadow-slate-100">
-                  Commit Registration
-               </button>
+
+               <div className="pt-4">
+                  <button className="w-full bg-slate-900 text-white font-bold py-5 rounded-[1.5rem] hover:bg-slate-800 active:scale-[0.98] transition-all shadow-lg shadow-slate-200">
+                    저장하기
+                  </button>
+               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* 분석 성과 모달 유지 */}
+      {/* 분석 결과 모달 */}
       {isAnalysisModalOpen && (
-        <div className="fixed inset-0 z-[130] flex items-center justify-center p-6 bg-slate-950/90 backdrop-blur-xl">
+        <div className="fixed inset-0 z-[130] flex items-center justify-center p-6 bg-slate-950/60 backdrop-blur-sm">
            <div className="absolute inset-0" onClick={() => !isAiLoading && setIsAnalysisModalOpen(false)}></div>
-           <div className="relative bg-white w-full max-w-[500px] rounded-none p-12 border-t-[16px] border-slate-900 shadow-2xl">
-              <div className="flex justify-between items-center mb-10 pb-6 border-b-2 border-slate-100">
-                 <h2 className="text-xl font-black text-slate-900 uppercase tracking-tighter">AI Analysis Report</h2>
-                 <button onClick={() => setIsAnalysisModalOpen(false)} className="p-3 bg-slate-900 text-white rounded-none"><X size={20} /></button>
+           <div className="relative bg-white w-full max-w-[540px] rounded-[2.5rem] p-10 shadow-2xl overflow-hidden ring-1 ring-slate-200">
+              <div className="flex justify-between items-center mb-8">
+                 <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600">
+                       <Sparkles size={20} />
+                    </div>
+                    <h2 className="text-xl font-bold text-slate-900 tracking-tight">AI 자산 진단 리포트</h2>
+                 </div>
+                 <button onClick={() => setIsAnalysisModalOpen(false)} className="p-2 text-slate-400 hover:text-slate-600 transition-colors">
+                    <X size={20} />
+                 </button>
               </div>
-              <div className="min-h-[300px] font-sans">
+
+              <div className="bg-slate-50 rounded-[1.5rem] p-6 max-h-[400px] overflow-y-auto">
                  {isAiLoading ? (
-                   <div className="py-20 flex flex-col items-center justify-center gap-6">
+                   <div className="py-20 flex flex-col items-center justify-center gap-4">
                       <Loader2 size={32} className="text-blue-600 animate-spin" />
-                      <p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.4em]">Processing Insights...</p>
+                      <p className="text-sm font-bold text-slate-400">포트폴리오 분석 중...</p>
                    </div>
                  ) : (
-                   <div className="text-[14px] font-bold text-slate-800 leading-relaxed whitespace-pre-wrap text-justify">
+                   <div className="text-[15px] font-medium text-slate-700 leading-relaxed whitespace-pre-wrap">
                       {aiAnalysis}
                    </div>
                  )}
               </div>
-              <button onClick={() => setIsAnalysisModalOpen(false)} className="w-full bg-slate-900 text-white font-black py-6 rounded-none mt-10 uppercase tracking-widest text-xs">Acknowledge Insight</button>
+              <button onClick={() => setIsAnalysisModalOpen(false)} className="w-full bg-slate-900 text-white font-bold py-5 rounded-[1.5rem] mt-8 hover:bg-slate-800 transition-all active:scale-[0.98]">
+                 확인했습니다
+              </button>
            </div>
         </div>
       )}
